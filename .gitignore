@@ -1,0 +1,50 @@
+# 의존성
+node_modules/
+
+# 빌드 산출물
+dist/
+build/
+.vite/
+*.tsbuildinfo
+
+# 환경 변수 (DB 접속 정보 등 비밀값 — docs/policy/credential-management.md)
+.env
+.env.*
+!.env.example
+
+# 로컬 SQLite (접속 설정·감사 로그 등 런타임 데이터 — 커밋 대상 아님)
+*.sqlite
+*.sqlite3
+*.db
+/data/
+
+# 로그
+*.log
+npm-debug.log*
+
+# 테스트 커버리지
+coverage/
+
+# 세션 작업 기록 (로컬 전용 — .claude/commands/done.md 참고)
+.done/
+
+# Claude Code 개인별 로컬 설정 (팀 공유 설정은 .claude/settings.json)
+.claude/settings.local.json
+
+# Docker 로컬 오버라이드
+docker-compose.override.yml
+
+# 에디터/IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
