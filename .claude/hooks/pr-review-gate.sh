@@ -125,7 +125,30 @@ def is_git_push(command_str):
     if group:
         groups.append(group)
 
-    return any(len(g) >= 2 and g[0] == 'git' and g[1] == 'push' for g in groups)
+    # 'git' 바로 다음 토큰이 정확히 'push'인지만 보면, 'git --no-pager push'나
+    # 'git -C <path> push'처럼 흔히 쓰는 전역 옵션 하나만 끼어도 놓친다 — 이건
+    # eval/coproc 같은 의도적 우회가 아니라 아주 평범한 git 사용법이라 7차 코드
+    # 리뷰에서 실제 위험으로 판단해 고쳤다. 'git'(또는 절대경로 `.../git`) 다음의
+    # 전역 옵션들(-로 시작하는 토큰, `-C`/`-c`는 다음 토큰도 그 값이므로 함께
+    # 건너뜀)을 건너뛰고 그 뒤에 오는 첫 서브커맨드가 push 인지 본다.
+    GIT_GLOBAL_OPTS_WITH_ARG = {'-C', '-c'}
+
+    def group_is_git_push(g):
+        if not g:
+            return False
+        head = g[0]
+        if head != 'git' and not head.endswith('/git'):
+            return False
+        i = 1
+        while i < len(g):
+            tok = g[i]
+            if tok.startswith('-'):
+                i += 2 if tok in GIT_GLOBAL_OPTS_WITH_ARG else 1
+                continue
+            return tok == 'push'
+        return False
+
+    return any(group_is_git_push(g) for g in groups)
 
 
 try:
