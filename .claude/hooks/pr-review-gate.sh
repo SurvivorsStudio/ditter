@@ -39,12 +39,13 @@ command_str="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/de
 # git push 여부 판정. 명령 문자열 전체를 훑으면 커밋 메시지 본문(특히
 # `git commit -m "$(cat <<'EOF' ... EOF)"` 형태의 heredoc)에 그 문구가 텍스트로만
 # 들어있어도 오탐한다 — heredoc 본문은 따옴표로 감싸여 있지 않아 따옴표만 걷어내는
-# 방식으론 못 막는다. 그래서 "명령 문자열의 첫 줄이 곧바로 git push 로 시작하는가"만
-# 본다. 이 저장소의 실제 push 는 항상 `git push -u origin HEAD` 형태의 단독 명령이라
-# 이 조건으로 충분하고, 다른 명령 뒤에 이어지거나 첫 줄이 아닌 곳의 push 는 놓칠 수
-# 있지만 그건 fail-open 방향의 누락이라 허용한다.
+# 방식으론 못 막는다. 그래서 명령 문자열의 **첫 줄만** 본다(heredoc 본문은 첫 줄
+# 다음에 오므로 배제됨). 다만 첫 줄 자체가 `git add -A && git commit ... && git push ...`
+# 처럼 `&&`·`;`·`|` 로 여러 명령을 이어붙인 한 줄일 수 있으므로(2차 코드 리뷰에서 실제
+# 우회 사례로 발견·재현됨), 첫 줄을 그 구분자들로 나눠 조각마다 검사한다.
 first_line="$(printf '%s\n' "$command_str" | head -n 1)"
-printf '%s' "$first_line" | grep -Eq '^[[:space:]]*git[[:space:]]+push([[:space:]]|$)' || allow
+first_line_segments="$(printf '%s' "$first_line" | sed -E 's/(&&|;|\|)/\n/g')"
+printf '%s\n' "$first_line_segments" | grep -Eq '^[[:space:]]*git[[:space:]]+push([[:space:]]|$)' || allow
 
 # 현재 브랜치 판별 — 실패하거나(디태치드 HEAD 등) main/알 수 없는 브랜치면 통과.
 branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" || allow
@@ -66,7 +67,7 @@ review_calls=0
 if [ -r "$state_file" ]; then
   reviewed_head="$(jq -r '.reviewed_head // empty' "$state_file" 2>/dev/null)"
   cycles_for_head="$(jq -r '.cycles_for_head // 0' "$state_file" 2>/dev/null)"
-  if [ -n "$reviewed_head" ] && [ "$reviewed_head" = "$current_head" ] && [ -n "$cycles_for_head" ]; then
+  if [ -n "$reviewed_head" ] && [ "$reviewed_head" = "$current_head" ] && printf '%s' "$cycles_for_head" | grep -Eq '^[0-9]+$'; then
     review_calls="$cycles_for_head"
   fi
 fi
