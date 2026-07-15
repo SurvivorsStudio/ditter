@@ -41,10 +41,16 @@ command_str="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/de
 # 들어있어도 오탐한다 — heredoc 본문은 따옴표로 감싸여 있지 않아 따옴표만 걷어내는
 # 방식으론 못 막는다. 그래서 명령 문자열의 **첫 줄만** 본다(heredoc 본문은 첫 줄
 # 다음에 오므로 배제됨). 다만 첫 줄 자체가 `git add -A && git commit ... && git push ...`
-# 처럼 `&&`·`;`·`|` 로 여러 명령을 이어붙인 한 줄일 수 있으므로(2차 코드 리뷰에서 실제
-# 우회 사례로 발견·재현됨), 첫 줄을 그 구분자들로 나눠 조각마다 검사한다.
+# 처럼 `&&`·`;`·`|`·`&`(백그라운드 실행)로 여러 명령을 이어붙인 한 줄일 수 있으므로
+# (2·3차 코드 리뷰에서 실제 우회 사례로 발견·재현됨 — `&&`/`;`/`|` 다음 단일 `&`도),
+# 첫 줄을 그 구분자들로 나눠 조각마다 검사한다. `&&`를 목록 맨 앞에 둬 단일 `&` 규칙에
+# 앞서 통째로 매치되게 한다(둘로 쪼개지지 않도록).
+#
+# 알려진 한계(이 방식이 못 잡는 것 — 문서화된 fail-open 허용 범위):
+# command substitution(`$(git push ...)`), `nohup`/`time`/`sudo` 같은 프로세스
+# 래퍼로 감싼 push. 이런 형태는 실수로 흔히 쓰이지 않아 우선순위가 낮다고 판단했다.
 first_line="$(printf '%s\n' "$command_str" | head -n 1)"
-first_line_segments="$(printf '%s' "$first_line" | sed -E 's/(&&|;|\|)/\n/g')"
+first_line_segments="$(printf '%s' "$first_line" | sed -E 's/(&&|;|\||&)/\n/g')"
 printf '%s\n' "$first_line_segments" | grep -Eq '^[[:space:]]*git[[:space:]]+push([[:space:]]|$)' || allow
 
 # 현재 브랜치 판별 — 실패하거나(디태치드 HEAD 등) main/알 수 없는 브랜치면 통과.
