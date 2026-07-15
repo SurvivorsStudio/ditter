@@ -6,7 +6,8 @@ argument-hint: [cycle number to force (optional, defaults to 1)]
 현재 브랜치의 diff(base: `origin/main`)를 `reviewer` 서브에이전트로 검토한다. **분석은
 공격적으로, 자동수정은 보수적으로** — finding 은 넓게 잡아내되, 사용자가 `수락`한 것만 commit
 한다. 이 커맨드는 push 하지 않는다 — push 는 `/pr`이 하고, `.claude/hooks/pr-review-gate.sh`가
-이 커맨드(정확히는 reviewer 호출 사실)를 이 세션에서 거쳤는지 검증해 강제한다.
+**지금 push 하려는 HEAD** 가 이 절차로 충분히 검토됐는지 `.claude/.review-state.json`(사이클마다
+이 커맨드가 갱신, `.gitignore` 처리된 로컬 상태 파일)으로 대조해 강제한다.
 
 ## Procedure
 
@@ -126,6 +127,16 @@ carry_over_existing: {carry_over}
     if status == "FAIL":  # 위에서 이미 처리했지만 재확인
         break
 
+    # === 상태 기록 (여기까지 왔으면 이번 사이클은 FAIL/한도 도달 없이 끝난 것) ===
+    # pr-review-gate.sh 가 대조할 "이 HEAD 는 몇 번 리뷰됐나"를 기록한다. reviewer 의
+    # 자동수정 commit 으로 HEAD 가 바뀌었으면(=이번 사이클이 만든 변경은 아직 review 안 된
+    # 새 diff 이므로) 카운트를 1로 리셋하고, 안 바뀌었으면(=이 사이클이 그 HEAD 를 온전히
+    # 리뷰) 누적한다.
+    new_head = $(git rev-parse HEAD)
+    prev_state = read .claude/.review-state.json (없으면 {})
+    prev_cycles = (prev_state.reviewed_head == new_head) ? prev_state.cycles_for_head : 0
+    write .claude/.review-state.json = {"reviewed_head": new_head, "cycles_for_head": prev_cycles + 1}
+
     # cycle 종료 — 다음 사이클로 갈지 결정
     if cycle < required_cycles:
         cycle += 1
@@ -151,13 +162,21 @@ output f"  종료 사유: {termination_reason}"
 - 그 외("리뷰 완료 (...)", "변경 없음")는 정상 종료. commit 해시·이월 목록을 보고한다.
 - 이월(`carry_over`) 목록은 `/pr`이 PR body 의 `## 코드리뷰` 섹션에 반영할 수 있도록 그대로
   넘겨준다(형식은 [pr.md](pr.md) §6-A 참고).
+- **마지막 사이클 자체가 새 자동수정 commit 을 만들었다면**, 그 commit 이 담긴 최종 HEAD 는
+  아직 `cycles_for_head`가 1로 리셋된 상태다(위 「상태 기록」 참고) — 고위험(2사이클 필요)
+  변경이었다면 `/pr`의 push 게이트가 여전히 막을 수 있다. 이건 버그가 아니라 "그 마지막 수정은
+  아직 review 안 된 새 diff"라는 정확한 신호다. `/review`를 한 번 더 실행해 해소한다.
 
 ## Notes
 
 - 이 커맨드는 **push 하지 않는다.** push 게이트는 `.claude/hooks/pr-review-gate.sh`가
-  기계적으로 강제한다 — reviewer 를 이 세션에서 필요한 횟수만큼 호출한 기록이 없으면 `/pr`의
-  `git push`가 deny 된다.
+  기계적으로 강제한다 — **지금 push 하려는 HEAD** 가 `.claude/.review-state.json`에 필요한
+  횟수만큼 리뷰됐다고 기록돼 있지 않으면 `/pr`의 `git push`가 deny 된다. (이전에는 "이 세션에서
+  reviewer 를 몇 번 불렀는지"만 셌는데, 그러면 리뷰 통과 후 같은 세션에서 코드를 더 고치고 다시
+  push 할 때 새 변경이 리뷰되지 않은 채 통과했다 — 지금은 HEAD 단위로 대조한다.)
 - `/pr`의 코드 리뷰 단계는 이 절차를 그대로 따른다(SSOT는 이 문서) — `/pr` 쪽에서 중복 설명하지
   않는다.
 - reviewer 의 절대 규칙(범위 밖 파일 금지, 민감 경로 자동수정 금지, 파괴적 git 금지 등)과 4D
   분류·결정 매트릭스의 본문은 [.claude/agents/reviewer.md](../agents/reviewer.md) (SSOT).
+- `.claude/.review-state.json`은 로컬 세션 상태일 뿐이라 `.gitignore` 처리돼 있다 — 팀과
+  공유되지 않고, 저장소를 새로 클론하면 리뷰 기록도 없이 시작한다(정상 동작).

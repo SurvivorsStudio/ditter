@@ -34,6 +34,9 @@ coverage/
 # Claude Code 개인별 로컬 설정 (팀 공유 설정은 .claude/settings.json)
 .claude/settings.local.json
 
+# /review 세션 상태 (어느 HEAD 를 몇 번 리뷰했는지 — .claude/commands/review.md 참고)
+.claude/.review-state.json
+
 # Docker 로컬 오버라이드
 docker-compose.override.yml
 

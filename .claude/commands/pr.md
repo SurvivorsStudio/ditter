@@ -64,9 +64,9 @@ main 은 팀이 공유하는 브랜치이므로 직접 push 하지 않는다. �
 - `/review`가 만든 확정 수정 commit 은 이미 위 2번 「커밋 정리」의 영역 분할 규칙을 지킨 채
   커밋되어 있다 — 여기서 다시 손대지 않는다.
 - `/review`의 최종 `carry_over` 목록을 받아서 아래 step 6 PR body 의 `## 코드리뷰` 섹션에 쓴다.
-- **이 단계를 건너뛰고 push 하지 않는다.** `.claude/hooks/pr-review-gate.sh`가 이 세션에서
-  `reviewer` 호출 기록(고위험이면 2회)을 검증해 강제한다 — 건너뛰면 다음 step 의 `git push`가
-  deny 된다.
+- **이 단계를 건너뛰고 push 하지 않는다.** `.claude/hooks/pr-review-gate.sh`가 **지금 push 하려는
+  HEAD** 가 reviewer 로 충분히(고위험이면 2회) 검토됐는지 `.claude/.review-state.json` 으로
+  대조해 강제한다 — 건너뛰거나 리뷰 이후 커밋을 더 쌓으면 다음 step 의 `git push`가 deny 된다.
 - `/review`가 `FAIL`로 끝나면(사유가 `reviewer FAIL`로 시작) push 하지 않는다. 원인을 해결하고
   `/review`를 다시 실행한다.
 
