@@ -55,10 +55,11 @@ command_str="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/de
 # 하나의 토큰으로 묶어 보존하므로 안전). 연산자 토큰으로 잘린 조각(= 개별 단순 명령)
 # 중 하나라도 `git`, `push` 로 시작하면 push 로 판정한다.
 #
-# 알려진 한계(문서화된 fail-open 허용 범위): command substitution(`$(git push ...)`),
-# `nohup`/`time`/`sudo` 같은 프로세스 래퍼로 감싼 push. 이런 형태는 실수로 흔히
-# 쓰이지 않아 우선순위가 낮다고 판단했다. 셸 문법 자체가 깨져 파싱이 실패하면(닫히지
-# 않은 따옴표 등) push 가 아니라고 본다(fail-open).
+# 알려진 한계(문서화된 fail-open 허용 범위): `nohup`/`time`/`sudo` 같은 프로세스
+# 래퍼로 감싼 push. 이런 형태는 실수로 흔히 쓰이지 않아 우선순위가 낮다고 판단했다.
+# (`$(git push ...)` 형태의 command substitution은 못 잡을 것으로 처음엔 예상했지만
+# 실측 결과 정상 탐지된다 — 5차 코드 리뷰에서 확인, 이 목록에서 제외.) 셸 문법
+# 자체가 깨져 파싱이 실패하면(닫히지 않은 따옴표 등) push 가 아니라고 본다(fail-open).
 is_git_push="$(printf '%s' "$command_str" | python3 -c "
 import re, shlex, sys
 
@@ -74,7 +75,10 @@ def strip_heredoc_bodies(text):
             continue
         m = HEREDOC_RE.search(line)
         if m:
-            out.append(line[: m.start()])
+            # heredoc 여는 토큰(<<EOF 등)만 지운다 — 같은 줄에 이어지는
+            # `&& git push` 같은 진짜 명령까지 함께 지우면 그 명령이 검사
+            # 대상에서 사라져버린다(5차 코드 리뷰에서 발견·재현됨).
+            out.append(line[: m.start()] + line[m.end() :])
             delim, in_heredoc = m.group(2), True
             continue
         out.append(line)
@@ -90,7 +94,16 @@ def is_git_push(command_str):
     except ValueError:
         return False
 
-    boundaries = {';', '&', '&&', '|', '||', '(', ')'}
+    # 실제 연산자 외에 셸 예약어도 명령 경계로 취급한다 — 'if true; then git
+    # push; fi' 처럼 예약어 바로 뒤에 오는 push 는 연산자 분리만으로는 새
+    # 명령의 시작으로 안 잡힌다(5차 코드 리뷰에서 발견·재현됨).
+    boundaries = {
+        ';', '&', '&&', '|', '||', '(', ')',
+        'if', 'then', 'elif', 'else', 'fi',
+        'for', 'while', 'until', 'do', 'done',
+        'case', 'esac', 'select', 'in',
+        '!', '{', '}',
+    }
     group = []
     groups = []
     for tok in tokens:
