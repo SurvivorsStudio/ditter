@@ -8,6 +8,7 @@
 - [docs/policy](docs/policy/README.md) — 보안·데이터 취급 정책
 - [docs/conventions](docs/conventions/README.md) — 개발 언어·코드 컨벤션
 - [docs/schema](docs/schema/README.md) — DITTER 로컬 SQLite 테이블 스키마
+- `.requirements/` — 신규 기능 설계서를 작성하는 로컬 전용 디렉토리(커밋 대상 아님, `.gitignore` 처리됨)
 
 ## 문서 갱신 원칙
 

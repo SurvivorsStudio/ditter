@@ -28,6 +28,9 @@ coverage/
 # 세션 작업 기록 (로컬 전용 — .claude/commands/done.md 참고)
 .done/
 
+# 로컬 요구사항·기획 메모 (하위 디렉토리 포함, 커밋 대상 아님)
+.requirements/
+
 # Claude Code 개인별 로컬 설정 (팀 공유 설정은 .claude/settings.json)
 .claude/settings.local.json
 
