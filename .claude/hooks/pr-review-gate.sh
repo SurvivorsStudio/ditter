@@ -25,8 +25,9 @@ deny() {
   exit 2
 }
 
-# jq 가 없으면 이 게이트 자체를 판단할 수 없다 — 통과시킨다.
+# jq·python3 가 없으면 이 게이트 자체를 판단할 수 없다 — 통과시킨다.
 command -v jq >/dev/null 2>&1 || allow
+command -v python3 >/dev/null 2>&1 || allow
 
 input="$(cat)"
 
@@ -36,22 +37,81 @@ tool_name="$(printf '%s' "$input" | jq -r '.tool_name // empty' 2>/dev/null)" ||
 command_str="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null)" || allow
 [ -n "$command_str" ] || allow
 
-# git push 여부 판정. 명령 문자열 전체를 훑으면 커밋 메시지 본문(특히
-# `git commit -m "$(cat <<'EOF' ... EOF)"` 형태의 heredoc)에 그 문구가 텍스트로만
-# 들어있어도 오탐한다 — heredoc 본문은 따옴표로 감싸여 있지 않아 따옴표만 걷어내는
-# 방식으론 못 막는다. 그래서 명령 문자열의 **첫 줄만** 본다(heredoc 본문은 첫 줄
-# 다음에 오므로 배제됨). 다만 첫 줄 자체가 `git add -A && git commit ... && git push ...`
-# 처럼 `&&`·`;`·`|`·`&`(백그라운드 실행)로 여러 명령을 이어붙인 한 줄일 수 있으므로
-# (2·3차 코드 리뷰에서 실제 우회 사례로 발견·재현됨 — `&&`/`;`/`|` 다음 단일 `&`도),
-# 첫 줄을 그 구분자들로 나눠 조각마다 검사한다. `&&`를 목록 맨 앞에 둬 단일 `&` 규칙에
-# 앞서 통째로 매치되게 한다(둘로 쪼개지지 않도록).
+# git push 여부 판정.
 #
-# 알려진 한계(이 방식이 못 잡는 것 — 문서화된 fail-open 허용 범위):
-# command substitution(`$(git push ...)`), `nohup`/`time`/`sudo` 같은 프로세스
-# 래퍼로 감싼 push. 이런 형태는 실수로 흔히 쓰이지 않아 우선순위가 낮다고 판단했다.
-first_line="$(printf '%s\n' "$command_str" | head -n 1)"
-first_line_segments="$(printf '%s' "$first_line" | sed -E 's/(&&|;|\||&)/\n/g')"
-printf '%s\n' "$first_line_segments" | grep -Eq '^[[:space:]]*git[[:space:]]+push([[:space:]]|$)' || allow
+# 이 판정은 세 차례 코드 리뷰에서 세 번 뚫렸다: (1차) 텍스트 전체를 그냥 훑으면 커밋
+# 메시지 본문(heredoc)에 "git push"가 텍스트로만 들어있어도 오탐. (2·3차) 그렇다고
+# "첫 줄만, 구분자로 나눠서" 보는 정규식 방식으로 좁히면 `&&`/`;`/`|`/`&`는 잡아도
+# 줄바꿈으로만 나눈 push, `(git push ...)`처럼 괄호로 감싼 push는 놓치고, 반대로
+# 구분자를 넓히면 따옴표 안 텍스트(JSON 등)를 진짜 명령으로 오인해 정상 작업까지
+# 차단했다 — fail-open 원칙(놓치는 것보다 잘못 막는 게 훨씬 비싸다)에 정면으로
+# 어긋나는 실패 방향이었다.
+#
+# 그래서 정규식 대신 **실제 셸 토큰화**로 판정한다: Python 표준 라이브러리 `shlex`를
+# `punctuation_chars` 옵션으로 써서, 따옴표 안 내용은 통째로 하나의 토큰으로 보존하고
+# `&&`·`;`·`|`·`&`·`(`·`)` 는 별도 연산자 토큰으로 분리한다(추가 의존성 없음 — python3
+# 표준 모듈만 사용). heredoc 본문은 먼저 구조적으로 제거하고, 줄바꿈은 `;`로 바꿔
+# "줄만 나눠 쓴 순차 명령"도 경계로 잡는다(따옴표 안에 있던 실제 개행은 shlex가 여전히
+# 하나의 토큰으로 묶어 보존하므로 안전). 연산자 토큰으로 잘린 조각(= 개별 단순 명령)
+# 중 하나라도 `git`, `push` 로 시작하면 push 로 판정한다.
+#
+# 알려진 한계(문서화된 fail-open 허용 범위): command substitution(`$(git push ...)`),
+# `nohup`/`time`/`sudo` 같은 프로세스 래퍼로 감싼 push. 이런 형태는 실수로 흔히
+# 쓰이지 않아 우선순위가 낮다고 판단했다. 셸 문법 자체가 깨져 파싱이 실패하면(닫히지
+# 않은 따옴표 등) push 가 아니라고 본다(fail-open).
+is_git_push="$(printf '%s' "$command_str" | python3 -c "
+import re, shlex, sys
+
+HEREDOC_RE = re.compile(r\"<<-?~?(['\\\"]?)([A-Za-z_][A-Za-z0-9_]*)\1\")
+
+
+def strip_heredoc_bodies(text):
+    out, in_heredoc, delim = [], False, None
+    for line in text.split('\n'):
+        if in_heredoc:
+            if line.strip() == delim:
+                in_heredoc, delim = False, None
+            continue
+        m = HEREDOC_RE.search(line)
+        if m:
+            out.append(line[: m.start()])
+            delim, in_heredoc = m.group(2), True
+            continue
+        out.append(line)
+    return '\n'.join(out)
+
+
+def is_git_push(command_str):
+    flattened = strip_heredoc_bodies(command_str).replace('\n', ';')
+    try:
+        lex = shlex.shlex(flattened, posix=True, punctuation_chars='();&|')
+        lex.whitespace_split = True
+        tokens = list(lex)
+    except ValueError:
+        return False
+
+    boundaries = {';', '&', '&&', '|', '||', '(', ')'}
+    group = []
+    groups = []
+    for tok in tokens:
+        if tok in boundaries:
+            if group:
+                groups.append(group)
+            group = []
+        else:
+            group.append(tok)
+    if group:
+        groups.append(group)
+
+    return any(len(g) >= 2 and g[0] == 'git' and g[1] == 'push' for g in groups)
+
+
+try:
+    print('yes' if is_git_push(sys.stdin.read()) else 'no')
+except Exception:
+    print('no')
+" 2>/dev/null)"
+[ "$is_git_push" = "yes" ] || allow
 
 # 현재 브랜치 판별 — 실패하거나(디태치드 HEAD 등) main/알 수 없는 브랜치면 통과.
 branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" || allow
