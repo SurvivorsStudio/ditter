@@ -124,10 +124,12 @@ STEP 2         STEP 3            STEP 7            │
 
 개발 착수 전에 합의가 필요한 사항들이다.
 
-1. 타깃 환경(프레임워크)을 하나 정한다.
-2. AI 모델 기본값을 정한다.
-3. 자격증명 암호화 키 관리 방침을 정한다. ([credential-management.md](../policy/credential-management.md))
-4. HypoPG를 MVP에 넣을지 결정한다.
+> **타깃 환경(프레임워크)은 이미 정했다**: TypeScript 모노레포 + React/Vite(프런트엔드) +
+> Fastify(백엔드) ([docs/conventions/README.md](../conventions/README.md) 참고).
+
+1. AI 모델 기본값을 정한다.
+2. 자격증명 암호화 키 관리 방침을 정한다. ([credential-management.md](../policy/credential-management.md))
+3. HypoPG를 MVP에 넣을지 결정한다.
 
    HypoPG는 PostgreSQL 확장으로, 인덱스를 실제로 만들지 않고 "만들었다고 가정"한 채 EXPLAIN을 돌려볼 수 있게 해준다. 세션 안에서만 유효하므로 프로덕션에 아무 영향이 없다.
 
