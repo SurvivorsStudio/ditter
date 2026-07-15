@@ -138,7 +138,7 @@ STEP 2         STEP 3            STEP 7            │
 
    "추측"과 "검증된 제안"의 차이다. 단점은 별도 설치가 필요한 확장이라 전제가 하나 늘어난다는 것.
 
-5. 프로덕션 데이터가 외부 AI로 나가는 문제를 어떻게 설명할지 정한다. ([ai-context-and-safety.md](../policy/ai-context-and-safety.md))
+4. 프로덕션 데이터가 외부 AI로 나가는 문제를 어떻게 설명할지 정한다. ([ai-context-and-safety.md](../policy/ai-context-and-safety.md))
 
 ## 관련 문서
 
