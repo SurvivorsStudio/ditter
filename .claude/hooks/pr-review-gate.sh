@@ -66,7 +66,9 @@ command_str="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/de
 #
 # 알려진 한계(문서화된 fail-open 허용 범위 — 6차 코드 리뷰에서 발견, 전부 "실수로는
 # 안 나오고 의도적으로 만들어야 하는 형태"라 우선순위 낮음으로 합의하고 여기서 멈춤):
-#   - `nohup`/`time`/`sudo` 같은 프로세스 래퍼로 감싼 push.
+#   - `nohup`/`time`/`sudo`/`command`/`exec`/`env`/`xargs` 처럼 뒤 인자를 그대로
+#     실행하는 프로세스 래퍼로 감싼 push(9·10차 코드 리뷰에서 `command`/`exec`/`env`
+#     추가 확인 — group 의 첫 토큰이 `git` 이 아니게 되어 구조적으로 못 잡는다).
 #   - 따옴표/백틱 안에 있는 command substitution — 예: `msg="$(git push ...)"`,
 #     `` `git push` ``. shlex 가 따옴표 문자열을 통째로 하나의 토큰으로 보존하는
 #     설계(따옴표 안 텍스트 오탐 방지를 위해 의도적으로 그렇게 함) 때문에, 따옴표
