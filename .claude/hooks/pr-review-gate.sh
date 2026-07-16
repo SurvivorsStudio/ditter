@@ -69,6 +69,15 @@ command_str="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/de
 # fail-open 방향(안전한 쪽)이고 이 저장소 워크플로우에서 극히 드문 형태라 방치한다.
 # 셸 문법 자체가 깨져 파싱이 실패하면(닫히지 않은 따옴표 등) push 가 아니라고
 # 본다(fail-open).
+#
+# ⚠️ 주의: 아래는 bash 큰따옴표 문자열 안에 파이썬 소스를 통째로 넣은 것이다.
+# 이 블록 안(주석 포함!)에 이스케이프 안 된 `"` 를 하나라도 쓰면 bash 문자열이
+# 거기서 끊겨 python3 가 조용히 실패하고, is_git_push 가 빈 문자열이 되어
+# **모든 push 를 판정 불능으로 fail-open 처리한다** — 즉 이 게이트 전체가
+# 말없이 무력화된다(8차 코드 리뷰 직후 실제로 이 사고가 났다: 새 주석에 넣은
+# 이스케이프 안 된 큰따옴표 하나 때문에 스크립트를 고치자마자 모든 테스트가
+# 조용히 통과해버렸다). 이 블록을 고칠 땐 반드시 아래 큰따옴표만 쓰고, 문자
+# 그대로의 `"` 가 필요하면 `\"` 로 이스케이프한 뒤 전체 테스트 배터리를 돌려라.
 is_git_push="$(printf '%s' "$command_str" | python3 -c "
 import re, shlex, sys
 
@@ -127,11 +136,13 @@ def is_git_push(command_str):
 
     # 'git' 바로 다음 토큰이 정확히 'push'인지만 보면, 'git --no-pager push'나
     # 'git -C <path> push'처럼 흔히 쓰는 전역 옵션 하나만 끼어도 놓친다 — 이건
-    # eval/coproc 같은 의도적 우회가 아니라 아주 평범한 git 사용법이라 7차 코드
+    # eval/coproc 같은 의도적 우회가 아니라 아주 평범한 git 사용법이라 7·8차 코드
     # 리뷰에서 실제 위험으로 판단해 고쳤다. 'git'(또는 절대경로 `.../git`) 다음의
-    # 전역 옵션들(-로 시작하는 토큰, `-C`/`-c`는 다음 토큰도 그 값이므로 함께
-    # 건너뜀)을 건너뛰고 그 뒤에 오는 첫 서브커맨드가 push 인지 본다.
-    GIT_GLOBAL_OPTS_WITH_ARG = {'-C', '-c'}
+    # 전역 옵션들(-로 시작하는 토큰)을 건너뛰고 그 뒤에 오는 첫 서브커맨드가 push
+    # 인지 본다. 아래 목록은 다음 토큰이 그 값인(= 없이 공백으로도 값을 받는)
+    # git 전역 옵션 전부를 실제 git(2.55) 실행으로 확인해서 채운 것이다
+    # (--super-prefix 는 공백 폼이 안 먹혀 제외).
+    GIT_GLOBAL_OPTS_WITH_ARG = {'-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env'}
 
     def group_is_git_push(g):
         if not g:
