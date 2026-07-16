@@ -106,6 +106,17 @@ docs/schema/**
 docs/conventions/commit-convention.md
 ```
 
+**예외**: `.claude/.review-state.json`은 위 `.claude/**` 민감 경로 규칙에서 제외한다. 이 파일은
+거버넌스·설정 파일이 아니라 **리뷰어 자신의 사이클 완료 기록**(로컬 전용, `.gitignore` 처리됨)이라
+아래 「절차」6번에 따라 **직접 쓴다** — PR diff 의 `in_scope_files` 여부와도 무관하다(애초에
+diff 대상 파일이 아니다).
+
+> 왜 오케스트레이터가 아니라 리뷰어 자신이 쓰는가: 이 파일은 `pr-review-gate.sh`가 "reviewer 가
+> 이 HEAD 를 실제로 검토했는지" 판단하는 유일한 근거다. 오케스트레이터(호출자)가 사이클이 끝난
+> "뒤에" 이 파일을 손으로 써넣으면, 실제 리뷰 여부와 무관하게 그 값을 조작할 수 있는 경로가
+> 생긴다 — 바로 이 게이트가 막으려는 것 자체다. 리뷰어 자신이 **자기 사이클이 실제로 끝나는
+> 순간**(CLEAN/ACTIONED 로 확정될 때)에만 쓰게 하면, 이 기록은 항상 진짜 리뷰 실행의 부수효과다.
+
 ### core paths — 고위험(blast radius 큰) 경로
 
 호출자가 사이클 수(최소 2회 여부)를 정할 때 참고하는 목록이다. 이 목록에 속한 변경을 리뷰할 때는
@@ -141,7 +152,17 @@ docs/policy/**, docs/schema/**       # 정책 · 스키마 계약 SSOT
      자동수정하지 않고 그 사실을 알린다.
    - **대안(note)**: note 의 지시대로 수정하거나, 지시가 불명확하면 다시 `NEEDS_USER`로 남긴다.
    - **거부**: 수정하지 않고 `carry_over_adds`로 이월한다.
-6. 최종 상태를 정하고 아래 「출력 계약」대로 `REVIEW_RESULT`를 출력한다.
+6. **이번 호출로 이 사이클이 진짜 끝나는 경우에만**(최종 status 가 `CLEAN` 또는 `ACTIONED` —
+   즉 `NEEDS_USER`로 사용자 응답을 더 기다려야 하는 상태가 아니고, `FAIL`도 아닐 때) 아래 순서로
+   `.claude/.review-state.json`을 직접 갱신한다:
+   1. `new_head = $(git rev-parse HEAD)` (5번에서 수락된 수정을 커밋했다면 그 커밋 이후 HEAD).
+   2. 기존 `.claude/.review-state.json`을 읽는다(없으면 없는 대로 진행).
+   3. 기존 파일의 `reviewed_head`가 `new_head`와 같으면 `cycles_for_head`를 그 값 + 1로,
+      다르거나 파일이 없으면 `1`로 한다.
+   4. `{"reviewed_head": "<new_head>", "cycles_for_head": <N>}`을 그 경로에 덮어쓴다.
+   - `status`가 `FAIL`이거나(분석 실패), `NEEDS_USER`로 응답을 더 기다려야 하면 이 파일에
+     손대지 않는다 — 아직 이 사이클이 검증을 끝낸 게 아니기 때문이다.
+7. 최종 상태를 정하고 아래 「출력 계약」대로 `REVIEW_RESULT`를 출력한다.
 
 **분석 자체가 실패하면**(diff 를 못 읽음, git 명령 실패, 파싱 불가 등) 반드시 `status: FAIL`,
 `fail_reason: analysis_error`로 보고한다 — 애매하게 `CLEAN`으로 눙치지 않는다. push 를 막는 것이

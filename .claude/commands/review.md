@@ -6,8 +6,10 @@ argument-hint: [cycle number to force (optional, defaults to 1)]
 현재 브랜치의 diff(base: `origin/main`)를 `reviewer` 서브에이전트로 검토한다. **분석은
 공격적으로, 자동수정은 보수적으로** — finding 은 넓게 잡아내되, 사용자가 `수락`한 것만 commit
 한다. 이 커맨드는 push 하지 않는다 — push 는 `/pr`이 하고, `.claude/hooks/pr-review-gate.sh`가
-**지금 push 하려는 HEAD** 가 이 절차로 충분히 검토됐는지 `.claude/.review-state.json`(사이클마다
-이 커맨드가 갱신, `.gitignore` 처리된 로컬 상태 파일)으로 대조해 강제한다.
+**지금 push 하려는 HEAD** 가 이 절차로 충분히 검토됐는지 `.claude/.review-state.json`(사이클이
+`CLEAN`/`ACTIONED`로 끝날 때마다 `reviewer` 자신이 갱신, `.gitignore` 처리된 로컬 상태 파일)으로
+대조해 강제한다. 오케스트레이터(이 커맨드)는 이 파일에 손대지 않는다 — 자세한 이유는
+[reviewer.md](../agents/reviewer.md)의 민감 경로 예외 설명 참고.
 
 ## Procedure
 
@@ -127,15 +129,11 @@ carry_over_existing: {carry_over}
     if status == "FAIL":  # 위에서 이미 처리했지만 재확인
         break
 
-    # === 상태 기록 (여기까지 왔으면 이번 사이클은 FAIL/한도 도달 없이 끝난 것) ===
-    # pr-review-gate.sh 가 대조할 "이 HEAD 는 몇 번 리뷰됐나"를 기록한다. reviewer 의
-    # 자동수정 commit 으로 HEAD 가 바뀌었으면(=이번 사이클이 만든 변경은 아직 review 안 된
-    # 새 diff 이므로) 카운트를 1로 리셋하고, 안 바뀌었으면(=이 사이클이 그 HEAD 를 온전히
-    # 리뷰) 누적한다.
-    new_head = $(git rev-parse HEAD)
-    prev_state = read .claude/.review-state.json (없으면 {})
-    prev_cycles = (prev_state.reviewed_head == new_head) ? prev_state.cycles_for_head : 0
-    write .claude/.review-state.json = {"reviewed_head": new_head, "cycles_for_head": prev_cycles + 1}
+    # === 상태 기록은 reviewer 자신이 한다 ===
+    # 여기까지 왔으면 이번 사이클은 FAIL/한도 도달 없이 CLEAN 또는 ACTIONED 로 끝난 것이고,
+    # reviewer.md §절차 6번에 따라 reviewer 가 이미 .claude/.review-state.json 을 스스로
+    # 갱신했다(오케스트레이터는 이 파일을 쓰지 않는다 — reviewer.md 의 민감 경로 예외 설명
+    # 참고). 오케스트레이터는 그 결과를 신뢰하고 다음 단계로 넘어가기만 한다.
 
     # cycle 종료 — 다음 사이클로 갈지 결정
     if cycle < required_cycles:
@@ -180,3 +178,9 @@ output f"  종료 사유: {termination_reason}"
   분류·결정 매트릭스의 본문은 [.claude/agents/reviewer.md](../agents/reviewer.md) (SSOT).
 - `.claude/.review-state.json`은 로컬 세션 상태일 뿐이라 `.gitignore` 처리돼 있다 — 팀과
   공유되지 않고, 저장소를 새로 클론하면 리뷰 기록도 없이 시작한다(정상 동작).
+- 이 파일은 **`reviewer` 자신만 쓴다** — 오케스트레이터(이 커맨드나 `/pr`)가 대신 써주지
+  않는다. 리뷰 게이트가 신뢰하는 유일한 근거를 그 게이트 대상이 아닌 실제 검사자(reviewer)가
+  자기 사이클이 진짜 끝나는 순간에만 기록해야, 이 기록이 항상 진짜 리뷰의 부수효과라는 게
+  보장된다 — 오케스트레이터가 사후에 손으로 써넣으면 실제 리뷰 여부와 무관하게 값을 조작할
+  수 있는 경로가 생긴다(바로 이 게이트가 막으려는 것). 자세한 근거는
+  [reviewer.md](../agents/reviewer.md)의 민감 경로 예외 설명 참고.
