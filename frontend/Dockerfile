@@ -20,6 +20,9 @@ COPY frontend frontend
 RUN npm run build --workspace=packages/shared-types
 
 # S7 — non-root 로 실행한다.
+# 위 COPY·npm ci 는 root 로 돌아 /app 이 root 소유다. 반면 Vite dev 서버는 기동할 때
+# frontend/node_modules/.vite 캐시를 직접 만들어야 하므로, 내려가기 전에 소유권을 넘긴다.
+RUN chown -R node:node /app
 USER node
 
 EXPOSE 5173
