@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+
+    // docs/conventions/typescript-style.md — strict 모드로 개발한다.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": true,
+
+    // 타입 표기는 지워지기만 해야 한다(enum·namespace·파라미터 프로퍼티 금지).
+    // 백엔드를 빌드 없이 `node src/index.ts` 로 실행하기 위한 전제다.
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  }
+}

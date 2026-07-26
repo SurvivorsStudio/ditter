@@ -1,0 +1,37 @@
+{
+  "name": "ditter",
+  "version": "0.0.0",
+  "private": true,
+  "description": "운영 중인 PostgreSQL에 붙는 읽기 전용 웹 SQL 콘솔",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "packages/*",
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=packages/shared-types && npm run build --workspace=frontend",
+    "dev": "concurrently -n backend,frontend -c blue,magenta \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "typecheck": "npm run build --workspace=packages/shared-types && npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.13.3",
+    "concurrently": "^9.2.1",
+    "eslint": "^10.8.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^3.2.4"
+  }
+}
