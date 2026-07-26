@@ -28,3 +28,8 @@ test('PORT 기본값은 4000 이다', () => {
 test('PORT 가 포트 번호가 아니면 기동을 멈춘다', () => {
   expect(() => readServerConfig({ PORT: 'not-a-port' })).toThrow();
 });
+
+test('HOST 기본값은 루프백이다 — 네트워크 노출은 명시적 설정으로만 열린다', () => {
+  expect(readServerConfig({}).host).toBe('127.0.0.1');
+  expect(readServerConfig({ HOST: '0.0.0.0' }).host).toBe('0.0.0.0');
+});

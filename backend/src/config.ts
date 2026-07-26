@@ -7,8 +7,10 @@ export type ServerConfig = {
 
 export function readServerConfig(env: NodeJS.ProcessEnv): ServerConfig {
   return {
-    // 컨테이너 안에서는 0.0.0.0 으로 바인딩해야 외부에서 접근된다.
-    host: env.HOST ?? '0.0.0.0',
+    // 기본값은 루프백이다. 인증은 STEP 8 에서야 붙으므로, 같은 네트워크에 노출하는 선택은
+    // 기본값이 아니라 명시적 설정이어야 한다. 컨테이너는 docker-compose.yml 의 backend
+    // 서비스가 HOST=0.0.0.0 을 직접 지정한다.
+    host: env.HOST ?? '127.0.0.1',
     port: parsePort(env.PORT) ?? 4000,
   };
 }
