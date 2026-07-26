@@ -10,8 +10,11 @@ services:
       # 로컬 개발 전용 값이다. 실제 대상 DB 자격증명은 저장소에 두지 않는다.
       # (docs/policy/credential-management.md)
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ditter_local_dev_only}
+    # 포트는 호스트 루프백에만 공개한다. 인터페이스를 지정하지 않으면 Docker 가 모든
+    # 인터페이스에 바인딩하고 리눅스에서는 호스트 방화벽도 우회한다 — 위 비밀번호가
+    # 저장소에 적힌 값이라 신뢰할 수 없는 네트워크에서 그대로 노출된다.
     ports:
-      - '5432:5432'
+      - '127.0.0.1:5432:5432'
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
@@ -33,7 +36,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-ditter}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ditter_local_dev_only}
     ports:
-      - '4000:4000'
+      - '127.0.0.1:4000:4000'
     depends_on:
       db:
         condition: service_healthy
@@ -45,7 +48,7 @@ services:
     environment:
       VITE_API_PROXY_TARGET: http://backend:4000
     ports:
-      - '5173:5173'
+      - '127.0.0.1:5173:5173'
     depends_on:
       - backend
 
