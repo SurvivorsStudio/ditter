@@ -1,4 +1,6 @@
-# npm 공급망 보안 (S1~S8)
+# 공급망 보안 (S1~S9)
+
+> S1~S8은 npm 의존성, S9는 CI가 끌어다 쓰는 GitHub Actions를 다룬다.
 
 ## 먼저, 오해 하나를 정리한다
 
@@ -18,6 +20,19 @@
 | S6 | 런타임 권한 제한 | Node의 `--permission` 플래그로 파일·네트워크 접근 최소화 | STEP 9 |
 | S7 | 컨테이너 격리 | non-root 실행, 최소 베이스 이미지, Trivy 스캔 | STEP 9 |
 | S8 | prototype pollution 방어 | Fastify `onProtoPoisoning: 'error'` 확인 + 스키마에 `additionalProperties: false` + `Object.create(null)` | STEP 3 |
+| S9 | GitHub Actions 고정 | 워크플로의 `uses:`를 커밋 SHA로 고정하고 버전은 주석으로 남긴다 | STEP 0 |
+
+### S9는 npm 게이트를 우회하는 경로를 막는다
+
+`actions/checkout@v4` 같은 버전 태그는 **나중에 다른 커밋을 가리키도록 옮길 수 있다.** 액션 저장소가
+침해되어 태그가 이동하면, S2(lockfile 고정)·S5(설치 스크립트 차단)를 아무리 촘촘히 걸어놔도 그
+전부를 건너뛰고 CI 러너 안에서 임의 코드가 실행된다. 그래서 `uses:`는 40자 커밋 SHA로 고정하고
+읽는 사람을 위해 `# v4.4.0` 처럼 버전을 주석으로 남긴다.
+
+SHA를 최신으로 유지하는 비용은 Dependabot의 `github-actions` 항목이 흡수한다 — 갱신이 PR로 올라온다.
+
+워크플로 토큰 권한(`permissions:`)도 기본을 `contents: read`로 좁힌다. 배포·퍼블리시 잡을 추가할
+때만 필요한 권한을 그 잡에만 준다.
 
 ### S6의 한계를 알고 쓰라
 

@@ -23,11 +23,11 @@ DITTER는 프로덕션 PostgreSQL에 붙는 도구다. 보안은 두 갈래로 �
 | P6 | [인증/인가](authentication-authorization.md) | 최소 로그인, 권한 분리 |
 | P7 | [감사 로그](audit-logging.md) | append-only, 삭제 불가 |
 
-### npm 공급망 (Node 고유)
+### 공급망 (npm + CI)
 
 | # | 문서 |
 |---|---|
-| S1~S8 | [supply-chain-security.md](supply-chain-security.md) |
+| S1~S9 | [supply-chain-security.md](supply-chain-security.md) |
 
 ## 리뷰 게이트
 
