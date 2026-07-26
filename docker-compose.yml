@@ -47,6 +47,9 @@ services:
       dockerfile: frontend/Dockerfile
     environment:
       VITE_API_PROXY_TARGET: http://backend:4000
+      # 컨테이너 안에서는 0.0.0.0 으로 바인딩해야 위 포트 매핑이 닿는다. 호스트에서 직접
+      # 돌릴 때(`npm run dev`)는 지정하지 않아 vite.config.ts 의 루프백 기본값이 쓰인다.
+      VITE_DEV_HOST: 0.0.0.0
     ports:
       - '127.0.0.1:5173:5173'
     depends_on:
