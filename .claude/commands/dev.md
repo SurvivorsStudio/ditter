@@ -37,8 +37,8 @@ PostgreSQL(docker compose)을 재시작합니다.
 ## 비고
 
 - 두 서버 모두 백그라운드로 실행.
-- 테스트는 루트에서 한 번에 돈다: `npm test` (Vitest가 전 워크스페이스를 스캔한다). 워크스페이스별
-  테스트 스크립트는 따로 두지 않았다.
+- 테스트: 루트에서 `npm test` 면 전 워크스페이스, 영역만 돌리려면
+  `npm test --workspace=backend` / `npm test --workspace=frontend`.
 - 위 포트·워크스페이스 이름은 [STEP 0](../../docs/todo/step-00-dev-environment.md)에서 실제로
   그렇게 구성됐다(백엔드 `backend/` `:4000`, 프런트 `frontend/` `:5173`).
 - DB만 띄우려면 `docker compose up -d db`. 앱까지 컨테이너로 다 띄우려면 `docker compose up`.
