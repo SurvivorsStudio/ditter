@@ -46,7 +46,7 @@
 
 | STEP | 문서 | 시작 조건 | 비고 |
 |---|---|---|---|
-| 0 | [개발 환경 만들기](step-00-dev-environment.md) | 없음 | ✅ 완료 (CI 초록불은 첫 push 후 확인) |
+| 0 | [개발 환경 만들기](step-00-dev-environment.md) | 없음 | ✅ 완료 — 완료 조건 둘 다 확인 |
 | 1 | [DB에 안전하게 접속하기](step-01-db-connection.md) | STEP 0 | 모든 것의 병목. 2인 리뷰 필수 |
 | 2 | [웹 SQL 콘솔](step-02-web-console.md) | STEP 1 | |
 | 3 | [AI에게 줄 "근거" 만들기](step-03-ai-context-builder.md) | STEP 1 | mock으로 선행 가능 |
