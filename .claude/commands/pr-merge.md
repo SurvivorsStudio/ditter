@@ -17,7 +17,10 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
   ```bash
   gh pr list --head "$(git rev-parse --abbrev-ref HEAD)" --state open --json number,url,title
   ```
-- 현재 브랜치가 `main` 이면 멈춘다(머지할 feature PR 이 아님).
+- **번호를 인자로 받지 않았을 때만** 현재 브랜치가 `main` 인지 본다 — main 이면 멈춘다(찾을
+  feature PR 이 없다). 번호를 받았으면 **체크아웃 위치와 무관하게 진행한다.** 이 명령은 4번에서
+  사용자를 main 에 남기므로, 직전 머지 정리 직후 `/pr-merge <다음 번호>` 를 부르는 것이 정상
+  경로다. 게이트는 로컬 위치가 아니라 서버 상태(1번)로 판정한다.
 - **대상이 하나로 정해지지 않으면 여기서 멈추고 사용자에게 묻는다** — 인자로 번호를 주지 않았는데
   열린 PR 이 0개이거나 2개 이상인 경우다. 어느 것을 머지할지 추측하지 않는다. (이 판정은 반드시
   여기서 한다. 아래 1·2번은 대상이 하나로 정해진 뒤에야 실행되므로 그쪽에 적으면 도달하지 못한다.)
@@ -52,8 +55,14 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
     gh pr checks <n> --watch --fail-fast
     ```
     끝난 뒤 `gh pr view <n> --json statusCheckRollup` 으로 다시 확인한다.
-  - 필수 체크(`build-test`)가 **하나도 잡히지 않으면** 종료한다. 워크플로가 트리거되지 않았다는
-    뜻이고, 이때 통과 처리하면 CI 게이트가 그냥 없는 것과 같다.
+  - 이 명령이 요구하는 체크(`build-test`)가 **하나도 잡히지 않으면** — 단, **곧바로 종료하지
+    않는다.** PR 생성 직후에는 GitHub 이 체크런을 아직 붙이지 않아 `statusCheckRollup` 이 잠깐
+    비어 있다. 이 "아직 안 붙음"과 "워크플로가 트리거되지 않음"은 구분해야 한다. 10초 간격으로
+    최대 3회 `gh pr view <n> --json statusCheckRollup` 을 다시 읽고, 그래도 비어 있으면 종료한다.
+    통과 처리하면 CI 게이트가 그냥 없는 것과 같다.
+  - 여기서 "요구하는 체크"는 **이 명령이 요구한다**는 뜻이지 GitHub 의 required check 가 아니다
+    (브랜치 보호가 없으므로 그런 것은 없다). `gh pr checks --required` 는 이 저장소에서 항상
+    "no required checks reported" 로 끝나니 쓰지 않는다.
 - `mergeable == "CONFLICTING"` 이면 종료: feature 브랜치에서 `git merge origin/main`(rebase
   금지)으로 충돌을 먼저 해소한 뒤 `/pr` 로 재준비하라고 안내. 자동 충돌 해소 옵션은 쓰지 않는다.
 - `mergeStateStatus == "BEHIND"` 면(승인·충돌엔 문제없지만 뒤처짐) 계속 진행 가능 — GitHub 의
@@ -87,6 +96,7 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
 ```bash
 gh api graphql -f query='
   query($owner:String!, $repo:String!, $pr:Int!) {
+    viewer { login }
     repository(owner:$owner, name:$repo) {
       pullRequest(number:$pr) {
         reviewThreads(first:100) {
@@ -95,14 +105,17 @@ gh api graphql -f query='
       }
     }
   }' -F owner=SurvivorsStudio -F repo=ditter -F pr=<n> \
-  --jq '.data.repository.pullRequest.reviewThreads.nodes[]
+  --jq '.data as $d | $d.repository.pullRequest.reviewThreads.nodes[]
         | select(.isResolved == false)
         | .comments.nodes[0]
-        | select(.author.__typename != "Bot")'
+        | select(. != null)
+        | select(.author.__typename != "Bot" and .author.login != $d.viewer.login)'
 ```
 
-봇이 남긴 것(`__typename == "Bot"`)과 자기 자신이 남긴 코멘트는 세지 않는다 — 사람의 미반영
-지적만 대상이다. 남은 것이 있으면 요약해 보여주고 그대로 머지할지 확인받는다. 없으면 묻지 않는다.
+세지 않는 것은 두 가지다 — 봇이 남긴 것(`__typename == "Bot"`)과 **`gh` 를 실행하는 계정
+(`viewer.login`)이 남긴 것**. "자기 자신"은 PR 작성자가 아니라 viewer 로 못박는다(둘이 대개
+같지만 규칙으로는 다르다). 남는 것은 **사람이 남긴 미반영 지적**뿐이다. 있으면 요약해 보여주고
+그대로 머지할지 확인받고, 없으면 묻지 않는다.
 
 그 외에는 묻지 않는다. 특히 **"되돌리기 어려운 작업이니 한 번 더 확인"** 을 이유로 되묻지 않는다 —
 명시적 호출 + 게이트 통과가 곧 승인이다.
