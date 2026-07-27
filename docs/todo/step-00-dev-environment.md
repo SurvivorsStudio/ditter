@@ -37,7 +37,9 @@ STEP 0에서 실제로 정해진 것들이다. 뒤 STEP은 이 전제 위에서 
 | 설치 스크립트 | `.npmrc`에 `ignore-scripts=true` | 로컬 설치를 CI와 같은 조건으로 맞춘다 (S5) |
 | CI 액션 | 커밋 SHA로 고정, 버전은 주석 | 태그는 옮길 수 있어 npm 게이트를 우회한다 (S9) |
 | 포트 | 백엔드 4000, 프런트 5173, `/api` 프록시 | |
-| 개발 서버 바인딩 | 백엔드·프런트 모두 기본 `127.0.0.1` | 인증은 STEP 8에야 붙는다. 네트워크 노출은 기본값이 아니라 `HOST`·`VITE_DEV_HOST` 명시 설정으로만 |
+| 개발 서버 바인딩 | 백엔드·프런트 모두 기본 `127.0.0.1` | 인증은 STEP 8에야 붙는다. 네트워크 노출은 기본값이 아니라 `HOST`·`VITE_DEV_HOST` 명시 설정으로만. 값을 비워둔 것(`HOST=`)은 "설정하지 않음"으로 보고 기본값으로 되돌린다 — 빈 문자열을 그대로 넘기면 전 인터페이스에 바인딩된다 |
+| 환경변수 출처 | 저장소 루트 `.env` 하나 | 백엔드는 `--env-file-if-exists=../.env`, 프런트는 `vite.config.ts`의 `loadEnv(mode, repoRoot)`로 **같은 파일**을 읽는다. `process.env.VITE_*`로는 `.env` 값이 보이지 않는다(Vite가 넣어주지 않는다). 컨테이너는 compose의 `environment`가 우선 |
+| 공유 타입 빌드 시점 | 루트 `dev`·`test`·`build`·`typecheck`가 각자 먼저 빌드 | `dist`는 커밋 대상이 아니고 `npm ci`도 만들지 않는다(`ignore-scripts=true`라 `prepare` 훅도 안 돈다). 새로 clone 한 사람이 순서를 몰라도 되게 스크립트에 넣는다 |
 | 컨테이너 실행 계정 | 처음부터 `node` 계정으로 설치·실행 | non-root 실행(S7)을 만족하면서, 설치 후 `chown -R`로 넘길 때 생기는 의존성 레이어 중복(+170MB)을 피한다 |
 
 `npm audit --audit-level=high` 게이트를 통과시키려고 ESLint를 10.x로 올렸다. **이 게이트는 앞으로
