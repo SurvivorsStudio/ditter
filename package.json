@@ -15,14 +15,14 @@
   ],
   "scripts": {
     "build": "npm run build --workspace=packages/shared-types && npm run build --workspace=frontend",
-    "dev": "concurrently -n backend,frontend -c blue,magenta \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev": "npm run build --workspace=packages/shared-types && concurrently -n backend,frontend -c blue,magenta \"npm:dev:backend\" \"npm:dev:frontend\"",
     "dev:backend": "npm run dev --workspace=backend",
     "dev:frontend": "npm run dev --workspace=frontend",
     "typecheck": "npm run build --workspace=packages/shared-types && npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "vitest run"
+    "test": "npm run build --workspace=packages/shared-types && vitest run"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
