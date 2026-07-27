@@ -20,7 +20,7 @@ jobs:
       # 액션은 커밋 SHA 로 고정한다. 버전 태그는 나중에 다른 커밋을 가리키도록 옮길 수
       # 있어서, npm 쪽 lockfile 고정(S2)·설치 스크립트 차단(S5) 게이트를 우회하는 경로가
       # 된다. SHA 갱신은 .github/dependabot.yml 의 github-actions 항목이 PR 로 올려준다.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
