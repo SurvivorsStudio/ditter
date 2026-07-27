@@ -27,9 +27,10 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
 - 찾은 PR 번호로 상세 상태를 가져온다(이후 게이트는 **이 서버 값**을 기준으로 한다 — 사용자가
   다른 브랜치를 체크아웃한 상태일 수 있으므로 로컬 `HEAD` 를 가정하지 않는다):
   ```bash
-  gh pr view <n> --json number,title,state,mergeable,mergeStateStatus,reviewDecision,\
-  statusCheckRollup,headRefName,headRefOid,baseRefName
+  gh pr view <n> --json number,title,state,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,headRefName,headRefOid,baseRefName
   ```
+  (한 줄로 붙여 쓴다. `\` 로 줄을 나누면 코드블록 들여쓰기가 딸려 들어가
+  `accepts at most 1 arg(s), received 2` 로 실패한다.)
 
 ### 1. 사전 게이트 (모두 통과해야 함 — 첫 실패에서 종료)
 
@@ -60,6 +61,11 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
     비어 있다. 이 "아직 안 붙음"과 "워크플로가 트리거되지 않음"은 구분해야 한다. 10초 간격으로
     최대 3회 `gh pr view <n> --json statusCheckRollup` 을 다시 읽고, 그래도 비어 있으면 종료한다.
     통과 처리하면 CI 게이트가 그냥 없는 것과 같다.
+  - **통과는 `build-test` 의 결론이 `SUCCESS` 일 때뿐이다.** 위 세 갈래에 안 걸렸다고 통과시키지
+    않는다 — 그러면 이 절이 거부한 "실패가 없으면 통과"로 되돌아간다. `CANCELLED`·`TIMED_OUT`·
+    `ACTION_REQUIRED`·`STALE`·`SKIPPED` 는 실패로 기록되지 않지만 **초록불도 아니므로 종료**한다.
+    (`ci.yml` 이 `cancel-in-progress: true` 를 쓰므로 `CANCELLED` 는 이 저장소가 실제로 만드는
+    상태다.)
   - 여기서 "요구하는 체크"는 **이 명령이 요구한다**는 뜻이지 GitHub 의 required check 가 아니다
     (브랜치 보호가 없으므로 그런 것은 없다). `gh pr checks --required` 는 이 저장소에서 항상
     "no required checks reported" 로 끝나니 쓰지 않는다.
@@ -143,12 +149,21 @@ gh pr merge <n> --squash --delete-branch --subject "<타입>: <제목>" --body "
     우회 옵션은 쓰지 않는다.
 
 ### 4. 로컬 정리
+
+> 여기까지 왔으면 **머지는 이미 끝났다.** 이 단계가 실패해도 머지를 되돌리지 않는다 — 멈추고,
+> 머지는 성공했고 로컬 정리만 남았다는 사실을 함께 보고한다.
+
 - `git switch main && git pull --ff-only`
+  - main 에 커밋하지 않은 변경이 있으면 `switch`·`pull` 이 거부된다. 0번이 번호를 받은 경우
+    main 체크아웃을 허용하므로 실제로 생길 수 있는 상황이다. 이때는 정리를 멈추고 위 원칙대로
+    보고한다. 사용자의 작업물을 stash·reset 으로 치우지 않는다.
 - **squash 머지는 `git branch -d` 가 항상 거부된다** — feature 의 커밋이 main 에 그대로 없으면
   (squash 로 합쳐져 SHA 가 다름) "미병합" 으로 보기 때문. 정상이며 데이터 손실 신호가 아니다.
 - step 3 에서 머지 성공(`MERGED`)이 서버로 확인됐으므로 로컬 브랜치도 바로 정리한다:
-  `git branch -D <headRefName>` (원격은 `--delete-branch` 로 이미 삭제됨). 추가 확인 없이 삭제한다
-  — 머지 확인이 곧 삭제 안전 보장이다.
+  `git branch -D <headRefName>`. 추가 확인 없이 삭제한다 — 머지 확인이 곧 삭제 안전 보장이다.
+  - 단 `gh pr merge --delete-branch` 는 **로컬 브랜치까지 지운다**(그 브랜치에 체크아웃 중이면
+    기본 브랜치로 옮긴 뒤 삭제). 이미 없으면 `branch not found` 가 나는데 **정상이다** — 실패로
+    보고하지 말고 넘어간다.
 - `git fetch --prune` 로 원격 추적 참조 정리.
 
 ### 5. Report
