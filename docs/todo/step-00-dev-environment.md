@@ -61,9 +61,9 @@ macOS + colima(Docker Desktop 대신 쓴 런타임)에서 실제로 돌려 확�
 기동하자마자 죽었다. 그리고 프런트 dev 서버가 모든 인터페이스에 열려 있어, 백엔드를 루프백으로
 좁혀도 `/api` 프록시를 통해 그대로 우회됐다. 둘 다 이 PR에서 고쳤다.
 
-CI 초록불은 아직 확인 못 했다 — 원격에 push한 뒤에야 실제로 돌아간다. 로컬에서 CI와 같은 순서
-(`npm ci --ignore-scripts` → `audit` → `format:check` → `lint` → `typecheck` → `build` → `test`)로
-전부 통과하는 것까지는 확인했다.
+CI 초록불도 확인했다 — 첫 PR([#2](https://github.com/SurvivorsStudio/ditter/pull/2))에서
+`build-test` 잡이 38초에 통과했다. Install(`--ignore-scripts`) → Audit(`found 0 vulnerabilities`)
+→ Format → Lint → Typecheck → Build → Test → Compose 설정 검증까지 전 단계 성공이다.
 
 ## 왜 지금인가
 
