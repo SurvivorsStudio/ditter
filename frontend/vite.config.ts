@@ -9,6 +9,16 @@ import { defineConfig, loadEnv } from 'vite';
 // 백엔드는 `node --env-file-if-exists=../.env` 로 같은 파일을 읽으므로 여기서 대칭을 맞춘다.
 const repoRoot = path.resolve(import.meta.dirname, '..');
 
+/**
+ * 빈 문자열은 "설정하지 않음"으로 취급한다. `.env` 에서 항목은 남기고 값만 지우는
+ * (`VITE_DEV_HOST=`) 편집이 흔한데, 그대로 넘기면 dev 서버가 루프백이 아니라 모든
+ * 인터페이스에 바인딩된다 — 기본값이 안전한 쪽으로 되돌아가야 한다.
+ */
+function readEnv(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed === '' ? undefined : trimmed;
+}
+
 export default defineConfig(({ mode }) => {
   // loadEnv 는 파일에서 읽은 값을 먼저 넣고 실제 환경변수를 나중에 덮어쓴다. 그래서
   // docker-compose.yml 이 지정하는 VITE_DEV_HOST=0.0.0.0 이 `.env` 파일 값보다 우선한다.
@@ -23,12 +33,12 @@ export default defineConfig(({ mode }) => {
       // 여기를 열면 백엔드의 루프백 바인딩(backend/src/config.ts)까지 함께 우회된다.
       // 인증은 STEP 8 에서야 붙는다. 컨테이너는 docker-compose.yml 의 frontend 서비스가
       // VITE_DEV_HOST=0.0.0.0 을 직접 지정한다.
-      host: env.VITE_DEV_HOST ?? '127.0.0.1',
+      host: readEnv(env.VITE_DEV_HOST) ?? '127.0.0.1',
       port: 5173,
       proxy: {
         // 로컬은 localhost, docker compose 안에서는 서비스 이름(backend)으로 붙는다.
         '/api': {
-          target: env.VITE_API_PROXY_TARGET ?? 'http://localhost:4000',
+          target: readEnv(env.VITE_API_PROXY_TARGET) ?? 'http://localhost:4000',
           changeOrigin: true,
         },
       },
