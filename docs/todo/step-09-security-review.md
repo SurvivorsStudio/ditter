@@ -10,7 +10,7 @@
 
 ## 하는 일
 
-- [supply-chain-security.md](../policy/supply-chain-security.md) (S1~S8) 전수 점검
+- [supply-chain-security.md](../policy/supply-chain-security.md) (S1~S9) 전수 점검
 - DB 접근 정책(P1~P8, `docs/policy` 각 파일) 전수 점검
 - 컨테이너 하드닝: non-root 실행, 최소 베이스 이미지, Trivy 이미지 스캔
 - Node permission model(`--permission`) 적용 — **한계를 알고 쓸 것** (`supply-chain-security.md`의 S6 참고)

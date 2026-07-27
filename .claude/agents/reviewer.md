@@ -96,7 +96,7 @@ commit 한다. 이게 리뷰어 자신이 만든 수정이 새로운 사고를 �
 ### 민감 경로 (자동수정 절대 금지 — 분석·노출만)
 
 ```
-.env*
+.env*                       # 단, .env.example 은 제외 — 아래 「예외」 참고
 *.key
 *.pem
 **/migrations/**            # DB 마이그레이션 파일 (경로 컨벤션은 STEP 0/1 스캐폴딩 후 확정)
@@ -105,6 +105,12 @@ docs/policy/**
 docs/schema/**
 docs/conventions/commit-convention.md
 ```
+
+**예외**: `.env.example`은 위 `.env*` 민감 경로 규칙에서 제외한다. `.env*`가 민감한 이유는 실제
+자격증명이 담기기 때문인데, `.env.example`은 정반대로 **비밀값을 담지 않기로 하고 저장소에
+커밋하는 문서용 파일**이다(`.gitignore`도 `!.env.example`로 되돌려 놓았다). 다른 설정 파일과
+함께 고쳐야 하는 경우가 잦아(예: 새 환경변수를 도입하면서 코드·compose·예시를 같이 갱신) 여기만
+막아 두면 변경이 반쪽으로 남는다.
 
 **예외**: `.claude/.review-state.json`은 위 `.claude/**` 민감 경로 규칙에서 제외한다. 이 파일은
 거버넌스·설정 파일이 아니라 **리뷰어 자신의 사이클 완료 기록**(로컬 전용, `.gitignore` 처리됨)이라

@@ -1,0 +1,59 @@
+# `docker compose up` 한 줄로 빈 앱 + 로컬 PostgreSQL 이 함께 뜬다 (STEP 0 완료 조건).
+# 일상 개발에서는 DB 만 띄우고(`docker compose up -d db`) 앱은 호스트에서 `npm run dev` 로 돌린다.
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ditter_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-ditter}
+      # 로컬 개발 전용 값이다. 실제 대상 DB 자격증명은 저장소에 두지 않는다.
+      # (docs/policy/credential-management.md)
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ditter_local_dev_only}
+    # 포트는 호스트 루프백에만 공개한다. 인터페이스를 지정하지 않으면 Docker 가 모든
+    # 인터페이스에 바인딩하고 리눅스에서는 호스트 방화벽도 우회한다 — 위 비밀번호가
+    # 저장소에 적힌 값이라 신뢰할 수 없는 네트워크에서 그대로 노출된다.
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-ditter} -d ${POSTGRES_DB:-ditter_dev}']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      HOST: 0.0.0.0
+      PORT: 4000
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-ditter_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-ditter}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ditter_local_dev_only}
+    ports:
+      - '127.0.0.1:4000:4000'
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      VITE_API_PROXY_TARGET: http://backend:4000
+      # 컨테이너 안에서는 0.0.0.0 으로 바인딩해야 위 포트 매핑이 닿는다. 호스트에서 직접
+      # 돌릴 때(`npm run dev`)는 지정하지 않아 vite.config.ts 의 루프백 기본값이 쓰인다.
+      VITE_DEV_HOST: 0.0.0.0
+    ports:
+      - '127.0.0.1:5173:5173'
+    depends_on:
+      - backend
+
+volumes:
+  db-data:

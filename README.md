@@ -43,10 +43,48 @@ AS (DELETE FROM users RETURNING *) SELECT * FROM t` 같은 CTE 우회도 문자�
 TypeScript 모노레포 — React + Vite(프런트엔드), Fastify(백엔드), PostgreSQL(대상 DB),
 SQLite(로컬 저장). 자세한 구조는 [docs/conventions](docs/conventions/README.md) 참고.
 
+```
+backend/                  Fastify 백엔드 (:4000)
+frontend/                 React + Vite 웹 콘솔 (:5173)
+packages/shared-types/    프런트·백엔드가 공유하는 타입
+docs/                     계획·정책·컨벤션·스키마
+```
+
+## 시작하기
+
+```bash
+npm ci --ignore-scripts   # 설치 스크립트 차단이 기본이다 (docs/policy/supply-chain-security.md S5)
+cp .env.example .env
+docker compose up -d db   # 로컬 PostgreSQL
+npm run dev               # 백엔드 :4000 + 프런트 :5173
+```
+
+`docker compose up` 한 줄이면 DB·백엔드·프런트가 한 번에 뜬다. 일상 개발에서는 DB만 컨테이너로
+띄우고 앱은 호스트에서 `npm run dev`로 돌리는 쪽이 빠르다.
+
+개발 서버는 **기본적으로 내 컴퓨터에서만 접속을 받는다.** 같은 네트워크의 다른 기기에서 붙어야
+하면 `.env`의 `HOST`(백엔드)와 `VITE_DEV_HOST`(프런트)를 둘 다 열어야 한다 — 프런트만 열어도
+`/api` 프록시를 타고 백엔드에 닿기 때문이다. 인증은 STEP 8에야 붙으니 열어둔 채 두지 않는다.
+
+| 명령 | 하는 일 |
+|---|---|
+| `npm run dev` | 백엔드(`:4000`) + 프런트(`:5173`) 개발 서버 |
+| `npm run lint` / `npm run format` | ESLint / Prettier |
+| `npm run typecheck` | 전 워크스페이스 타입 검사 |
+| `npm test` | 전 워크스페이스 테스트 (Vitest) |
+| `npm run build` | 공유 타입 + 프런트엔드 빌드 |
+
+백엔드는 **빌드하지 않는다.** Node가 타입 표기를 지우며 `.ts`를 그대로 실행한다(Node 24+). 트랜스
+파일러 의존성을 하나 줄이려는 선택이며, 그 대가로 백엔드 코드에서는 상대 경로 import에 `.ts`
+확장자를 붙인다.
+
 ## 진행 상황
 
-현재 개발 계획·정책·컨벤션·스키마를 정리하는 단계다(`STEP 0` 착수 전). 실행 가능한 앱은 아직
-없다. 진행 단계와 완료 조건은 [docs/todo](docs/todo/README.md)에서 추적한다.
+**STEP 0(개발 환경) 완료** — 모노레포·CI 보안 게이트가 서 있고, `docker compose up`으로 세
+컨테이너가 뜨는 것과 `npm run dev` 양쪽 경로를 실제로 확인했다. 제품 기능은 아직 없다. 다음은
+[STEP 1 DB 안전 접속](docs/todo/step-01-db-connection.md)이며, 모든 것의 병목이다.
+
+진행 단계와 완료 조건은 [docs/todo](docs/todo/README.md)에서 추적한다.
 
 ## 문서
 

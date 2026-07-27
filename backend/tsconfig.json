@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    // 백엔드는 빌드하지 않고 Node 가 타입 표기를 지우며 그대로 실행한다.
+    // 그래서 상대 경로 import 에 `.ts` 확장자를 그대로 쓴다 (Node 의 요구사항).
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"]
+}
