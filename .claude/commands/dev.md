@@ -26,8 +26,13 @@ PostgreSQL(docker compose)을 재시작합니다.
      Docker 데몬(colima VM)이 꺼진 것이다. `colima start` 로 먼저 띄운 뒤 다시 확인한다.
      이 맥은 Docker Desktop 이 아니라 **colima + docker CLI**(Homebrew) 조합이라 재부팅하면
      매번 꺼져 있다.
-   - 안 떠 있으면 `docker compose up -d` 로 기동 (백엔드가 접속할 대상이므로 앱보다 먼저 떠야 함).
-   - DB 컨테이너가 `healthy` 가 될 때까지 기다린 뒤 다음 단계로 간다.
+   - `docker compose up -d --wait db` 로 기동한다 (이미 떠 있으면 그대로 통과하므로 무조건 실행해도
+     된다). `--wait` 가 healthy 가 될 때까지 대기하므로 별도 폴링이 필요 없다.
+     - **서비스 이름 `db` 를 반드시 붙인다.** 이름 없이 `docker compose up -d` 하면 `backend`·
+       `frontend` 컨테이너까지 떠서 `4000`·`5173` 을 선점하고, 3단계의 `npm run dev` 가 포트 충돌로
+       죽는다. 이때 컨테이너 쪽이 응답하기 때문에 4단계 확인은 그대로 통과해 버린다.
+     - DB 는 백엔드가 접속할 대상이므로 앱보다 먼저 떠야 한다.
+   - `--wait` 가 타임아웃으로 실패하면 대기를 반복하지 말고 `docker compose logs db` 를 확인해 보고한다.
 
 3. **개발 서버 기동** (백그라운드)
    - 저장소 루트에서 `npm run dev` 실행.
@@ -37,12 +42,12 @@ PostgreSQL(docker compose)을 재시작합니다.
 4. **확인**
    - 몇 초 대기 후 `:5173`·`:4000` 두 포트가 LISTEN 상태인지, 백엔드가 로컬 PostgreSQL에 정상
      접속했는지 확인.
-   - 결과 보고. **이때 접속 URL을 항상 함께 제공한다** — 최소한 아래 두 개는 매번 적는다.
-     - 앱(프런트): http://localhost:5173
-     - 백엔드 헬스체크: http://localhost:4000/api/health
-     - DB 접속이 필요하면: `postgres://…@127.0.0.1:5432` (compose 가 `127.0.0.1` 로만 바인딩하므로
-       같은 맥에서만 접속 가능)
+   - 결과 보고. **이때 접속 URL을 항상 함께 제공한다** — 아래 두 개는 매번 적는다.
+     - 앱(프런트): http://127.0.0.1:5173
+     - 백엔드 헬스체크: http://127.0.0.1:4000/api/health
    - 포트를 바꿔 띄웠거나 Vite 가 다른 포트를 잡았다면, 실제로 뜬 포트를 보고 URL 을 고쳐 적는다.
+   - DB 접속 문자열은 보고에 적지 않는다 — 자격증명이 대화 기록에 남는다
+     (`docs/policy/credential-management.md`). 필요하면 `.env` 를 직접 본다.
 
 ## 비고
 
