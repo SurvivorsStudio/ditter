@@ -51,3 +51,8 @@ jobs:
 
       - name: Test
         run: npm test
+
+      # compose 파일이 깨져도 위 게이트는 전부 통과한다. 이미지 빌드까지는 러너 시간이
+      # 아까워 하지 않고, 문법·보간·포트 표기(127.0.0.1 바인딩)가 살아 있는지만 확인한다.
+      - name: Compose 설정 검증
+        run: docker compose config -q
