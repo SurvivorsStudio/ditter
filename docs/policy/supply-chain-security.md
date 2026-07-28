@@ -34,6 +34,12 @@ SHA를 최신으로 유지하는 비용은 Dependabot의 `github-actions` 항목
 워크플로 토큰 권한(`permissions:`)도 기본을 `contents: read`로 좁힌다. 배포·퍼블리시 잡을 추가할
 때만 필요한 권한을 그 잡에만 준다.
 
+### Dependabot PR 제목 한글화
+
+Dependabot이 여는 PR의 제목·본문은 GitHub 쪽 고정 템플릿이라 언어를 바꿀 수 없다. `.github/workflows/dependabot-korean-title.yml`이 PR이 열릴 때 제목만 규칙 기반으로 한글로 다시 쓰고, 본문 맨 위에 한 줄 요약을 덧붙인다. 본문 원문(릴리스 노트·커밋 로그)은 그대로 둔다 — 전체 번역은 번역 API 호출과 시크릿 등록이 필요해 범위에서 뺐다.
+
+이 워크플로는 PR 코드를 체크아웃하지 않고 `gh` CLI로 메타데이터만 수정하므로 외부 액션에 의존하지 않는다(SHA 고정 대상 자체가 없다). Dependabot PR은 fork가 아니라 저장소 내 브랜치라서 `pull_request_target` 같은 권한 상승 트리거 없이 일반 `pull_request` 트리거로 충분하다.
+
 ### S6의 한계를 알고 쓰라
 
 Node의 permission model은 최신 버전에서 experimental을 졸업해 쓸 만해졌다. 하지만 DITTER는 SQLite 파일 쓰기와 PostgreSQL·AI API 네트워크가 필수라 결국 플래그를 넓게 열어야 한다. 특히 **`--allow-net`은 특정 호스트로 제한할 수 없다.** 즉 "침해된 패키지가 데이터를 외부로 빼돌리는" 시나리오는 이 플래그로 못 막는다. **부분 완화이지 해결책이 아니다.**
