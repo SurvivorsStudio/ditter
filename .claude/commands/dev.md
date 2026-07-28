@@ -22,10 +22,13 @@ PostgreSQL(docker compose)을 재시작합니다.
        바인딩한다. 떠 있으면 3단계의 호스트 개발 서버와 같은 포트를 두고 다툰다.
      - docker 가 안 떠 있어 이 명령이 실패해도 무시하고 넘어간다 (2단계에서 처리한다).
    - 그다음 **호스트에서 직접 띄운 개발 서버만** 종료한다:
-     - `lsof -ti :5173 -c node -a | xargs kill -9 2>/dev/null` (없으면 무시)
-     - `lsof -ti :4000 -c node -a | xargs kill -9 2>/dev/null` (없으면 무시)
+     - `lsof -ti :5173 -c node -a -sTCP:LISTEN | xargs kill -9 2>/dev/null` (없으면 무시)
+     - `lsof -ti :4000 -c node -a -sTCP:LISTEN | xargs kill -9 2>/dev/null` (없으면 무시)
      - `-a` 를 빼면 lsof 가 두 조건을 **OR** 로 묶어 **모든 node 프로세스**를 반환한다 — 무관한
        프로세스까지 죽으므로 반드시 붙인다.
+     - `-sTCP:LISTEN` 도 반드시 붙인다. `-i :PORT` 는 그 포트로 **접속만 한** 소켓까지 매칭하므로,
+       이게 없으면 그 포트에 연결된 무관한 node 프로세스도 함께 죽는다. 4단계 확인 명령도 같은
+       한정자를 쓴다.
    - **포트만 보고 무조건 죽이지 않는다.** 컨테이너가 그 포트를 잡고 있을 때 리스너는 앱이 아니라
      컨테이너 런타임의 포트 포워딩 프로세스다. colima 라면 단일 `ssh … [mux]` 프로세스가 docker
      소켓과 DB 포워딩까지 함께 담당하므로, 이걸 죽이면 docker 연결 자체가 끊긴다.
@@ -40,9 +43,9 @@ PostgreSQL(docker compose)을 재시작합니다.
      필요 없다. `--wait-timeout` 을 주지 않으면 상한 없이 기다리므로 반드시 붙인다.
      - **서비스 이름 `db` 를 반드시 붙인다.** 이름 없이 `docker compose up -d` 하면 `backend`·
        `frontend` 컨테이너까지 떠서 `4000`·`5173` 을 선점한다. 그러면 3단계에서 백엔드는
-       EADDRINUSE 로 죽지만 프런트(Vite)는 `strictPort` 가 없어 조용히 `5174` 로 옮겨 뜬다 —
-       루트 `dev` 스크립트에 `--kill-others` 도 없어서, 겉보기엔 `npm run dev` 가 살아있는 것처럼
-       보인다. 4단계 확인도 컨테이너 응답으로 통과해 실패가 그대로 가려진다.
+       EADDRINUSE 를 내지만 `node --watch` 라 종료되지 않고 파일 변경을 기다리며 대기 상태로
+       남고, 프런트(Vite)는 `strictPort` 가 없어 조용히 `5174` 로 옮겨 뜬다. 겉보기엔 `npm run dev`
+       가 살아있는 것처럼 보이고, 4단계 확인도 컨테이너 응답으로 통과해 실패가 그대로 가려진다.
      - DB 는 백엔드가 접속할 대상이므로 앱보다 먼저 떠야 한다.
    - 대기가 실패하면 반복하지 말고 `docker compose logs db` 를 확인해 보고한다.
 
