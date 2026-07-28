@@ -55,11 +55,21 @@ docs/                     계획·정책·컨벤션·스키마
 ```bash
 npm ci --ignore-scripts   # 설치 스크립트 차단이 기본이다 (docs/policy/supply-chain-security.md S5)
 cp .env.example .env
+```
+
+이후 로컬 개발 서버(백엔드 `:4000` + 프런트 `:5173` + 로컬 PostgreSQL)는 Claude Code에서
+[`/dev`](.claude/commands/dev.md) 커맨드로 기동·재시작한다. 기존 서버 종료 → DB 컨테이너 확인/기동
+→ `npm run dev` → 포트 확인까지 한 번에 처리한다.
+
+커맨드 없이 수동으로 하는 경우:
+
+```bash
 docker compose up -d db   # 로컬 PostgreSQL
 npm run dev               # 백엔드 :4000 + 프런트 :5173
 ```
 
-`docker compose up` 한 줄이면 DB·백엔드·프런트가 한 번에 뜬다. 일상 개발에서는 DB만 컨테이너로
+`docker compose up` 한 줄이면 DB·백엔드·프런트가 한 번에 뜬다. 단 이건 위 절차와 배타적인 별개
+모드다 — 이 경우 `npm run dev`는 실행하지 않는다(포트가 겹친다). 일상 개발에서는 DB만 컨테이너로
 띄우고 앱은 호스트에서 `npm run dev`로 돌리는 쪽이 빠르다.
 
 개발 서버는 **기본적으로 내 컴퓨터에서만 접속을 받는다.** 같은 네트워크의 다른 기기에서 붙어야
