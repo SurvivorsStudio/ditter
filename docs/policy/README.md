@@ -22,6 +22,7 @@ DITTER는 프로덕션 PostgreSQL에 붙는 도구다. 보안은 두 갈래로 �
 | P8 | [AI 컨텍스트와 안전](ai-context-and-safety.md) | 프롬프트 인젝션, 출력 검증, 데이터 외부 전송 |
 | P6 | [인증/인가](authentication-authorization.md) | 최소 로그인, 권한 분리 |
 | P7 | [감사 로그](audit-logging.md) | append-only, 삭제 불가 |
+| P9 | [파이프라인 쓰기 경계](pipeline-write-boundary.md) | 읽기 전용 콘솔과 파이프라인 타깃 쓰기의 분리 |
 
 ### 공급망 (npm + CI)
 
@@ -32,7 +33,8 @@ DITTER는 프로덕션 PostgreSQL에 붙는 도구다. 보안은 두 갈래로 �
 ## 리뷰 게이트
 
 - **읽기 전용 강제(P3)와 자격증명 처리(P4)는 2인 리뷰 필수** — [STEP 1](../todo/step-01-db-connection.md)
-- [STEP 9](../todo/step-09-security-review.md)에서 위 체크리스트 전 항목을 실제 코드로 전수 점검
+- **파이프라인 쓰기 경계(P9)도 같은 등급으로 2인 리뷰 필수** — [STEP 9](../todo/step-09-pipeline-foundation.md)
+- [STEP 12](../todo/step-12-security-review.md)에서 위 체크리스트 전 항목을 실제 코드로 전수 점검
 - 제출 전 SBOM + `npm audit` 클린 확보
 
 ## 핵심 원칙 요약
@@ -42,6 +44,7 @@ DITTER는 프로덕션 PostgreSQL에 붙는 도구다. 보안은 두 갈래로 �
 - **AI 출력은 절대 그대로 믿지 않는다.** 검증 실패 시 원본 반환, 실행 전 항상 사용자 확인, AST 검증 통과 필수.
 - **감사 로그는 지울 수 없어야 진짜 감사 로그다.**
 - **가장 강력한 공급망 방어는 의존성을 늘리지 않는 것이다.**
+- **파이프라인이 생겨도 사람이 SQL을 넣는 경로는 여전히 읽기 전용 하나뿐이다.** 타깃 쓰기는 자유형 SQL이 닿지 않는 별도 경로다 (P9).
 
 ## 관련 문서
 

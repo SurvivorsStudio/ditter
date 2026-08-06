@@ -15,10 +15,10 @@
 | S1 | 의존성 최소화 | 새 패키지 추가 전 "직접 20줄로 짤 수 있나" 먼저 묻는다 | 상시 |
 | S2 | lockfile 고정 | `package-lock.json` 커밋 필수. CI는 `npm ci`만 (`npm install` 금지) | STEP 0 |
 | S3 | 취약점 스캔 자동화 | CI에 `npm audit --audit-level=high` 게이트 + Dependabot | STEP 0 |
-| S4 | 의존성 가시화 | `npm ls --all` 정기 점검, SBOM 생성해 릴리스에 첨부 | STEP 9 |
+| S4 | 의존성 가시화 | `npm ls --all` 정기 점검, SBOM 생성해 릴리스에 첨부 | STEP 12 |
 | S5 | 설치 스크립트 차단 | `npm ci --ignore-scripts` 기본화. postinstall이 악성코드 주요 침투 경로 | STEP 0 |
-| S6 | 런타임 권한 제한 | Node의 `--permission` 플래그로 파일·네트워크 접근 최소화 | STEP 9 |
-| S7 | 컨테이너 격리 | non-root 실행, 최소 베이스 이미지, Trivy 스캔 | STEP 9 |
+| S6 | 런타임 권한 제한 | Node의 `--permission` 플래그로 파일·네트워크 접근 최소화 | STEP 12 |
+| S7 | 컨테이너 격리 | non-root 실행, 최소 베이스 이미지, Trivy 스캔 | STEP 12 |
 | S8 | prototype pollution 방어 | Fastify `onProtoPoisoning: 'error'` 확인 + 스키마에 `additionalProperties: false` + `Object.create(null)` | STEP 3 |
 | S9 | GitHub Actions 고정 | 워크플로의 `uses:`를 커밋 SHA로 고정하고 버전은 주석으로 남긴다 | STEP 0 |
 
@@ -54,4 +54,4 @@ JSON Schema 검증(Ajv)은 입력 *형태*를 제약할 뿐 `__proto__` 오염 �
 
 ## 관련
 
-- 담당 STEP: [step-00-dev-environment.md](../todo/step-00-dev-environment.md), [step-09-security-review.md](../todo/step-09-security-review.md)
+- 담당 STEP: [step-00-dev-environment.md](../todo/step-00-dev-environment.md), [step-12-security-review.md](../todo/step-12-security-review.md)
