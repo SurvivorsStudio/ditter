@@ -47,7 +47,8 @@ STEP 1이 "DB를 안전하게 읽는 능력"이었다면, 이 STEP은 **"그 읽
 - 노드 구현: extract · transform(filter/map) · load
 - `overwrite` 규칙 — DB는 첫 배치만 truncate, S3·파일은 `run_id=` prefix 선정리
 - **같은 파이프라인 동시 실행 잠금** (Redis) — 수동·스케줄·재시도 **모든 경로**가 통과
-- 파이프라인 실행의 소스 읽기·타깃 쓰기를 **감사 로그에 기록**
+- 파이프라인 실행의 소스 읽기·타깃 쓰기를 **감사 로그에 기록** — `audit_logs`의 `pipeline_*` ·
+  `write_*` 컬럼을 채운다 ([audit-logs.md](../schema/audit-logs.md))
 
 ## 완료 조건
 

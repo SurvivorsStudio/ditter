@@ -13,7 +13,7 @@ DITTER 앱 자체가 로컬 **SQLite**에 저장하는 테이블 문서다. **DI
 | [users](users.md) | DITTER 로그인 계정 | [STEP 8](../todo/step-08-audit-log-auth.md) |
 | [connections](connections.md) | 등록된 접속 설정(자격증명 포함). `role`로 소스/타깃을, `adapter_type`으로 커넥터 종류를 나눈다 | [STEP 1](../todo/step-01-db-connection.md) |
 | [connection_grants](connection-grants.md) | 사용자별 접속 대상 권한 분리 | [STEP 8](../todo/step-08-audit-log-auth.md) |
-| [audit_logs](audit-logs.md) | 실행된 모든 쿼리의 append-only 기록 | [STEP 8](../todo/step-08-audit-log-auth.md) |
+| [audit_logs](audit-logs.md) | 실행된 모든 쿼리의 append-only 기록. **파이프라인 소스 읽기·타깃 쓰기도 여기에 남는다** | [STEP 8](../todo/step-08-audit-log-auth.md) ~ [9](../todo/step-09-pipeline-foundation.md) |
 
 ### 파이프라인 (F7)
 
@@ -37,6 +37,7 @@ users ──1:N── pipeline_runs             (triggered_by)
 pipelines ──1:N── pipeline_runs         (pipeline_id)
 pipelines ──1:N── pipeline_checkpoints  (pipeline_id, node_id UNIQUE)
 pipeline_runs ──1:N── pipeline_run_logs (run_id)
+pipelines ──1:N── audit_logs            (pipeline_id, 파이프라인 실행 기록만)
 
 pipelines.definition(JSON) ─참조─▶ connections.id   ← FK 아님. 삭제 시 확인 필요
 ```
