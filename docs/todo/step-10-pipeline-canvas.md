@@ -25,9 +25,10 @@ STEP 9에서 만든 실행 능력에 **사람이 쓸 수 있는 화면**을 붙�
 - 실행 바: 전체 실행 · 노드 미리보기 · `full_refresh` 옵션
 - **노드 미리보기는 소스·변환 노드 전용이다** — 타깃 노드는 단독 실행할 수 없고, 미리보기는 실행
   이력을 만들지도 워터마크를 전진시키지도 않는다 ([execution-engine.md](../pipeline/execution-engine.md))
-- **미리보기도 감사 로그에 남긴다** — 누를 때마다 한 건, `pipeline_trigger='preview'`
-  ([audit-logs.md](../schema/audit-logs.md)). 저장된 파이프라인에서만 누를 수 있게 해 `pipeline_id`가
-  비지 않게 한다
+- **미리보기도 감사 로그에 남긴다** — 누를 때마다(읽은 커넥션마다) 한 건,
+  `pipeline_trigger='preview'` ([audit-logs.md](../schema/audit-logs.md)). 저장된 파이프라인에서만
+  누를 수 있게 해 `pipeline_id`가 비지 않게 하고, 저장하지 않은 편집이 있으면 `pipeline_version`을
+  NULL로 남긴다
 - **WebSocket 실시간 표시** — 노드 상태 색, 진행률, 로그 스트림 (폴링하지 않는다)
 - `pipeline_run_logs` 조회 화면 — 실패 노드 클릭 시 해당 에러로 바로 이동
 - 실행 이력 목록 (`pipeline_runs`) + 실행 상세
@@ -52,7 +53,8 @@ STEP 9에서 만든 실행 능력에 **사람이 쓸 수 있는 화면**을 붙�
 7. 타깃 노드를 선택하면 **미리보기 실행이 불가능**하고, 화면이 그 이유를 알려준다. 미리보기로는
    타깃에 한 행도 쓰이지 않는다.
 8. 미리보기를 한 번 누르면 **감사 로그에 한 건**이 `pipeline_trigger='preview'`로 남는다.
-   저장하지 않은 초안에서는 미리보기 버튼이 눌리지 않는다.
+   저장하지 않은 **초안**에서는 버튼이 눌리지 않고, 저장된 파이프라인을 **편집 중**일 때는 눌리되
+   그 기록의 `pipeline_version`이 NULL이다.
 
 ## 관련 문서
 
