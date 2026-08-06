@@ -14,7 +14,9 @@
 | `status` | TEXT | NOT NULL, DEFAULT `'draft'`, CHECK `IN ('draft','active','paused')` | `active`만 스케줄 실행 대상이다 |
 | `schedule` | TEXT | NULL 허용 | cron 식. NULL이면 수동 실행 전용 |
 | `timezone` | TEXT | NOT NULL, DEFAULT `'UTC'` | cron 해석 기준 시간대. **적지 않으면 서머타임에 실행이 밀리거나 겹친다** |
-| `created_by` | INTEGER | NOT NULL, FK → `users.id` | |
+| `activated_by` | INTEGER | NULL 허용, FK → `users.id` | **`status`를 `'active'`로 올린 사람.** 스케줄 실행의 책임자가 이 사람이며, 그 실행의 [pipeline_runs](pipeline-runs.md)`.triggered_by`와 [audit_logs](audit-logs.md)`.user_id`에 그대로 들어간다. `draft`·`paused`에서는 NULL일 수 있다 — **`active`로 올릴 때 반드시 채운다** |
+| `activated_at` | TEXT (ISO8601) | NULL 허용 | 마지막으로 `active`가 된 시각 |
+| `created_by` | INTEGER | NOT NULL, FK → `users.id` | 처음 만든 사람. **`activated_by`와 다를 수 있다** — 만든 사람과 켠 사람을 구분하기 위해 컬럼을 나눴다 |
 | `created_at` | TEXT (ISO8601) | NOT NULL, DEFAULT now | |
 | `updated_at` | TEXT (ISO8601) | NOT NULL, DEFAULT now | |
 
@@ -27,12 +29,13 @@
 
 ## 비고
 
-- **`definition` 안의 커넥션 참조는 FK가 아니다.** 그래서 참조된 커넥션이 지워지면 정의는 조용히
-  깨진 채 남는다. 커넥션 삭제 시 **사용 중인 파이프라인을 먼저 확인**하고, 사용 중이면 막거나
-  명시적으로 확인받는다.
-- **감사 로그가 남아 있는 파이프라인은 삭제하지 않는다.** [audit_logs](audit-logs.md)`.pipeline_id`가
-  이 테이블을 참조하는데, 그 행은 append-only라 지우거나 비울 수 없다. 삭제 대신 `status`를
-  비활성으로 내리는 **보관 처리**로 다룬다. MVP에는 파이프라인 삭제 기능 자체가 없다.
+- **`definition` 안의 커넥션 참조는 FK가 아니다.** 그래서 참조가 가리키는 커넥션이 사라지면 정의는
+  조용히 깨진 채 남는다. **MVP에는 커넥션 삭제 기능이 없으므로**([audit-logs.md](audit-logs.md)의
+  append-only 절) 이 상황은 생기지 않는다 — 쓰지 않게 된 커넥션은 정의에서 **교체**한다. 커넥션
+  교체 시 그 커넥션을 쓰는 파이프라인 목록을 보여준다.
+- **파이프라인도 삭제하지 않는다.** [audit_logs](audit-logs.md)`.pipeline_id`가 이 테이블을
+  참조하는데 그 행은 append-only라 지우거나 비울 수 없다. 그만 돌리려면 `status='paused'`로
+  내린다.
 - 저장 시점에 DAG를 검증한다 — 순환 없음, 타깃 노드의 커넥션이 `role='target'`, 소스 쿼리가 AST
   검증 통과. **실행 직전에 같은 검증을 다시 한다** (저장 이후 커넥션 역할이 바뀌었을 수 있다).
 - `definition`은 앱의 내부 조회 대상이므로 파라미터 바인딩을 강제한다

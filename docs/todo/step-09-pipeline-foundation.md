@@ -44,8 +44,11 @@ STEP 1이 "DB를 안전하게 읽는 능력"이었다면, 이 STEP은 **"그 읽
 ### DAG 스펙과 저장
 
 - `packages/shared-types`에 zod DAG 스키마 **한 벌** ([dag-and-nodes.md](../pipeline/dag-and-nodes.md))
-- `pipelines` · `pipeline_runs` 테이블 ([schema](../schema/README.md))
-- 저장 시 검증 + **실행 직전 재검증**
+- `pipelines` · `pipeline_runs` 테이블 ([schema](../schema/README.md)) — `pipelines.activated_by` ·
+  `activated_at`은 `status`를 `active`로 올릴 때 채운다. 스케줄 실행의 `triggered_by`가 여기서 온다
+- **노드 타입 ↔ `adapter_type` 대응표**를 `packages/shared-types`에서 파생시킨다. 화면과 백엔드가
+  각자 매핑을 만들면 어긋난다
+- 저장 시 검증 + **실행 직전 재검증** — 커넥션 `role`, `adapter_type` 일치, 소스 쿼리 AST
 
 ### 실행 엔진과 워커
 

@@ -12,7 +12,7 @@
 | `pipeline_version` | INTEGER | NOT NULL | **실행 시점의 정의 버전을 복사해 둔다.** 이게 없으면 "그때 그 실행이 지금 정의와 같은 것이었나"에 답할 수 없다 |
 | `status` | TEXT | NOT NULL, CHECK `IN ('pending','running','success','failed','cancelled')` | |
 | `trigger` | TEXT | NOT NULL, CHECK `IN ('schedule','manual','retry')` | 무엇이 이 실행을 시작시켰나 |
-| `triggered_by` | INTEGER | NOT NULL, FK → `users.id` | 수동 실행이면 실행한 사람. 스케줄이면 파이프라인을 `active`로 만든 사람. **스케줄 실행도 반드시 사람을 가리킨다** — [audit_logs](audit-logs.md)`.user_id`가 NOT NULL이라 여기가 비면 그 실행은 감사 로그를 남길 수 없다 |
+| `triggered_by` | INTEGER | NOT NULL, FK → `users.id` | 수동 실행이면 실행한 사람. 스케줄이면 [pipelines](pipelines.md)`.activated_by`를 복사한다. **스케줄 실행도 반드시 사람을 가리킨다** — [audit_logs](audit-logs.md)`.user_id`가 NOT NULL이라 여기가 비면 그 실행은 감사 로그를 남길 수 없다 |
 | `full_refresh` | INTEGER (0/1) | NOT NULL, DEFAULT 0 | 1이면 워터마크를 무시하고 전량 읽는다 |
 | `node_states` | TEXT (JSON) | NOT NULL, DEFAULT `'{}'` | 노드별 상태·처리 행수·에러. 부분 성공한 실행이 어디까지 갔는지 여기서 본다 |
 | `records_read` | INTEGER | NOT NULL, DEFAULT 0 | |
@@ -41,6 +41,8 @@
 - 재시작은 이 레코드가 아니라 [pipeline_checkpoints](pipeline-checkpoints.md)의 워터마크를 기준으로
   한다. `trigger='retry'`인 새 run이 만들어진다.
 - **`triggered_by`가 가리키는 계정은 지우지 않는다.** 이 값이 비면 그 실행의 감사 로그를 쓸 수
-  없다(`audit_logs.user_id`는 NOT NULL). 계정을 정리해야 하면 그 사람이 활성화한 파이프라인을
-  먼저 `paused`로 내리고 다른 사람이 다시 활성화한다 — 계정은 비활성 처리하되 행 자체는 남긴다
-  ([users](users.md)).
+  없다(`audit_logs.user_id`는 NOT NULL). **MVP에는 계정 삭제 기능이 없으므로** 이 규칙은 지금
+  비용이 들지 않는다 ([users](users.md)).
+- 스케줄 실행의 책임자를 바꾸려면 파이프라인을 `paused`로 내렸다가 다른 사람이 다시 `active`로
+  올린다 — 그러면 [pipelines](pipelines.md)`.activated_by`가 갱신되고 이후 실행부터 반영된다.
+  **이미 남은 실행 기록은 바뀌지 않는다**(그때의 책임자가 맞다).
