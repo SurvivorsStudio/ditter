@@ -11,7 +11,7 @@ DITTER 앱 자체가 로컬 **SQLite**에 저장하는 테이블 문서다. **DI
 | 테이블 | 설명 | 담당 STEP |
 |---|---|---|
 | [users](users.md) | DITTER 로그인 계정 | [STEP 8](../todo/step-08-audit-log-auth.md) |
-| [connections](connections.md) | 등록된 접속 설정(자격증명 포함). `role`로 소스/타깃을, `adapter_type`으로 커넥터 종류를 나눈다 | [STEP 1](../todo/step-01-db-connection.md) |
+| [connections](connections.md) | 등록된 접속 설정(자격증명 포함). `role`로 소스/타깃을, `adapter_type`으로 커넥터 종류를 나눈다 | [STEP 1](../todo/step-01-db-connection.md) ~ [9](../todo/step-09-pipeline-foundation.md) |
 | [connection_grants](connection-grants.md) | 사용자별 접속 대상 권한 분리 | [STEP 8](../todo/step-08-audit-log-auth.md) |
 | [audit_logs](audit-logs.md) | 실행된 모든 쿼리의 append-only 기록. **파이프라인 소스 읽기·타깃 쓰기도 여기에 남는다** | [STEP 8](../todo/step-08-audit-log-auth.md) ~ [9](../todo/step-09-pipeline-foundation.md) |
 

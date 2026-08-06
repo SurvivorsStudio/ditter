@@ -18,8 +18,15 @@ STEP 1이 "DB를 안전하게 읽는 능력"이었다면, 이 STEP은 **"그 읽
 ### 쓰기 경계부터 긋는다 (다른 것보다 먼저)
 
 - `connections`에 `role` 컬럼 추가 (`source` | `target`), 겸직 불가
+- **`connections`를 커넥터 종류 전체로 넓힌다** ([connections.md](../schema/connections.md)) —
+  `config`(JSON) 컬럼 추가, `adapter_type` 값 확장(`postgres`·`s3`·`local_file`·`http_json`),
+  `host`·`port`·`database_name`·`username`·`encrypted_password`의 NOT NULL 완화
+- **완화한 NOT NULL을 대신하는 앱 레벨 필수값 검증**을 같이 넣는다. SQLite로는 "`postgres`일 때만
+  필수"를 표현할 수 없어서 컬럼 제약이 사라진 자리다 — 이 검증이 빠지면 host 없는 PostgreSQL
+  커넥션이 등록된다
 - **쿼리 실행 API가 `role='target'`을 거부**하도록 라우터 앞단에 차단 추가
-- 접속 목록 API가 콘솔 용도로 호출될 때 타깃 커넥션을 **응답에 넣지 않도록** 분리
+- 접속 목록 API가 콘솔 용도로 호출될 때 **`role='source'` + `adapter_type='postgres'`만** 응답에
+  넣도록 분리 (P9 규칙 2의 표 참고 — `role` 하나로는 부족하다)
 - 타깃 커넥션 등록·수정을 관리자로 제한
 - 근거와 전체 규칙: [pipeline-write-boundary.md](../policy/pipeline-write-boundary.md) (P9)
 
