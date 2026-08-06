@@ -32,6 +32,12 @@ CTE 안에 숨은 DML은 **반드시 차단**해야 한다.
 
 이 정책은 사용자가 직접 입력한 쿼리와 AI가 생성한 쿼리 **모두**에 동일하게 적용된다. AI가 만든 SQL도 신뢰하지 않는다 — AST 검증기를 통과한 뒤에만 실행 가능하다.
 
+[파이프라인(F7)](../pipeline/README.md)의 소스 읽기도 예외가 아니다. `ReadSpec`의 `query`는 콘솔과 **같은 AST 검증기**를 통과해야 하고, 소스 커넥터는 자체 접속을 열지 않고 이 정책이 붙어 있는 STEP 1의 DB 어댑터를 경유한다.
+
+## 파이프라인이 생겨도 이 정책은 완화되지 않는다
+
+파이프라인 타깃에는 쓰기가 일어난다. 그래서 "읽기 전용이라며?"라는 질문이 자연스럽게 따라오는데, 답은 **이 정책을 건드리지 않는 것**이다 — 쓰기는 사람도 AI도 자유형 SQL을 넣을 수 없는 완전히 분리된 경로에서만 일어나며, 그 커넥션은 콘솔에서 도달할 수 없다. 경계의 정의는 [pipeline-write-boundary.md](pipeline-write-boundary.md) (P9)에 있다.
+
 ## 리뷰 게이트
 
 🔒 **읽기 전용 강제 구현은 반드시 2명이 리뷰한다.** 뚫리면 제품의 존재 이유가 사라진다.
@@ -41,3 +47,4 @@ CTE 안에 숨은 DML은 **반드시 차단**해야 한다.
 - 담당 STEP: [step-01-db-connection.md](../todo/step-01-db-connection.md)
 - [query-safety-limits.md](query-safety-limits.md)
 - [internal-vs-user-query-injection.md](internal-vs-user-query-injection.md)
+- [pipeline-write-boundary.md](pipeline-write-boundary.md) (P9)

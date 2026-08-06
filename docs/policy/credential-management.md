@@ -17,10 +17,25 @@
 
 > **팀 결정 필요**: 자격증명 암호화 키 관리 방침은 개발 착수 전에 팀이 합의해야 한다. ([todo README](../todo/README.md) "팀이 먼저 결정해야 할 것" 참고)
 
+## 커넥터 시크릿도 같은 방식으로 다룬다
+
+[파이프라인(F7)](../pipeline/README.md)의 커넥터 설정에는 DB 비밀번호 외의 시크릿이 섞여 들어온다. **파이프라인용 암호화 메커니즘을 새로 만들지 않는다** — 위 방침을 그대로 적용한다.
+
+다음 키는 저장 시 분리 암호화하고, **API 응답·로그·에러 메시지 어디에도 포함하지 않는다.**
+
+```
+password · secretAccessKey · sessionToken · privateKey · passphrase · apiToken
+```
+
+- 이 키 목록은 **한 곳에 두고 직렬화 계층에서 강제**한다. 각 라우터가 알아서 빼게 두면 새 엔드포인트에서 샌다.
+- 새 커넥터가 새 시크릿 키를 들고 오면 **이 목록에 추가하는 것이 커넥터 추가 체크리스트에 포함된다** ([connector-contract.md](../pipeline/connector-contract.md)).
+- 커넥터가 던지는 에러에 config 객체를 통째로 붙이지 않는다.
+
 ## 리뷰 게이트
 
 🔒 자격증명 처리 구현은 읽기 전용 강제와 함께 **2인 리뷰 필수** 대상이다.
 
 ## 관련
 
-- 담당 STEP: [step-01-db-connection.md](../todo/step-01-db-connection.md)
+- 담당 STEP: [step-01-db-connection.md](../todo/step-01-db-connection.md), [step-09-pipeline-foundation.md](../todo/step-09-pipeline-foundation.md)
+- [pipeline-write-boundary.md](pipeline-write-boundary.md) (P9)
