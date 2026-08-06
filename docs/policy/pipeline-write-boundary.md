@@ -124,10 +124,16 @@ GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON <대상 테이블들> TO ditte
 - 읽기 전용 DB 계정 (주방어)
 - AST 기반 문장 검증 — `ReadSpec`의 `query`도 검증기를 통과해야 한다. CTE 안의 DML, `pg_sleep`,
   `SECURITY DEFINER` 함수, `FOR UPDATE` 전부 동일하게 막는다.
-- `statement_timeout` · 반환 행 수 제한 · 풀 상한 ([P5](query-safety-limits.md))
+- `statement_timeout` · 풀 상한 ([P5](query-safety-limits.md))
+- **행 수 상한은 배치 단위로 적용한다.** 콘솔의 `max_rows`(응답 한 번에 담기는 행 수 상한)는
+  파이프라인 소스 읽기에 걸지 않는다 — 스트리밍이라 응답이라는 단위가 없고, 여기에 걸면 대량
+  적재가 조용히 잘린 채 성공으로 끝난다. 파이프라인 쪽에서 메모리를 지키는 것은 **한 배치의 크기
+  상한**이며, 전체 소요 시간은 `statement_timeout`이 막는다
+  ([connections](../schema/connections.md)의 `max_rows`).
 
 **소스 커넥터는 자체 접속을 열지 않고 STEP 1의 DB 어댑터를 경유한다.** 위 방어가 전부 그 어댑터에
-붙어 있기 때문이다.
+붙어 있기 때문이다. 다만 어댑터가 콘솔용으로 거는 `max_rows`는 파이프라인 경로에서 배치 크기
+상한으로 대체된다 — **파이프라인 전용 최대 행수는 두지 않는다.**
 
 ## 리뷰 게이트
 

@@ -23,7 +23,7 @@ JSON 커넥터도 여기에 등록한다. 별도 테이블을 만들지 않는 �
 | `encrypted_password` | TEXT | NULL 허용 | 암호화된 비밀번호. `adapter_type='postgresql'`에서 **필수**. **브라우저로 절대 내려가지 않는다.** 암호화 키 관리 방침은 [credential-management.md](../policy/credential-management.md) 참고 |
 | `config` | TEXT (JSON) | NOT NULL, DEFAULT `'{}'` | 커넥터별 추가 설정 — S3 버킷·리전·엔드포인트, 로컬 파일 하위 경로, HTTP base URL·헤더 등. **허용 키는 커넥터 종류마다 백엔드 화이트리스트로 고정**하고([connector-contract.md](../pipeline/connector-contract.md) 신규 커넥터 추가 절차), 그중 시크릿 키(`secretAccessKey` 등)는 `encrypted_password`와 **같은 방식으로 분리 암호화**해 API 응답·로그에 싣지 않는다 ([credential-management.md](../policy/credential-management.md)) |
 | `statement_timeout_ms` | INTEGER | NULL 허용, 기본값은 앱에서 정의 | 앱이 요청하는 실행 시간 제한. **주방어는 DB 롤 레벨 `statement_timeout`**이며 이 값은 보조 수단이다 ([query-safety-limits.md](../policy/query-safety-limits.md)). `adapter_type='postgresql'`에만 의미가 있다 |
-| `max_rows` | INTEGER | NULL 허용, 기본값은 앱에서 정의 | 반환 행 수 제한. **`role='source'`의 콘솔 조회에만 적용된다** — 파이프라인 소스 읽기는 스트리밍이라 전량을 반환하지 않으므로 이 상한의 대상이 아니다 |
+| `max_rows` | INTEGER | NULL 허용, 기본값은 앱에서 정의 | **콘솔 응답 한 번에 담기는 행 수 상한.** 파이프라인 소스 읽기에는 걸지 않는다 — 스트리밍이라 "응답"이라는 단위가 없고, 여기에 걸면 대량 적재가 조용히 잘린 채 성공으로 끝난다. 파이프라인 쪽에서 이 상한을 대신하는 것은 **한 배치의 크기 상한 + `statement_timeout`**이며, **파이프라인 전용 최대 행수는 두지 않는다** ([pipeline-write-boundary.md](../policy/pipeline-write-boundary.md) 규칙 8) |
 | `created_by` | INTEGER | NOT NULL, FK → `users.id` | |
 | `created_at` | TEXT (ISO8601) | NOT NULL, DEFAULT now | |
 | `updated_at` | TEXT (ISO8601) | NOT NULL, DEFAULT now | |
