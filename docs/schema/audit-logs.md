@@ -23,7 +23,7 @@
 | `duration_ms` | INTEGER | NULL 허용 | 실행 시간 |
 | `pipeline_id` | INTEGER | NULL 허용, FK → `pipelines.id` | 파이프라인 실행으로 발생한 기록일 때 채운다. 콘솔 실행이면 NULL |
 | `pipeline_version` | INTEGER | NULL 허용 | **실행 시점의 정의 버전.** 정의는 그 뒤 바뀔 수 있으므로 `pipeline_id`만으로는 "그때 그 실행이 무엇이었나"에 답할 수 없다 ([pipelines](pipelines.md)`.version`) |
-| `pipeline_trigger` | TEXT | NULL 허용, CHECK (`'schedule'`, `'manual'`, `'retry'`) | 무엇이 그 실행을 시작시켰나. `user_id`가 "누가"라면 이 컬럼이 "어떻게"다 ([pipeline_runs](pipeline-runs.md)`.trigger`와 같은 값 집합) |
+| `pipeline_trigger` | TEXT | NULL 허용, CHECK (`'schedule'`, `'manual'`, `'retry'`, `'preview'`, `'watermark_reset'`) | 무엇이 그 기록을 만들었나. `user_id`가 "누가"라면 이 컬럼이 "어떻게"다. 앞의 셋은 [pipeline_runs](pipeline-runs.md)`.trigger`와 같은 값 집합이고, 뒤의 둘은 **run에 속하지 않는 기록**이다 (아래 참고) |
 | `write_target` | TEXT | NULL 허용 | 쓰기 대상 — DB 타깃은 `스키마.테이블`, S3·파일 타깃은 경로/prefix. 읽기 기록이면 NULL |
 | `write_mode` | TEXT | NULL 허용, CHECK (`'append'`, `'upsert'`, `'overwrite'`) | 적재 모드. **`overwrite`는 파괴적이므로 사후 추적의 핵심 값이다.** 타깃에 나갈 수 있는 문장이 이 셋뿐이라는 것이 P9 규칙 3이다 |
 | `executed_at` | TEXT (ISO8601) | NOT NULL, DEFAULT now | 실행(시도) 시각 |
@@ -54,10 +54,27 @@
 - 실행 상세 로그([pipeline_run_logs](pipeline-run-logs.md))는 **감사 로그가 아니다.** 그쪽은 오래된
   것을 지우고, 이 테이블은 지우지 않는다.
 
+### run에 속하지 않는 파이프라인 기록 두 가지
+
+`pipeline_trigger`의 뒤 두 값은 **`pipeline_runs`에 대응하는 행이 없다.** `pipeline_id`로 조인해도
+run이 나오지 않는 것이 정상이며, 이걸 모르면 "실행 이력에 없는 유령 실행"으로 읽힌다.
+
+| 값 | 언제 | 채우는 값 |
+|---|---|---|
+| `preview` | 캔버스의 노드 미리보기 ([execution-engine.md](../pipeline/execution-engine.md)) | `connection_id`는 읽은 소스 커넥션, `query_text`는 실제로 날린 쿼리. `write_*`는 전부 NULL — **미리보기는 아무것도 쓰지 않는다** |
+| `watermark_reset` | 관리자가 워터마크를 수동으로 되돌림 ([pipeline_checkpoints](pipeline-checkpoints.md)) | `connection_id`는 해당 소스 노드의 커넥션, `query_text`에 되돌린 값을 한 줄로(예: `RESET WATERMARK node=src_orders 2026-08-01T00:00:00Z → 2026-07-01T00:00:00Z`). `row_count`·`write_*`는 NULL |
+
+- **미리보기는 한 번마다 한 건** 남긴다. 프로덕션 DB를 읽는 경로에 예외를 두지 않기 때문이다. 세션
+  단위로 묶지 않는다 — 묶는 순간 "언제 무엇을 읽었나"의 해상도가 사라진다.
+- 워터마크 되돌리기는 쿼리가 아니지만 **데이터 적재 범위를 바꾸는 조작**이라 감사 대상이다. 되돌린
+  뒤 다음 실행이 무엇을 다시 읽었는지 추적하려면 이 기록이 있어야 한다.
+
 ## append-only 원칙 — 반드시 지킨다
 
 - **앱에는 이 테이블에 대한 UPDATE/DELETE API를 만들지 않는다.** INSERT만 허용한다. 지울 수 있으면 감사 로그가 아니다 ([audit-logging.md](../policy/audit-logging.md)).
 - 스키마 마이그레이션 등 운영상 불가피한 경우를 제외하면, 애플리케이션 코드 경로에서 이 테이블에 접근하는 방법은 INSERT뿐이어야 한다.
+- **`pipeline_id`가 가리키는 파이프라인은 삭제하지 않는다.** 감사 로그가 남아 있는 파이프라인은 삭제 대신 **보관 처리**(`status`를 비활성으로 내리고 목록에서 감춤)한다. `ON DELETE CASCADE`(감사 로그가 함께 지워짐)도, `SET NULL`(append-only 행을 사후 변경)도 **둘 다 P7 위반**이다 — 셋 중 고를 문제가 아니라 삭제 자체를 하지 않는다. MVP에는 파이프라인 삭제 기능이 없으므로 이 규칙은 지금 비용이 들지 않는다.
+- 같은 이유로 `user_id`·`connection_id`가 가리키는 행도 지우지 않는다. 정리가 필요하면 비활성 처리한다.
 
 ## 비고
 
