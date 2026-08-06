@@ -73,11 +73,30 @@ function parseNode<S extends z.ZodTypeAny>(schema: S, raw: unknown): z.infer<S> 
 | 모든 타깃은 상류에 소스가 하나 이상 있다 | 저장 거부 |
 | 소스에서 도달 불가능한 실행 노드가 없다 | 경고 (저장은 허용) |
 | 타깃 노드의 커넥션은 `role='target'`이다 | **저장 거부** — P9의 핵심 |
+| 소스 노드의 커넥션은 `role='source'`이다 | **저장 거부** |
+| 노드 타입과 커넥션의 `adapter_type`이 일치한다 | **저장 거부** (아래 표) |
 | `source.postgres`의 `query`가 AST 검증을 통과한다 | **저장 거부** |
 | 트리거는 파이프라인당 하나다 | 저장 거부 |
 
-읽기 전용 강제와 관련된 두 규칙(타깃 커넥션 역할, 소스 쿼리 AST)은 **저장 시 통과했더라도 실행
-직전에 다시 검사한다.** 커넥션의 역할이 저장 이후에 바뀌었을 수 있다.
+### 노드 타입 ↔ `adapter_type` 대응
+
+`role`만 맞으면 통과시키면, `source.postgres` 노드에 `http_json` 커넥션을 붙인 파이프라인이 저장을
+통과한다. 그 실패는 저장할 때가 아니라 **스케줄이 처음 도는 새벽에** 드러난다.
+
+| 노드 | `adapter_type` |
+|---|---|
+| `source.postgres` · `target.postgres` | `postgres` |
+| `source.http_json` | `http_json` |
+| `target.s3` | `s3` |
+| `target.file` | `local_file` |
+
+- **`local_file`은 타깃 전용이다.** `source.local_file` 노드는 두지 않는다 — 파일을 소스로 읽는
+  기능은 MVP 범위 밖이다.
+- 노드 이름(`target.file`)과 커넥터 이름(`local_file`)이 다른 것은 위 표가 유일한 대응 근거다.
+  화면·백엔드가 각자 매핑을 만들지 않도록 이 표를 `packages/shared-types`에서 파생시킨다.
+
+읽기 전용 강제와 관련된 규칙(커넥션 역할, `adapter_type` 일치, 소스 쿼리 AST)은 **저장 시
+통과했더라도 실행 직전에 다시 검사한다.** 커넥션의 역할이나 종류가 저장 이후에 바뀌었을 수 있다.
 
 ## 버전
 
