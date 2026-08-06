@@ -52,8 +52,13 @@ export interface Connector {
 
 `postgres` 소스 커넥터는 **자체 접속을 만들지 않는다.** [STEP 1](../todo/step-01-db-connection.md)에서
 만든 DB 어댑터 인터페이스를 그대로 쓴다. 이유는 하나다 — 읽기 전용 강제, `statement_timeout`,
-행 수 제한, 풀 상한이 전부 그 어댑터에 붙어 있기 때문이다. 파이프라인이 자체 접속을 열면 그
-방어가 전부 우회된다.
+풀 상한이 전부 그 어댑터에 붙어 있기 때문이다. 파이프라인이 자체 접속을 열면 그 방어가 전부
+우회된다.
+
+단 하나 예외가 있다. 어댑터가 콘솔용으로 거는 **`max_rows`(응답 행 수 상한)는 이 경로에 걸지
+않는다** — 스트리밍에는 "응답"이라는 단위가 없고, 걸면 대량 적재가 조용히 잘린다. 그 자리를
+대신하는 것은 **한 배치의 크기 상한**이다 ([pipeline-write-boundary.md](../policy/pipeline-write-boundary.md)
+규칙 8, [connections](../schema/connections.md)의 `max_rows`).
 
 `ReadSpec`이 `kind: 'query'`인 경우 **콘솔과 동일한 AST 검증기를 통과해야 한다.** 파이프라인
 소스라고 예외를 두지 않는다 ([read-only-enforcement.md](../policy/read-only-enforcement.md)).
