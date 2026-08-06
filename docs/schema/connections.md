@@ -1,7 +1,8 @@
 # connections
 
 사용자가 등록한 접속 설정. [STEP 1 DB에 안전하게 접속하기](../todo/step-01-db-connection.md)의
-"접속 설정 CRUD (SQLite에 저장)"에 해당한다.
+"접속 설정 등록·수정·조회 (SQLite에 저장)"에 해당한다 — **삭제는 만들지 않는다**
+([audit-logs.md](audit-logs.md)의 append-only 절).
 
 **파이프라인 커넥터의 접속도 이 테이블 하나에 담는다.** PostgreSQL뿐 아니라 S3·로컬 파일·HTTP
 JSON 커넥터도 여기에 등록한다. 별도 테이블을 만들지 않는 이유는 [P9](../policy/pipeline-write-boundary.md)
@@ -42,4 +43,4 @@ JSON 커넥터도 여기에 등록한다. 별도 테이블을 만들지 않는 �
 - **`role` 역시 주방어가 아니다.** 타깃 계정이 쓸 수 있는 범위를 실제로 정하는 것은 DB 계정 권한이다. `role`은 "콘솔에서 이 접속에 도달할 수 없게" 만드는 앱 레벨 차단이며, 그 차단은 라우터 앞단 한 곳에서 강제한다 ([pipeline-write-boundary.md](../policy/pipeline-write-boundary.md) 규칙 2).
 - **필수 컬럼이 `adapter_type`에 따라 달라지므로 검증은 앱에서 한다.** SQLite의 NOT NULL로는 "postgres일 때만 필수"를 표현할 수 없다. 커넥터 종류별 필수 필드는 [connector-contract.md](../pipeline/connector-contract.md)의 백엔드 허용 키 목록과 **같은 한 곳에서 파생시킨다** — 두 벌로 두면 어긋난다.
 - **`role` 검증은 `adapter_type`과 무관하게 모든 접속에 적용된다.** S3·로컬 파일 타깃도 `role='target'`으로 등록되며, 따라서 콘솔에서 도달할 수 없고 타깃 노드의 커넥션 선택 목록에만 나타난다 ([pipeline-write-boundary.md](../policy/pipeline-write-boundary.md) 규칙 2·6, [dag-and-nodes.md](../pipeline/dag-and-nodes.md) 검증 규칙).
-- **콘솔이 쓰는 접속 목록·쿼리 실행 API는 `role='source'`와 `adapter_type='postgres'`를 함께 검사한다.** `role` 하나로는 부족하다 — `http_json`은 파이프라인 소스이므로 `role='source'`이지만 SQL을 실행할 수 없고, 그걸 콘솔 목록에 노출하면 host·username이 빈 접속을 골라 실행이 깨진다. 이 검사도 P9 규칙 2와 **같은 라우터 앞단 한 곳**에서 건다. 즉 콘솔이 보는 집합은 `role='source' AND adapter_type='postgres'`이고, 파이프라인 소스가 보는 집합은 `role='source'` 전체다.
+- **콘솔이 쓰는 접속 목록·쿼리 실행 API는 `role='source'`와 `adapter_type='postgres'`를 함께 검사한다.** `role` 하나로는 부족하다 — `http_json`은 파이프라인 소스이므로 `role='source'`이지만 SQL을 실행할 수 없고, 그걸 콘솔 목록에 노출하면 host·username이 빈 접속을 골라 실행이 깨진다. 이 검사도 P9 규칙 2와 **같은 라우터 앞단 한 곳**에서 건다. 즉 콘솔이 보는 집합은 `role='source' AND adapter_type='postgres'`이고, 파이프라인 소스가 보는 집합은 `role='source'` 전체다. 다만 **노드의 커넥션 선택 목록은 거기서 한 번 더 좁힌다** — 그 노드 타입에 대응하는 `adapter_type`만 보여준다 ([dag-and-nodes.md](../pipeline/dag-and-nodes.md)의 대응표). 화면이 먼저 제시한 선택지를 저장 검증이 되돌리는 상황을 만들지 않기 위해서다.
