@@ -12,7 +12,7 @@
 | `pipeline_version` | INTEGER | NOT NULL | **실행 시점의 정의 버전을 복사해 둔다.** 이게 없으면 "그때 그 실행이 지금 정의와 같은 것이었나"에 답할 수 없다 |
 | `status` | TEXT | NOT NULL, CHECK `IN ('pending','running','success','failed','cancelled')` | |
 | `trigger` | TEXT | NOT NULL, CHECK `IN ('schedule','manual','retry')` | 무엇이 이 실행을 시작시켰나 |
-| `triggered_by` | INTEGER | NOT NULL, FK → `users.id` | 수동 실행이면 실행한 사람. 스케줄이면 [pipelines](pipelines.md)`.activated_by`를 복사한다. **스케줄 실행도 반드시 사람을 가리킨다** — [audit_logs](audit-logs.md)`.user_id`가 NOT NULL이라 여기가 비면 그 실행은 감사 로그를 남길 수 없다 |
+| `triggered_by` | INTEGER | NOT NULL, FK → `users.id` | `trigger` 값마다 출처가 정해져 있다 — `manual`은 실행한 사람, `schedule`은 [pipelines](pipelines.md)`.activated_by`를 복사, `retry`는 재시작을 누른 사람(**워커가 자동으로 재개한 경우에는 원래 run의 `triggered_by`를 그대로 승계**). **세 경로 모두 반드시 사람을 가리킨다** — [audit_logs](audit-logs.md)`.user_id`가 NOT NULL이라 여기가 비면 그 실행은 감사 로그를 남길 수 없다 |
 | `full_refresh` | INTEGER (0/1) | NOT NULL, DEFAULT 0 | 1이면 워터마크를 무시하고 전량 읽는다 |
 | `node_states` | TEXT (JSON) | NOT NULL, DEFAULT `'{}'` | 노드별 상태·처리 행수·에러. 부분 성공한 실행이 어디까지 갔는지 여기서 본다 |
 | `records_read` | INTEGER | NOT NULL, DEFAULT 0 | |
