@@ -8,7 +8,7 @@
 
 ## 하는 일
 
-- postgres.js 접속 풀, 접속 설정 CRUD (SQLite에 저장)
+- postgres.js 접속 풀, 접속 설정 등록·수정·조회 (SQLite에 저장) — **삭제는 만들지 않는다.** 감사 로그가 커넥션을 참조하는데 그 행은 append-only라 지울 수 없다 ([audit-logs.md](../schema/audit-logs.md))
 - 스키마·통계 읽어오는 API (`information_schema`, `pg_catalog`)
 - 쿼리 실행 API — 실행 시간 제한(`statement_timeout`), 반환 행 수 제한, 커넥션 풀 상한 ([query-safety-limits.md](../policy/query-safety-limits.md))
 - 접속 정보(비밀번호 등) 저장·보관 ([credential-management.md](../policy/credential-management.md))

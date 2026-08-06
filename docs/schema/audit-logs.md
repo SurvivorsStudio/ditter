@@ -59,10 +59,21 @@
 `pipeline_trigger`의 뒤 두 값은 **`pipeline_runs`에 대응하는 행이 없다.** `pipeline_id`로 조인해도
 run이 나오지 않는 것이 정상이며, 이걸 모르면 "실행 이력에 없는 유령 실행"으로 읽힌다.
 
-| 값 | 언제 | 채우는 값 |
+| 컬럼 | `preview` (캔버스 노드 미리보기) | `watermark_reset` (워터마크 수동 되돌리기) |
 |---|---|---|
-| `preview` | 캔버스의 노드 미리보기 ([execution-engine.md](../pipeline/execution-engine.md)) | `connection_id`는 읽은 소스 커넥션, `query_text`는 실제로 날린 쿼리. `write_*`는 전부 NULL — **미리보기는 아무것도 쓰지 않는다** |
-| `watermark_reset` | 관리자가 워터마크를 수동으로 되돌림 ([pipeline_checkpoints](pipeline-checkpoints.md)) | `connection_id`는 해당 소스 노드의 커넥션, `query_text`에 되돌린 값을 한 줄로(예: `RESET WATERMARK node=src_orders 2026-08-01T00:00:00Z → 2026-07-01T00:00:00Z`). `row_count`·`write_*`는 NULL |
+| 언제 | [execution-engine.md](../pipeline/execution-engine.md)의 노드 미리보기 | 관리자가 되돌림 ([pipeline_checkpoints](pipeline-checkpoints.md)) |
+| `user_id` | 미리보기를 누른 사람 | 되돌린 관리자 |
+| `connection_id` | 읽은 소스 커넥션 | 해당 소스 노드의 커넥션 |
+| `query_text` | 실제로 날린 쿼리 | 되돌린 값을 한 줄로 — `RESET WATERMARK node=src_orders 2026-08-01T00:00:00Z → 2026-07-01T00:00:00Z` |
+| `query_source` | `'pipeline'` | `'pipeline'` — 사람이 SQL을 넣은 게 아니라는 뜻이다 |
+| `status` | `'success'` · `'error'` · **AST 검증에 걸리면 `'blocked'`** | `'success'` (실패하면 `'error'`) |
+| `risk_verdict` | 콘솔과 동일하게 채운다 | NULL |
+| `row_count` | 미리보기로 읽은 행 수 | NULL |
+| `pipeline_id` · `pipeline_version` | 저장된 파이프라인의 값 | 같음 |
+| `write_*` | **전부 NULL** — 미리보기는 아무것도 쓰지 않는다 | **전부 NULL** |
+
+- **미리보기는 저장된 파이프라인에서만 가능하다.** 저장 전 초안에서는 미리보기 버튼이 비활성이다 —
+  그래야 `pipeline_id`가 비는 감사 기록이 생기지 않는다.
 
 - **미리보기는 한 번마다 한 건** 남긴다. 프로덕션 DB를 읽는 경로에 예외를 두지 않기 때문이다. 세션
   단위로 묶지 않는다 — 묶는 순간 "언제 무엇을 읽었나"의 해상도가 사라진다.
@@ -73,8 +84,9 @@ run이 나오지 않는 것이 정상이며, 이걸 모르면 "실행 이력에 
 
 - **앱에는 이 테이블에 대한 UPDATE/DELETE API를 만들지 않는다.** INSERT만 허용한다. 지울 수 있으면 감사 로그가 아니다 ([audit-logging.md](../policy/audit-logging.md)).
 - 스키마 마이그레이션 등 운영상 불가피한 경우를 제외하면, 애플리케이션 코드 경로에서 이 테이블에 접근하는 방법은 INSERT뿐이어야 한다.
-- **`pipeline_id`가 가리키는 파이프라인은 삭제하지 않는다.** 감사 로그가 남아 있는 파이프라인은 삭제 대신 **보관 처리**(`status`를 비활성으로 내리고 목록에서 감춤)한다. `ON DELETE CASCADE`(감사 로그가 함께 지워짐)도, `SET NULL`(append-only 행을 사후 변경)도 **둘 다 P7 위반**이다 — 셋 중 고를 문제가 아니라 삭제 자체를 하지 않는다. MVP에는 파이프라인 삭제 기능이 없으므로 이 규칙은 지금 비용이 들지 않는다.
-- 같은 이유로 `user_id`·`connection_id`가 가리키는 행도 지우지 않는다. 정리가 필요하면 비활성 처리한다.
+- **이 테이블이 참조하는 행(`user_id` · `connection_id` · `pipeline_id`)은 지우지 않는다.** `ON DELETE CASCADE`(감사 로그가 함께 지워짐)도 `SET NULL`(append-only 행을 사후 변경)도 **둘 다 P7 위반**이다 — 참조 무결성 옵션을 고르는 문제가 아니라 **삭제라는 동작 자체를 만들지 않는다.**
+- **그래서 MVP에는 사용자·커넥션·파이프라인 삭제 기능이 없다.** 접속 설정 CRUD([STEP 1](../todo/step-01-db-connection.md))도 등록·수정·조회까지이며 삭제는 넣지 않는다. 쓰지 않게 된 커넥션은 파이프라인 정의에서 **교체**하고, 파이프라인은 `status='paused'`로 내려 둔다.
+- 삭제·보관 기능이 필요해지면 그때 설계한다. **비활성 플래그나 `archived` 상태값을 미리 만들어 두지 않는다** — 쓰이지 않는 상태값은 "일시정지와 보관이 화면에서 섞이는" 문제만 만든다.
 
 ## 비고
 

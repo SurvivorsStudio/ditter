@@ -13,7 +13,7 @@ DITTER 앱 자체가 로컬 **SQLite**에 저장하는 테이블 문서다. **DI
 | [users](users.md) | DITTER 로그인 계정 | [STEP 8](../todo/step-08-audit-log-auth.md) |
 | [connections](connections.md) | 등록된 접속 설정(자격증명 포함). `role`로 소스/타깃을, `adapter_type`으로 커넥터 종류를 나눈다 | [STEP 1](../todo/step-01-db-connection.md) ~ [9](../todo/step-09-pipeline-foundation.md) |
 | [connection_grants](connection-grants.md) | 사용자별 접속 대상 권한 분리 | [STEP 8](../todo/step-08-audit-log-auth.md) |
-| [audit_logs](audit-logs.md) | 실행된 모든 쿼리의 append-only 기록. **파이프라인 소스 읽기·타깃 쓰기도 여기에 남는다** | [STEP 8](../todo/step-08-audit-log-auth.md) ~ [9](../todo/step-09-pipeline-foundation.md) |
+| [audit_logs](audit-logs.md) | 실행된 모든 쿼리의 append-only 기록. **파이프라인 소스 읽기·타깃 쓰기도 여기에 남는다** | [STEP 8](../todo/step-08-audit-log-auth.md) ~ [11](../todo/step-11-pipeline-operations.md) (컬럼은 8·9, `preview`는 10, `watermark_reset`은 11에서 채워지기 시작) |
 
 ### 파이프라인 (F7)
 
@@ -39,8 +39,12 @@ pipelines ──1:N── pipeline_checkpoints  (pipeline_id, node_id UNIQUE)
 pipeline_runs ──1:N── pipeline_run_logs (run_id)
 pipelines ──1:N── audit_logs            (pipeline_id, 파이프라인 실행 기록만)
 
-pipelines.definition(JSON) ─참조─▶ connections.id   ← FK 아님. 삭제 시 확인 필요
+pipelines.definition(JSON) ─참조─▶ connections.id   ← FK 아님. 교체만 가능(삭제 기능 없음)
 ```
+
+> **MVP에는 사용자·커넥션·파이프라인 삭제 기능이 없다.** `audit_logs`가 셋 다 참조하는데 그 행은
+> append-only라 CASCADE도 SET NULL도 걸 수 없기 때문이다 ([audit_logs](audit-logs.md)). 정리가
+> 필요하면 파이프라인은 `paused`로 내리고, 커넥션은 정의에서 교체한다.
 
 ## 원칙
 
