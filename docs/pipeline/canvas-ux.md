@@ -19,7 +19,9 @@
 
 - **팔레트**: 드래그해서 캔버스에 떨어뜨린다. 드래그 중 프리뷰를 보여준다.
 - **설정 패널**: 선택된 노드의 필드. 필드 선언은 `connectorFields.ts`에서 오고, 백엔드 허용 키와
-  짝을 이룬다 ([connector-contract.md](connector-contract.md)).
+  짝을 이룬다 ([connector-contract.md](connector-contract.md)). **커넥션 선택 목록은 `role`과
+  `adapter_type` 양쪽으로 좁힌다** — `target.s3` 노드에는 `role='target'`인 `s3` 커넥션만 뜬다
+  ([dag-and-nodes.md](dag-and-nodes.md)의 대응표). 고를 수 있게 보여준 뒤 저장에서 거부하지 않는다.
 - **실행 바**: 전체 실행 / 선택 노드 미리보기 / 진행률 · 노드 상태.
 
 ## 편집 기능
@@ -42,7 +44,8 @@
 - **저장하지 않은 초안에서는 버튼이 비활성**이다. 감사 기록이 어느 파이프라인의 것인지 가리킬 수
   없기 때문이다. 반대로 **저장된 파이프라인을 편집 중일 때는 눌린다** — 쿼리를 고쳐가며 돌려보는
   것이 미리보기의 존재 이유다.
-- **누를 때마다 감사 로그에 한 건 남는다**(`pipeline_trigger='preview'`). 저장하지 않은 편집이
+- **누를 때마다, 읽은 커넥션마다 감사 로그에 한 건 남는다**(`pipeline_trigger='preview'`). 상류
+  소스가 둘이면 두 건이다. 저장하지 않은 편집이
   있으면 그 기록의 `pipeline_version`은 NULL이다 ([audit-logs.md](../schema/audit-logs.md)).
 
 **타깃에 쓰는 경로는 전체 실행 하나뿐이다.** 미리보기로 쓰기가 가능해지면 실행 잠금·감사 기록을
