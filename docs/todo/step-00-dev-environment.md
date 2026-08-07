@@ -65,6 +65,24 @@ CI 초록불도 확인했다 — 첫 PR([#2](https://github.com/SurvivorsStudio/
 `build-test` 잡이 38초에 통과했다. Install(`--ignore-scripts`) → Audit(`found 0 vulnerabilities`)
 → Format → Lint → Typecheck → Build → Test → Compose 설정 검증까지 전 단계 성공이다.
 
+## 그 뒤에 바뀐 것 — 로컬 실행은 Docker 하나로 모았다
+
+STEP 0 당시에는 실행 경로가 둘이었다 — `docker compose up`(전체 컨테이너)과 `npm run dev`(DB만
+컨테이너, 앱은 호스트). 둘 다 같은 포트를 쓰는데 배타적이라, 섞어 쓰면 백엔드는 EADDRINUSE 로
+멈추고 Vite 는 조용히 다른 포트로 옮겨 떠서 **실패가 성공처럼 보였다.**
+
+그래서 **`docker compose up` 하나를 정규 경로로 삼았다.** 위 표의 결정들은 그대로 유효하고,
+달라진 것은 다음 셋이다.
+
+| 항목 | 결정 | 이유 |
+|---|---|---|
+| 소스 반영 | `backend`·`frontend`·`packages` 를 bind mount | 컨테이너 안에서 개발하려면 재빌드 없이 코드가 반영돼야 한다. 이미지 재빌드는 의존성이 바뀔 때만 |
+| `node_modules`·`dist` | 익명 볼륨으로 덮어 bind mount 를 가린다 | 호스트의 `node_modules` 는 macOS 바이너리라 리눅스 컨테이너에서 못 쓴다. `dist` 는 호스트에 없거나 낡은 것이 컨테이너 빌드 결과를 가린다 |
+| 파일 감시 | 프런트는 Vite `usePolling`, 백엔드는 `backend/scripts/dev-watch.mjs` | **bind mount 는 inotify 이벤트를 컨테이너로 전달하지 않는다.** 파일 내용은 보이는데 이벤트만 안 와서, 저장해도 옛 코드가 계속 돈다. `node --watch` 에는 폴링 옵션이 없어(`--watch-path`·`--watch-kill-signal` 뿐) `fs.watchFile`(stat 폴링) 기반 워처를 직접 뒀다 — 패키지를 늘리지 않으려는 선택이다 ([S1](../policy/supply-chain-security.md)) |
+
+호스트에서 직접 돌리는 경로(`npm run dev`)는 **남겨 두되 선택지로 내렸다.** CI 는 여전히 컨테이너
+밖에서 lint·typecheck·test·build 를 돌리므로 그 스크립트들은 그대로 필요하다.
+
 ## F7(파이프라인)이 나중에 요구하는 것
 
 STEP 0은 위 완료 조건으로 **이미 끝났다.** 다시 열지 않는다. 다만 [F7 데이터 파이프라인](../pipeline/README.md)이

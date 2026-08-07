@@ -22,5 +22,5 @@
 
 ## 관련
 
-- 담당 STEP: [step-03-ai-context-builder.md](../todo/step-03-ai-context-builder.md)
+- 담당 STEP: [1A](../todo/step-01a-connection-registry.md)(첫 라우트 · 스키마 검증 · S8 · P1), [step-03-ai-context-builder.md](../todo/step-03-ai-context-builder.md)(서비스 계층 분리)
 - [../policy/supply-chain-security.md](../policy/supply-chain-security.md)

@@ -11,13 +11,15 @@
 | `backend` | Fastify — REST · WebSocket · 큐 enqueue | 기존 |
 | `frontend` | React + Vite | 기존 |
 | **`redis`** | 잡 큐 · 진행률 · 실행 잠금 | **신규** |
-| **`worker`** | BullMQ 워커 — DAG 실행 | **신규** |
-| **`scheduler`** | cron 트리거 폴링 | **신규** (워커에 합칠 수도 있다 — 아래 참고) |
+| **`worker`** | BullMQ 워커 — DAG 실행 + cron 스케줄 | **신규** |
+
+**늘어나는 컨테이너는 이 둘뿐이다.** 스케줄러는 별도 프로세스로 만들지 않는다 — 아래 참고.
 
 ### scheduler를 워커에 합칠 것인가
 
 BullMQ의 repeatable job을 쓰면 별도 스케줄러 프로세스 없이 큐 자체가 cron을 관리한다. **MVP는
 이쪽을 택한다** — 프로세스가 하나 줄고, 스케줄과 큐가 같은 곳에 있어 상태가 갈라지지 않는다.
+따라서 `scheduler` 서비스는 compose 구성에 **없다**.
 
 대신 지켜야 할 것: repeatable job의 키는 **파이프라인 ID + cron 식**으로 만들고, 스케줄을 바꾸면
 **기존 repeatable job을 제거한 뒤 다시 등록한다.** 안 그러면 옛 스케줄이 유령처럼 남아 같은

@@ -1,8 +1,24 @@
 # 읽기 전용 강제 (P3)
 
-**대전제**: DITTER는 데이터를 수정하지 않는다. 읽기만 한다. 이건 기능 제약이 아니라 **위험 자체를 없애는 설계 결정**이다. 도입하는 회사 입장에서 "이 도구에는 읽기 전용 계정만 주면 된다"가 된다.
+**대전제**: DITTER는 데이터를 수정하지 않는다. 읽기만 한다. 이건 기능 제약이 아니라 **위험 자체를 없애는 설계 결정**이다. 도입하는 회사 입장에서 "이 도구에는 **읽는 권한만** 주면 된다"가 된다.
 
 읽기 전용은 **두 겹**으로 막는다. 어느 쪽이 주방어인지가 중요하다.
+
+## 콘솔 계정에 정확히 무엇을 주는가
+
+"읽기 전용 계정만 주면 된다"는 짧은 문장은 **한 군데서 부정확하다.** 운영 관찰(F5)은
+`pg_stat_activity`에서 남의 세션 쿼리를 봐야 하는데, 순수 읽기 전용 계정에는 그 컬럼이 NULL로
+마스킹된다 ([step-07-operations-monitoring.md](../todo/step-07-operations-monitoring.md)).
+
+| 쓰는 기능 | 필요한 권한 |
+|---|---|
+| F1~F4 · F6 (콘솔·AI·감사) | 대상 스키마 `SELECT` + `default_transaction_read_only = on` |
+| F5 (운영 관찰)까지 | 위 + `pg_read_all_stats` 롤 + `pg_stat_statements` 확장 |
+
+**`pg_read_all_stats`도 읽기 권한이다.** 통계 뷰의 마스킹을 푸는 것이지 데이터를 쓰게 하지
+않는다. 그래서 "데이터를 바꿀 수 있는 권한은 어느 경우에도 필요 없다"는 주장은 그대로 유효하다 —
+다만 **문서·발표에서는 위 표대로 정확히 말한다.** "읽기 전용 계정 하나면 끝"이라고 뭉뚱그렸다가
+F5 시연에서 권한을 더 요구하면, 심사에서 이 주장 전체의 신뢰가 흔들린다.
 
 ## 1순위 (주방어): DB 계정 권한
 
@@ -44,7 +60,7 @@ CTE 안에 숨은 DML은 **반드시 차단**해야 한다.
 
 ## 관련
 
-- 담당 STEP: [step-01-db-connection.md](../todo/step-01-db-connection.md)
+- 담당 STEP: [1B 읽기 전용 AST 검증기](../todo/step-01b-readonly-validator.md)(판정), [1C 스키마 조회와 쿼리 실행 API](../todo/step-01c-schema-catalog.md)(호출 지점)
 - [query-safety-limits.md](query-safety-limits.md)
 - [internal-vs-user-query-injection.md](internal-vs-user-query-injection.md)
 - [pipeline-write-boundary.md](pipeline-write-boundary.md) (P9)

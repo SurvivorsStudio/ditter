@@ -58,4 +58,4 @@ DB 접근 코드는 **처음부터 어댑터 인터페이스로 감싼다.** MVP
 
 - [backend-fastify.md](backend-fastify.md)
 - [docs/pipeline](../pipeline/README.md) — 파이프라인 패키지 구성의 근거
-- 담당 STEP: [step-00-dev-environment.md](../todo/step-00-dev-environment.md), [step-01-db-connection.md](../todo/step-01-db-connection.md), [step-03-ai-context-builder.md](../todo/step-03-ai-context-builder.md), [step-09-pipeline-foundation.md](../todo/step-09-pipeline-foundation.md)
+- 담당 STEP: [step-00-dev-environment.md](../todo/step-00-dev-environment.md), [1A 어댑터 인터페이스](../todo/step-01a-connection-registry.md), [step-03-ai-context-builder.md](../todo/step-03-ai-context-builder.md), [9B 커넥터](../todo/step-09b-connectors.md) · [9D 워커](../todo/step-09d-execution-engine.md)

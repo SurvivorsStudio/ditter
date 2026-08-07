@@ -1,6 +1,6 @@
 # STEP 2 · 웹 SQL 콘솔 (`F1` 완성)
 
-**시작 조건**: STEP 1의 스키마 API와 실행 API
+**시작 조건**: [STEP 1C](step-01c-schema-catalog.md)의 스키마 API와 실행 API
 
 ## 목표
 

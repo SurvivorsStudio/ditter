@@ -37,5 +37,5 @@ password · secretAccessKey · sessionToken · privateKey · passphrase · apiTo
 
 ## 관련
 
-- 담당 STEP: [step-01-db-connection.md](../todo/step-01-db-connection.md), [step-09-pipeline-foundation.md](../todo/step-09-pipeline-foundation.md)
+- 담당 STEP: [1A 접속 등록과 커넥션 풀](../todo/step-01a-connection-registry.md), [9A 쓰기 경계 긋기](../todo/step-09a-write-boundary.md)
 - [pipeline-write-boundary.md](pipeline-write-boundary.md) (P9)

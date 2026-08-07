@@ -13,52 +13,29 @@ STEP 1의 DB 어댑터·커넥션 관리를 물려받고, STEP 8의 인증·감�
 STEP 1이 "DB를 안전하게 읽는 능력"이었다면, 이 STEP은 **"그 읽기를 반복 가능하게 만드는
 능력"**이다. 그리고 STEP 1과 마찬가지로 **뒤따르는 모든 것의 병목**이다.
 
-## 하는 일
+## 작업 분할 — 네 문서로 나눈다
 
-### 쓰기 경계부터 긋는다 (다른 것보다 먼저)
+STEP 9는 다른 STEP 하나의 서너 배 분량이고, 그중 절반은 나머지를 기다리지 않아도 되는
+순수 로직이다. 그래서 넷으로 나눈다.
 
-- `connections`에 `role` 컬럼 추가 (`source` | `target`), 겸직 불가
-- **`connections`를 커넥터 종류 전체로 넓힌다** ([connections.md](../schema/connections.md)) —
-  `config`(JSON) 컬럼 추가, `adapter_type` 값 확장(`postgres`·`s3`·`local_file`·`http_json`),
-  `host`·`port`·`database_name`·`username`·`encrypted_password`의 NOT NULL 완화
-- **완화한 NOT NULL을 대신하는 앱 레벨 필수값 검증**을 같이 넣는다. SQLite로는 "`postgres`일 때만
-  필수"를 표현할 수 없어서 컬럼 제약이 사라진 자리다 — 이 검증이 빠지면 host 없는 PostgreSQL
-  커넥션이 등록된다
-- **쿼리 실행 API가 `role='target'`을 거부**하도록 라우터 앞단에 차단 추가
-- 접속 목록 API가 콘솔 용도로 호출될 때 **`role='source'` + `adapter_type='postgres'`만** 응답에
-  넣도록 분리 (P9 규칙 2의 표 참고 — `role` 하나로는 부족하다)
-- 타깃 커넥션 등록·수정을 관리자로 제한
-- 근거와 전체 규칙: [pipeline-write-boundary.md](../policy/pipeline-write-boundary.md) (P9)
+| 문서 | 내용 | 시작 조건 |
+|---|---|---|
+| [9A 쓰기 경계 긋기](step-09a-write-boundary.md) | `role` 분리 · 라우터 앞단 차단 · 관리자 제한 | STEP 1 + 8 |
+| [9B 커넥터 패키지](step-09b-connectors.md) | `Connector` 계약 + 4종. **mock 선행 가능** | 없음 |
+| [9C DAG 스펙과 저장](step-09c-dag-spec.md) | zod 스펙 · 테이블 · 저장 검증. **스펙은 mock 선행 가능** | 스펙 없음 / 검증 9A |
+| [9D 실행 엔진과 워커](step-09d-execution-engine.md) | BullMQ · pull 스트리밍 · 잠금 · 감사 기록 | 9A + 9B + 9C |
 
-이걸 나중으로 미루면 "일단 되게 만들고 나중에 막자"가 되고, 그러면 안 막힌다.
+```
+        ┌──▶ 9B 커넥터 ─────────┐
+(mock)  ├──▶ 9C DAG 스펙 ───────┤
+        │         ▲             ├──▶ 9D 실행 엔진 · 워커
+STEP 1+8 ──▶ 9A 쓰기 경계 ──────┘
+```
 
-### 커넥터
-
-- `packages/pipeline-connectors` 패키지 + `Connector` 인터페이스
-  ([connector-contract.md](../pipeline/connector-contract.md))
-- 레지스트리 + **동적 `import()` 지연 로딩**
-- 커넥터 4종: `postgres`(소스·타깃) · `s3` · `local_file` · `http_json`
-- **소스 커넥터는 STEP 1의 DB 어댑터를 경유한다.** 자체 접속을 열지 않는다
-- 시크릿 키 분리 암호화 — 기존 [P4](../policy/credential-management.md) 방식 재사용
-
-### DAG 스펙과 저장
-
-- `packages/shared-types`에 zod DAG 스키마 **한 벌** ([dag-and-nodes.md](../pipeline/dag-and-nodes.md))
-- `pipelines` · `pipeline_runs` 테이블 ([schema](../schema/README.md)) — `pipelines.activated_by` ·
-  `activated_at`은 `status`를 `active`로 올릴 때 채운다. 스케줄 실행의 `triggered_by`가 여기서 온다
-- **노드 타입 ↔ `adapter_type` 대응표**를 `packages/shared-types`에서 파생시킨다. 화면과 백엔드가
-  각자 매핑을 만들면 어긋난다
-- 저장 시 검증 + **실행 직전 재검증** — 커넥션 `role`, `adapter_type` 일치, 소스 쿼리 AST
-
-### 실행 엔진과 워커
-
-- Redis + BullMQ 배선. **백엔드는 워커 코드를 import 하지 않는다** — 잡 이름과 페이로드만 넣는다
-- 타깃 주도 pull 스트리밍 엔진 ([execution-engine.md](../pipeline/execution-engine.md))
-- 노드 구현: extract · transform(filter/map) · load
-- `overwrite` 규칙 — DB는 첫 배치만 truncate, S3·파일은 `run_id=` prefix 선정리
-- **같은 파이프라인 동시 실행 잠금** (Redis) — 수동·스케줄·재시도 **모든 경로**가 통과
-- 파이프라인 실행의 소스 읽기·타깃 쓰기를 **감사 로그에 기록** — `audit_logs`의 `pipeline_*` ·
-  `write_*` 컬럼을 채운다 ([audit-logs.md](../schema/audit-logs.md))
+**순서 규칙은 하나뿐이다 — 9A가 9D보다 먼저 끝난다.** 9D는 타깃에 실제로 쓰는 코드라서, 경계가
+서기 전에 만들면 "일단 되게 만들고 나중에 막자"가 되고 그러면 안 막힌다. 9B·9C는 타깃에 쓰지
+않으므로 병렬로 가도 되고, **순수 타입·순수 로직 부분은 STEP 1이 끝나기 전부터** 착수한다
+([todo README](README.md)의 「지금 당장 착수할 것」 6번).
 
 ## 완료 조건
 
@@ -72,11 +49,15 @@ CLI나 API 호출만으로 다음이 된다.
    **저장 단계에서 거부된다.**
 6. 실행 결과가 `pipeline_runs`에 남고, 소스 읽기·타깃 쓰기가 감사 로그에 남는다.
 
+네 문서의 완료 조건을 전부 만족하면 위가 자동으로 만족된다 — 4는 9A, 5는 9C, 나머지는 9D가 담당한다.
+
 ## 리뷰 게이트
 
 🔒 **쓰기 경계(P9) 구현은 2인 리뷰 필수다.** [STEP 1](step-01-db-connection.md)의 읽기 전용
 강제·자격증명 처리와 같은 등급으로 취급한다. 여기가 뚫리면 읽기 전용 콘솔이 쓰기 가능한 콘솔이
 된다.
+
+리뷰 대상은 **9A와 9D**다. 9A는 경계를 긋는 코드, 9D는 그 경계를 실제로 넘나드는 코드다.
 
 위 완료 조건 3·4·5는 **회귀 테스트로 고정한다** ([testing.md](../conventions/testing.md)).
 

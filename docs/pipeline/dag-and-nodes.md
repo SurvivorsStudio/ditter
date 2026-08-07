@@ -118,4 +118,4 @@ function parseNode<S extends z.ZodTypeAny>(schema: S, raw: unknown): z.infer<S> 
 - [connector-contract.md](connector-contract.md) — 소스·타깃 노드가 호출하는 계약
 - [execution-engine.md](execution-engine.md) — 이 DAG를 실제로 돌리는 쪽
 - [canvas-ux.md](canvas-ux.md) — 이 DAG를 사람이 만드는 쪽
-- 담당 STEP: [step-09-pipeline-foundation.md](../todo/step-09-pipeline-foundation.md)
+- 담당 STEP: [9C DAG 스펙과 저장](../todo/step-09c-dag-spec.md)

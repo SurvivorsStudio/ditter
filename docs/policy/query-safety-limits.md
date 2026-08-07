@@ -28,5 +28,5 @@ EXPLAIN의 예상 행수·비용은 DB 통계에 의존한다. 통계가 낡으�
 
 ## 관련
 
-- 담당 STEP: [step-01-db-connection.md](../todo/step-01-db-connection.md), [step-05-risk-prediction.md](../todo/step-05-risk-prediction.md)
+- 담당 STEP: [1A](../todo/step-01a-connection-registry.md)(풀 상한) · [1C](../todo/step-01c-schema-catalog.md)(timeout·행수), [step-05-risk-prediction.md](../todo/step-05-risk-prediction.md)
 - [read-only-enforcement.md](read-only-enforcement.md)
