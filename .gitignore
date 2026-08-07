@@ -40,6 +40,10 @@ coverage/
 # Docker 로컬 오버라이드
 docker-compose.override.yml
 
+# 컨테이너가 죽으면서 bind mount 된 소스 디렉토리에 떨군 코어 덤프 (수백 MB 짜리가 나온다)
+core
+core.*
+
 # 에디터/IDE
 .vscode/*
 !.vscode/settings.json

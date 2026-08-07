@@ -9,6 +9,8 @@
 .requirements
 docs
 *.log
+core
+core.*
 .env
 .env.*
 !.env.example

@@ -16,9 +16,11 @@ ditter는 **실제 DB를 읽는다.** 스키마, 데이터 규모, 인덱스, EX
 붙잡는다.
 
 **절대 안 하는 것**: 사람이 쓴 SQL로 데이터를 수정하지 않는다. 콘솔은 읽기만 한다. 이건 기능
-제약이 아니라 위험 자체를 없애는 설계 결정이다 — 도입하는 회사 입장에서 "이 콘솔에는 읽기 전용
-계정만 주면 된다"가 된다. 파이프라인(F7)의 타깃 적재는 자유형 SQL이 닿지 않는 별도 경로이며,
-그 경계는 [아래](#파이프라인이-쓰는데도-읽기-전용인-이유)에 정리했다.
+제약이 아니라 위험 자체를 없애는 설계 결정이다 — 도입하는 회사 입장에서 "이 콘솔에는 **읽는
+권한만** 주면 된다"가 된다. 운영 관찰(F5)까지 쓰려면 통계 조회 롤(`pg_read_all_stats`)이 하나 더
+붙는데, 그것도 읽기 권한이다. 데이터를 바꿀 수 있는 권한은 어느 경우에도 필요 없다.
+파이프라인(F7)의 타깃 적재는 자유형 SQL이 닿지 않는 별도 경로이며, 그 경계는
+[아래](#파이프라인이-쓰는데도-읽기-전용인-이유)에 정리했다.
 
 ## 핵심 기능
 
@@ -64,7 +66,7 @@ F7은 목적 저장소에 쓴다. 그래도 위 주장은 그대로다 — **사
 - 모든 쓰기는 감사 로그에 남는다.
 
 경계의 전문은 [pipeline-write-boundary.md](docs/policy/pipeline-write-boundary.md) 참고. 콘솔
-계정에는 **여전히 읽기 권한만 주면 된다.**
+계정에는 **여전히 읽는 권한만 주면 된다** (F5를 쓸 때 붙는 `pg_read_all_stats`까지 포함해서).
 
 ## 기술 스택
 
@@ -83,33 +85,63 @@ docs/                     계획·정책·컨벤션·스키마·파이프라인 
 
 ## 시작하기
 
+**앱은 Docker로 돌린다.** PostgreSQL까지 컨테이너 안에 있어서, 호스트에 Node나 PostgreSQL을
+따로 깔지 않아도 된다.
+
+```bash
+docker compose up
+```
+
+이거 하나면 세 개가 함께 뜬다.
+
+| 주소 | 무엇 |
+|---|---|
+| http://localhost:5173 | 웹 콘솔 (React + Vite) |
+| http://localhost:4000 | 백엔드 API (Fastify) |
+| `localhost:5432` | PostgreSQL — psql·GUI 클라이언트로 붙을 때 쓴다 |
+
+**소스는 bind mount라 고치면 바로 반영된다.** 프런트는 HMR로, 백엔드는 프로세스 재시작으로
+붙는다. 이미지를 다시 빌드해야 하는 건 **의존성이 바뀔 때뿐**이다 — 그때는
+`docker compose up --build`.
+
+Claude Code에서는 [`/dev`](.claude/commands/dev.md) 커맨드가 위 과정(런타임 확인 → 기동 →
+health 확인)을 한 번에 처리한다.
+
+```bash
+docker compose logs -f backend   # 로그 보기
+docker compose down              # 내리기 (DB 데이터는 남는다)
+docker compose down -v           # DB 데이터까지 지우고 처음부터
+```
+
+`.env`는 없어도 위 명령이 그대로 돈다 — [docker-compose.yml](docker-compose.yml)에 로컬 기본값이
+들어 있다. 포트나 DB 이름을 바꾸고 싶을 때만 `cp .env.example .env` 하면 된다.
+
+**공개 범위**: 컨테이너 포트는 전부 `127.0.0.1`에만 묶여 있어 같은 네트워크의 다른 기기에서
+닿지 않는다. compose에 적힌 DB 비밀번호가 저장소에 그대로 있는 고정값이고 인증은 STEP 8에야
+붙기 때문이다. 이 구성은 **로컬 개발 전용이며 배포용이 아니다.**
+
+### 호스트에서 직접 돌리기 (선택)
+
+Docker 없이 돌려야 하면 이 경로도 남아 있다. 단 **위 `docker compose up`과 동시에 쓰지 않는다**
+— 같은 포트를 두고 다툰다.
+
 ```bash
 npm ci --ignore-scripts   # 설치 스크립트 차단이 기본이다 (docs/policy/supply-chain-security.md S5)
 cp .env.example .env
-```
-
-이후 로컬 개발 서버(백엔드 `:4000` + 프런트 `:5173` + 로컬 PostgreSQL)는 Claude Code에서
-[`/dev`](.claude/commands/dev.md) 커맨드로 기동·재시작한다. 기존 서버 종료 → DB 컨테이너 확인/기동
-→ `npm run dev` → 포트 확인까지 한 번에 처리한다.
-
-커맨드 없이 수동으로 하는 경우:
-
-```bash
-docker compose up -d db   # 로컬 PostgreSQL
+docker compose up -d db   # DB만 컨테이너로
 npm run dev               # 백엔드 :4000 + 프런트 :5173
 ```
 
-`docker compose up` 한 줄이면 DB·백엔드·프런트가 한 번에 뜬다. 단 이건 위 절차와 배타적인 별개
-모드다 — 이 경우 `npm run dev`는 실행하지 않는다(포트가 겹친다). 일상 개발에서는 DB만 컨테이너로
-띄우고 앱은 호스트에서 `npm run dev`로 돌리는 쪽이 빠르다.
+이 경우에도 개발 서버는 기본적으로 내 컴퓨터에서만 접속을 받는다. 같은 네트워크의 다른 기기에서
+붙어야 하면 `.env`의 `HOST`(백엔드)와 `VITE_DEV_HOST`(프런트)를 둘 다 열어야 한다 — 프런트만
+열어도 `/api` 프록시를 타고 백엔드에 닿기 때문이다. 인증은 STEP 8에야 붙으니 열어둔 채 두지 않는다.
 
-개발 서버는 **기본적으로 내 컴퓨터에서만 접속을 받는다.** 같은 네트워크의 다른 기기에서 붙어야
-하면 `.env`의 `HOST`(백엔드)와 `VITE_DEV_HOST`(프런트)를 둘 다 열어야 한다 — 프런트만 열어도
-`/api` 프록시를 타고 백엔드에 닿기 때문이다. 인증은 STEP 8에야 붙으니 열어둔 채 두지 않는다.
+### 그 밖의 명령
+
+아래는 컨테이너 밖에서 도는 검사·빌드다 (CI가 쓰는 것과 같다). `npm ci --ignore-scripts`가 먼저 필요하다.
 
 | 명령 | 하는 일 |
 |---|---|
-| `npm run dev` | 백엔드(`:4000`) + 프런트(`:5173`) 개발 서버 |
 | `npm run lint` / `npm run format` | ESLint / Prettier |
 | `npm run typecheck` | 전 워크스페이스 타입 검사 |
 | `npm test` | 전 워크스페이스 테스트 (Vitest) |
@@ -122,8 +154,12 @@ npm run dev               # 백엔드 :4000 + 프런트 :5173
 ## 진행 상황
 
 **STEP 0(개발 환경) 완료** — 모노레포·CI 보안 게이트가 서 있고, `docker compose up`으로 세
-컨테이너가 뜨는 것과 `npm run dev` 양쪽 경로를 실제로 확인했다. 제품 기능은 아직 없다. 다음은
-[STEP 1 DB 안전 접속](docs/todo/step-01-db-connection.md)이며, 모든 것의 병목이다.
+컨테이너가 뜨는 것과 `npm run dev` 양쪽 경로를 실제로 확인했다. 제품 기능은 아직 없다.
+
+다음은 [STEP 1 DB 안전 접속](docs/todo/step-01-db-connection.md)이며 모든 것의 병목이다. 다만
+STEP 1을 기다리지 않고 **동시에 시작할 수 있는 작업이 셋 더 있다** — 읽기 전용 AST 검증기,
+감사 로그 + 인증, 커넥터 패키지 셋 다 순수 로직이라 DB도 백엔드도 필요 없다
+([지금 당장 착수할 것](docs/todo/README.md#지금-당장-착수할-것)).
 
 진행 단계와 완료 조건은 [docs/todo](docs/todo/README.md)에서 추적한다.
 
