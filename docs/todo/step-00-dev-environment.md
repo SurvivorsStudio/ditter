@@ -68,7 +68,7 @@ CI 초록불도 확인했다 — 첫 PR([#2](https://github.com/SurvivorsStudio/
 ## F7(파이프라인)이 나중에 요구하는 것
 
 STEP 0은 위 완료 조건으로 **이미 끝났다.** 다시 열지 않는다. 다만 [F7 데이터 파이프라인](../pipeline/README.md)이
-합류하면서 개발 환경 전제가 늘었고, 그 차이는 [STEP 9](step-09-pipeline-foundation.md)에서 세운다.
+합류하면서 개발 환경 전제가 늘었고, 그 차이는 [STEP 9](step-09-pipeline-foundation.md)~[11](step-11-pipeline-operations.md)에서 세운다.
 여기 적어 두는 이유는, 위 「이렇게 만들었다」 표를 STEP 0 당시의 기록으로 읽어야 하기 때문이다 —
 **지금의 개발 환경 전체가 아니다.**
 
