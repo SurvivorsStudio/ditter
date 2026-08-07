@@ -75,9 +75,16 @@ STEP 0은 위 완료 조건으로 **이미 끝났다.** 다시 열지 않는다.
 | STEP 0이 세운 것 | F7이 더 요구하는 것 | 세우는 곳 |
 |---|---|---|
 | 워크스페이스 `backend`·`frontend`·`packages/shared-types` | `worker/`(BullMQ 워커), `packages/pipeline-connectors` ([구조 트리](../../README.md#기술-스택), [connector-contract.md](../pipeline/connector-contract.md)) | STEP 9 |
-| compose 서비스 `db`·`backend`·`frontend` | `redis`(잡 큐·진행률·실행 잠금), `worker` ([deployment.md](../pipeline/deployment.md)) | STEP 9 |
-| 루트 `.env` 하나 | `REDIS_URL`·`WORKER_CONCURRENCY`·`PIPELINE_SPOOL_DIR`·`PIPELINE_FILE_ROOT` 등 추가 키 | STEP 9 |
+| compose 서비스 `db`·`backend`·`frontend` | `redis`(잡 큐·진행률·실행 잠금), `worker` ([deployment.md](../pipeline/deployment.md)) | STEP 11 |
+| 루트 `.env` 하나 | `REDIS_URL` | STEP 9 |
+| 루트 `.env` 하나 (이어서) | `WORKER_CONCURRENCY`·`PIPELINE_SPOOL_DIR`·`PIPELINE_FILE_ROOT` 등 추가 키 | STEP 11 |
 | 테스트는 순수 모듈뿐 (DOM은 STEP 2에서 분리) | 워커·커넥터 워크스페이스가 늘면 Vitest 설정을 다시 쪼갠다 | STEP 9~11 |
+
+경계는 **배선은 STEP 9, 컨테이너화·운영 하드닝은 STEP 11**이다 — compose 서비스와
+`WORKER_CONCURRENCY`·`PIPELINE_SPOOL_DIR`·`PIPELINE_FILE_ROOT`는
+[STEP 11](step-11-pipeline-operations.md)의 「운영 배선」이 소유한다. 다만 **Redis 자체는 STEP 9
+완료 조건 3(같은 파이프라인을 동시에 두 번 트리거하면 두 번째가 거절된다)을 확인하는 데
+필요하므로, 컨테이너로 묶기 전에도 로컬에서 띄울 수 있어야 한다.**
 
 스케줄러는 별도 프로세스로 만들지 않는다 — BullMQ repeatable job으로 큐 안에서 처리한다
 ([deployment.md](../pipeline/deployment.md#scheduler를-워커에-합칠-것인가)).
