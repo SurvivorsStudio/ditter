@@ -35,6 +35,12 @@ export default defineConfig(({ mode }) => {
       // VITE_DEV_HOST=0.0.0.0 을 직접 지정한다.
       host: readEnv(env.VITE_DEV_HOST) ?? '127.0.0.1',
       port: 5173,
+      // 컨테이너에서 돌 때는 bind mount 로 소스를 본다. 호스트(macOS·Windows)의 파일 변경은
+      // inotify 이벤트로 컨테이너 안에 전달되지 않아, 폴링을 켜지 않으면 저장해도 HMR 이 돌지
+      // 않는다. 폴링은 CPU 를 계속 쓰므로 호스트에서 직접 돌릴 때는 켜지 않는다 —
+      // docker-compose.yml 의 frontend 서비스만 VITE_DEV_POLL 을 지정한다.
+      // `null` 은 "기본 감시자를 그대로 쓴다"는 뜻이다 (Vite 의 타입이 `WatchOptions | null`).
+      watch: readEnv(env.VITE_DEV_POLL) === 'true' ? { usePolling: true, interval: 300 } : null,
       proxy: {
         // 로컬은 localhost, docker compose 안에서는 서비스 이름(backend)으로 붙는다.
         '/api': {
