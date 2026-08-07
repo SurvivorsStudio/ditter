@@ -74,7 +74,7 @@ STEP 0은 위 완료 조건으로 **이미 끝났다.** 다시 열지 않는다.
 
 | STEP 0이 세운 것 | F7이 더 요구하는 것 | 세우는 곳 |
 |---|---|---|
-| 워크스페이스 `backend`·`frontend`·`packages/shared-types` | `worker/`(BullMQ 워커), `packages/pipeline-connectors` ([project-structure.md](../conventions/project-structure.md)) | STEP 9 |
+| 워크스페이스 `backend`·`frontend`·`packages/shared-types` | `worker/`(BullMQ 워커), `packages/pipeline-connectors` ([구조 트리](../../README.md#기술-스택), [connector-contract.md](../pipeline/connector-contract.md)) | STEP 9 |
 | compose 서비스 `db`·`backend`·`frontend` | `redis`(잡 큐·진행률·실행 잠금), `worker` ([deployment.md](../pipeline/deployment.md)) | STEP 9 |
 | 루트 `.env` 하나 | `REDIS_URL`·`WORKER_CONCURRENCY`·`PIPELINE_SPOOL_DIR`·`PIPELINE_FILE_ROOT` 등 추가 키 | STEP 9 |
 | 테스트는 순수 모듈뿐 (DOM은 STEP 2에서 분리) | 워커·커넥터 워크스페이스가 늘면 Vitest 설정을 다시 쪼갠다 | STEP 9~11 |
