@@ -65,6 +65,26 @@ CI 초록불도 확인했다 — 첫 PR([#2](https://github.com/SurvivorsStudio/
 `build-test` 잡이 38초에 통과했다. Install(`--ignore-scripts`) → Audit(`found 0 vulnerabilities`)
 → Format → Lint → Typecheck → Build → Test → Compose 설정 검증까지 전 단계 성공이다.
 
+## F7(파이프라인)이 나중에 요구하는 것
+
+STEP 0은 위 완료 조건으로 **이미 끝났다.** 다시 열지 않는다. 다만 [F7 데이터 파이프라인](../pipeline/README.md)이
+합류하면서 개발 환경 전제가 늘었고, 그 차이는 [STEP 9](step-09-pipeline-foundation.md)에서 세운다.
+여기 적어 두는 이유는, 위 「이렇게 만들었다」 표를 STEP 0 당시의 기록으로 읽어야 하기 때문이다 —
+**지금의 개발 환경 전체가 아니다.**
+
+| STEP 0이 세운 것 | F7이 더 요구하는 것 | 세우는 곳 |
+|---|---|---|
+| 워크스페이스 `backend`·`frontend`·`packages/shared-types` | `worker/`(BullMQ 워커), `packages/pipeline-connectors` ([project-structure.md](../conventions/project-structure.md)) | STEP 9 |
+| compose 서비스 `db`·`backend`·`frontend` | `redis`(잡 큐·진행률·실행 잠금), `worker` ([deployment.md](../pipeline/deployment.md)) | STEP 9 |
+| 루트 `.env` 하나 | `REDIS_URL`·`WORKER_CONCURRENCY`·`PIPELINE_SPOOL_DIR`·`PIPELINE_FILE_ROOT` 등 추가 키 | STEP 9 |
+| 테스트는 순수 모듈뿐 (DOM은 STEP 2에서 분리) | 워커·커넥터 워크스페이스가 늘면 Vitest 설정을 다시 쪼갠다 | STEP 9~11 |
+
+스케줄러는 별도 프로세스로 만들지 않는다 — BullMQ repeatable job으로 큐 안에서 처리한다
+([deployment.md](../pipeline/deployment.md#scheduler를-워커에-합칠-것인가)).
+
+`npm audit --audit-level=high` 게이트는 여기에도 그대로 걸린다. BullMQ·Redis 클라이언트·S3 SDK가
+들어올 때 우회하지 않는다.
+
 ## 왜 지금인가
 
 나중에 보안 게이트를 넣으면 이미 설치된 수백 개 의존성을 되짚어야 한다. 처음에 심으면 공짜다.
