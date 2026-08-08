@@ -96,9 +96,9 @@ docker compose up
 
 | 주소 | 무엇 |
 |---|---|
-| http://localhost:5173 | 웹 콘솔 (React + Vite) |
-| http://localhost:4000 | 백엔드 API (Fastify) |
-| `localhost:5432` | PostgreSQL — psql·GUI 클라이언트로 붙을 때 쓴다 |
+| http://127.0.0.1:5173 | 웹 콘솔 (React + Vite) |
+| http://127.0.0.1:4000 | 백엔드 API (Fastify) |
+| `127.0.0.1:5432` | PostgreSQL — psql·GUI 클라이언트로 붙을 때 쓴다 |
 
 **소스는 bind mount라 고치면 바로 반영된다.** 프런트는 HMR로, 백엔드는 프로세스 재시작으로
 붙는다. 이미지를 다시 빌드해야 하는 건 **의존성이 바뀔 때뿐**이다 — 그때는
