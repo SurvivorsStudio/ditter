@@ -74,15 +74,29 @@ function scheduleRestart() {
  * doRestart 를 큐에 잇는다. `.then` 체이닝이라, 지금 진행 중인 재시작(이전 프로세스
  * 종료 대기 포함)이 끝난 뒤에만 다음 재시작이 시작된다 — 겹쳐 부르면 새 프로세스
  * 두 개가 같은 포트를 놓고 다툰다.
+ *
+ * `.then(fn, onRejected)` 가 아니라 `.then(fn).catch(onRejected)` 를 쓴다. 전자의
+ * onRejected 는 **restartQueue(이전 상태)가 reject 됐을 때만** 불리고 `fn`(doRestart)
+ * 자신이 던진 예외는 못 잡는다 — 그러면 이번 재시작의 오류를 다음 재시작 요청이 대신
+ * 삼켜 조용히 스킵된다.
  */
 function enqueueRestart() {
-  restartQueue = restartQueue.then(doRestart, (err) => {
+  restartQueue = restartQueue.then(doRestart).catch((err) => {
     console.error('[dev-watch] 재시작 중 오류:', err);
   });
 }
 
-/** 프로세스에 SIGTERM 을 보내고 완전히 종료될 때까지 기다린다. */
+/**
+ * 프로세스에 SIGTERM 을 보내고 완전히 종료될 때까지 기다린다.
+ *
+ * 이미 종료된 프로세스면 곧바로 통과시킨다 — `exit` 이벤트는 한 번만 발생하고
+ * EventEmitter 는 지나간 이벤트를 새로 등록한 리스너에 재생해주지 않는다. 백엔드가
+ * 스스로 죽은 뒤(문법 오류 등) 다음 저장에서 이 함수가 그 죽은 프로세스를 다시
+ * 기다리면, `once('exit', ...)` 도 `SIGKILL` 폴백(이미 죽은 프로세스에는 아무 효과가
+ * 없다)도 절대 풀리지 않아 재시작 큐 전체가 영구히 멈춘다.
+ */
 function waitForExit(proc) {
+  if (proc.exitCode !== null || proc.signalCode !== null) return Promise.resolve();
   return new Promise((resolve) => {
     intentionalKills.add(proc);
     const killTimer = setTimeout(() => proc.kill('SIGKILL'), KILL_TIMEOUT_MS);
