@@ -39,8 +39,14 @@ export default defineConfig(({ mode }) => {
       // inotify 이벤트로 컨테이너 안에 전달되지 않아, 폴링을 켜지 않으면 저장해도 HMR 이 돌지
       // 않는다. 폴링은 CPU 를 계속 쓰므로 호스트에서 직접 돌릴 때는 켜지 않는다 —
       // docker-compose.yml 의 frontend 서비스만 VITE_DEV_POLL 을 지정한다.
-      // `null` 은 "기본 감시자를 그대로 쓴다"는 뜻이다 (Vite 의 타입이 `WatchOptions | null`).
-      watch: readEnv(env.VITE_DEV_POLL) === 'true' ? { usePolling: true, interval: 300 } : null,
+      // `watch` 키 자체를 넣지 않아야 Vite 의 기본 감시자(chokidar)가 그대로 붙는다. Vite 는
+      // `watch: null` 을 "파일 감시를 끈다"로 해석하므로(청크 소스의 `serverConfig.watch !== null
+      // ? chokidar.watch(...) : createNoopWatcher(...)`), null 을 넣으면 호스트 직접 실행 경로의
+      // HMR 이 통째로 죽는다. `exactOptionalPropertyTypes`(tsconfig.base.json) 때문에
+      // `watch: undefined` 로도 못 고치므로 조건부 스프레드로 키 자체를 뺀다.
+      ...(readEnv(env.VITE_DEV_POLL) === 'true'
+        ? { watch: { usePolling: true, interval: 300 } }
+        : {}),
       proxy: {
         // 로컬은 localhost, docker compose 안에서는 서비스 이름(backend)으로 붙는다.
         '/api': {
