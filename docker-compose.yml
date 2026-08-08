@@ -33,6 +33,18 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    # 이미지 안의 `node` 계정은 uid:gid 1000:1000 으로 고정돼 있다(Dockerfile 의
+    # `USER node`). macOS 는 bind mount 를 다루는 파일시스템 계층(virtiofs 등)이 uid 를
+    # 투명하게 중재해 주는 경우가 많아 드러나지 않지만, **리눅스 네이티브 bind mount 는
+    # 커널이 실제 uid 로 권한을 그대로 검사한다.** 저장소 소유자가 1000이 아니면(우분투
+    # 등에서 흔함) 컨테이너가 bind mount 된 `./backend`·`./frontend`·`./packages` 에 쓰기
+    # 권한이 없어, Vite 가 설정 임시 파일을 못 써 프런트가 기동조차 못 할 수 있다.
+    #
+    # `DEV_UID`·`DEV_GID` 를 호스트 uid/gid(`id -u`·`id -g`)로 맞추면 해결된다 — 예:
+    # `DEV_UID=$(id -u) DEV_GID=$(id -g) docker compose up`. 안 맞을 일이 훨씬 많은
+    # 리눅스에서만 신경 쓰면 되고, macOS·Windows 는 기본값(1000:1000)을 그대로 써도
+    # 대개 문제가 없다. 값을 안 주면 이미지 빌드 시점의 uid 와 같아 기존 동작과 동일하다.
+    user: '${DEV_UID:-1000}:${DEV_GID:-1000}'
     # 기동할 때마다 공유 타입을 먼저 빌드한다. `dist` 는 커밋 대상이 아니고 아래 익명 볼륨에
     # 담기므로, 이 단계가 없으면 타입 패키지를 고친 뒤 컨테이너가 옛 산출물을 그대로 쓴다.
     #
@@ -88,6 +100,10 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+    # 리눅스에서 bind mount 소유자 uid 가 안 맞으면 쓰기가 막힌다 — backend 서비스의
+    # `user:` 주석 참고. 이 서비스가 특히 취약하다: Vite dev 서버가 기동할 때마다
+    # `vite.config.ts` 옆에 설정 임시 파일을 쓰는데 그 디렉터리가 바로 이 bind mount 다.
+    user: '${DEV_UID:-1000}:${DEV_GID:-1000}'
     # 마지막 명령 앞의 `exec` 는 sh 를 그 프로세스로 치환해, 종료 신호가 sh 를 거치지 않고
     # Vite dev 서버까지 곧바로 닿게 한다 (backend 서비스와 동일한 이유).
     command: sh -c "npm run build --workspace=packages/shared-types && exec npm run dev --workspace=frontend"

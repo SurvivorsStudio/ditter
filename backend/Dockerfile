@@ -23,5 +23,17 @@ COPY --chown=node:node backend backend
 
 RUN npm run build --workspace=packages/shared-types
 
+# docker-compose.yml 이 `packages/shared-types/dist` 를 익명 볼륨으로 선언한다(호스트
+# bind mount 가 컨테이너 산출물을 가리지 않게). 그 볼륨은 지금 이 시점의 소유권(node,
+# uid 1000)을 그대로 물려받아 초기화되는데, 컨테이너를 다른 uid(`DEV_UID` — 리눅스에서
+# 호스트 소유자와 맞추는 값)로 띄우면 그 uid 가 못 쓴다 — 컨테이너가 뜰 때마다 이 build 를
+# 다시 돌리므로 매번 걸린다. 어떤 uid 로 뜨더라도 쓸 수 있게 미리 열어 둔다.
+#
+# `backend/node_modules`·`packages/shared-types/node_modules` 도 같은 이유로 익명
+# 볼륨이지만 여기서는 손대지 않는다 — npm 워크스페이스가 의존성을 루트 node_modules 로
+# 전부 호이스팅해서 이 경로 자체가 이미지 안에 존재하지 않고(런타임에 빈 디렉터리로
+# 새로 생긴다), 아무도 거기에 쓰지 않는다.
+RUN chmod -R a+rwX packages/shared-types/dist
+
 EXPOSE 4000
 CMD ["node", "backend/src/index.ts"]
