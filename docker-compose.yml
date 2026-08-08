@@ -56,6 +56,19 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ditter_local_dev_only}
     ports:
       - '127.0.0.1:4000:4000'
+    # 첫 기동에는 위 command 의 공유 타입 빌드가 끝나야 서버가 뜬다. healthcheck 가 없으면
+    # `docker compose up --wait` 는 컨테이너가 running 이 된 시점(빌드 중)에 바로 통과해 버려,
+    # 뒤이은 확인 요청이 아직 응답하지 않는 서버에 닿아 실패로 보인다.
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'node -e "fetch(\"http://127.0.0.1:4000/api/health\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
     volumes:
       # 소스는 호스트에서 가져온다 — 고치면 `node --watch` 가 다시 띄운다. 이미지 재빌드는
       # 의존성(package.json·lockfile)이 바뀔 때만 필요하다.
@@ -88,6 +101,18 @@ services:
       VITE_DEV_POLL: 'true'
     ports:
       - '127.0.0.1:5173:5173'
+    # 첫 기동에는 위 command 의 공유 타입 빌드가 끝나야 dev 서버가 뜬다. backend 서비스와
+    # 같은 이유로 healthcheck 없이는 `--wait` 가 준비 전에 통과해 버린다.
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'node -e "fetch(\"http://127.0.0.1:5173\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
     volumes:
       - ./frontend:/app/frontend
       - ./packages:/app/packages
