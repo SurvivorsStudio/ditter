@@ -23,5 +23,16 @@ COPY --chown=node:node backend backend
 
 RUN npm run build --workspace=packages/shared-types
 
+# 컨테이너는 root 로 시작해 진입점 스크립트가 익명 볼륨(node_modules · dist)의 소유권을
+# 목표 uid(`DEV_UID` — 리눅스에서 호스트 저장소 소유자와 맞추는 값)로 정리한 뒤,
+# su-exec 로 권한을 낮춰 실제 앱을 그 uid 로 실행한다. 그 이유와 build 시점 chmod 로는
+# 왜 부족한지는 docker-entrypoint-dev.sh 의 주석 참고. 앱 프로세스 자체는 여전히
+# non-root 로 도니 S7 은 그대로 지켜진다.
+USER root
+RUN apk add --no-cache su-exec
+COPY backend/docker-entrypoint-dev.sh /usr/local/bin/docker-entrypoint-dev.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint-dev.sh
+ENTRYPOINT ["docker-entrypoint-dev.sh"]
+
 EXPOSE 4000
 CMD ["node", "backend/src/index.ts"]
