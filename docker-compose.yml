@@ -39,7 +39,11 @@ services:
     # `dev` 가 아니라 `dev:poll` 인 이유: `node --watch` 는 inotify 이벤트에 의존하는데 그 이벤트가
     # bind mount 를 넘어오지 않아, 저장해도 서버가 조용히 옛 코드를 계속 돌린다
     # (backend/scripts/dev-watch.mjs 의 주석 참고).
-    command: sh -c "npm run build --workspace=packages/shared-types && npm run dev:poll --workspace=backend"
+    #
+    # 마지막 명령 앞의 `exec` 는 sh 를 그 프로세스로 치환한다. 없으면 sh 가 컨테이너의 1번
+    # 프로세스로 남아 SIGTERM 을 자식(dev-watch.mjs)에 넘기지 않고, `docker compose down`·
+    # `restart` 가 매번 정지 유예 시간을 다 쓰고 SIGKILL 로 끝난다.
+    command: sh -c "npm run build --workspace=packages/shared-types && exec npm run dev:poll --workspace=backend"
     environment:
       # 컨테이너 안에서는 0.0.0.0 으로 바인딩해야 아래 포트 매핑이 닿는다. 공개 범위를 정하는
       # 것은 이 값이 아니라 `ports` 의 `127.0.0.1` 이다.
@@ -71,7 +75,9 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-    command: sh -c "npm run build --workspace=packages/shared-types && npm run dev --workspace=frontend"
+    # 마지막 명령 앞의 `exec` 는 sh 를 그 프로세스로 치환해, 종료 신호가 sh 를 거치지 않고
+    # Vite dev 서버까지 곧바로 닿게 한다 (backend 서비스와 동일한 이유).
+    command: sh -c "npm run build --workspace=packages/shared-types && exec npm run dev --workspace=frontend"
     environment:
       VITE_API_PROXY_TARGET: http://backend:4000
       # 컨테이너 안에서는 0.0.0.0 으로 바인딩해야 위 포트 매핑이 닿는다. 호스트에서 직접
