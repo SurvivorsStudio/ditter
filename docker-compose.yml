@@ -44,7 +44,14 @@ services:
     # `DEV_UID=$(id -u) DEV_GID=$(id -g) docker compose up`. 안 맞을 일이 훨씬 많은
     # 리눅스에서만 신경 쓰면 되고, macOS·Windows 는 기본값(1000:1000)을 그대로 써도
     # 대개 문제가 없다. 값을 안 주면 이미지 빌드 시점의 uid 와 같아 기존 동작과 동일하다.
-    user: '${DEV_UID:-1000}:${DEV_GID:-1000}'
+    #
+    # 여기서 `user:` 를 직접 쓰지 않는다 — 그러면 컨테이너가 그 uid 로 곧장 시작돼,
+    # 이전에 다른 uid 로 뜬 적이 있는 익명 볼륨(node_modules·dist) 안의 파일을 그 uid
+    # 자신이 소유자가 아니라 chmod 조차 못 하게 된다(실측 확인: `DEV_UID` 를 바꿔 재기동하면
+    # EACCES 로 죽는다). 그래서 컨테이너는 항상 root 로 시작하고, 진입점 스크립트가 그
+    # 볼륨들의 소유권을 목표 uid 로 정리한 뒤 su-exec 로 권한을 낮춘다 — 이유는
+    # backend/docker-entrypoint-dev.sh 의 주석 참고.
+    #
     # 기동할 때마다 공유 타입을 먼저 빌드한다. `dist` 는 커밋 대상이 아니고 아래 익명 볼륨에
     # 담기므로, 이 단계가 없으면 타입 패키지를 고친 뒤 컨테이너가 옛 산출물을 그대로 쓴다.
     #
@@ -66,6 +73,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-ditter_dev}
       POSTGRES_USER: ${POSTGRES_USER:-ditter}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ditter_local_dev_only}
+      # 진입점 스크립트(docker-entrypoint-dev.sh)가 이 값을 읽어 su-exec 로 권한을
+      # 낮춘다. 위 `user:` 관련 주석 참고.
+      DEV_UID: ${DEV_UID:-1000}
+      DEV_GID: ${DEV_GID:-1000}
     ports:
       - '127.0.0.1:4000:4000'
     # 첫 기동에는 위 command 의 공유 타입 빌드가 끝나야 서버가 뜬다. healthcheck 가 없으면
@@ -101,9 +112,10 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     # 리눅스에서 bind mount 소유자 uid 가 안 맞으면 쓰기가 막힌다 — backend 서비스의
-    # `user:` 주석 참고. 이 서비스가 특히 취약하다: Vite dev 서버가 기동할 때마다
+    # `DEV_UID` 주석 참고. 이 서비스가 특히 취약하다: Vite dev 서버가 기동할 때마다
     # `vite.config.ts` 옆에 설정 임시 파일을 쓰는데 그 디렉터리가 바로 이 bind mount 다.
-    user: '${DEV_UID:-1000}:${DEV_GID:-1000}'
+    # `user:` 를 안 쓰고 진입점 스크립트로 su-exec 하는 이유도 backend 와 동일하다.
+    #
     # 마지막 명령 앞의 `exec` 는 sh 를 그 프로세스로 치환해, 종료 신호가 sh 를 거치지 않고
     # Vite dev 서버까지 곧바로 닿게 한다 (backend 서비스와 동일한 이유).
     command: sh -c "npm run build --workspace=packages/shared-types && exec npm run dev --workspace=frontend"
@@ -115,6 +127,10 @@ services:
       # bind mount 를 통한 파일 변경은 호스트(macOS·Windows)에서 컨테이너 안으로 inotify
       # 이벤트가 전달되지 않는다. 폴링이 없으면 저장해도 화면이 갱신되지 않는다.
       VITE_DEV_POLL: 'true'
+      # 진입점 스크립트(docker-entrypoint-dev.sh)가 이 값을 읽어 su-exec 로 권한을
+      # 낮춘다. backend 서비스의 같은 이름 환경변수 주석 참고.
+      DEV_UID: ${DEV_UID:-1000}
+      DEV_GID: ${DEV_GID:-1000}
     ports:
       - '127.0.0.1:5173:5173'
     # 첫 기동에는 위 command 의 공유 타입 빌드가 끝나야 dev 서버가 뜬다. backend 서비스와
