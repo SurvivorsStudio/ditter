@@ -137,4 +137,4 @@ password · secretAccessKey · sessionToken · privateKey · passphrase · apiTo
 - [execution-engine.md](execution-engine.md) — 이 계약을 소비하는 쪽
 - [read-only-enforcement.md](../policy/read-only-enforcement.md) — 소스 읽기에 적용되는 방어
 - [pipeline-write-boundary.md](../policy/pipeline-write-boundary.md) — `write`가 허용되는 범위
-- 담당 STEP: [step-09-pipeline-foundation.md](../todo/step-09-pipeline-foundation.md)
+- 담당 STEP: [9B 커넥터 패키지](../todo/step-09b-connectors.md)

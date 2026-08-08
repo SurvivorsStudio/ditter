@@ -102,13 +102,14 @@ GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON <대상 테이블들> TO ditte
 - superuser · `pg_write_all_data` 같은 광역 롤.
 
 문서에 이 권한 목록을 그대로 실어 두는 이유는, 도입하는 회사가 **"이 도구에 무슨 권한을 줘야
-하나"에 복사해서 답할 수 있게** 하기 위해서다. P3의 "읽기 전용 계정만 주면 된다"와 같은 성격의
-문장이다.
+하나"에 복사해서 답할 수 있게** 하기 위해서다. 소스 쪽의 대응물은
+[P3의 권한 표](read-only-enforcement.md#콘솔-계정에-정확히-무엇을-주는가)다.
 
 ## 규칙 6 — 타깃 커넥션 등록은 더 엄격하다
 
-- 타깃 커넥션 등록·수정은 **관리자만** 한다 ([P6](authentication-authorization.md),
-  [connection_grants](../schema/connection-grants.md)).
+- 타깃 커넥션 등록·수정은 **관리자만** 한다 ([P6](authentication-authorization.md)). 관리자
+  여부는 [users](../schema/users.md)`.is_admin`에 있다 — 이 플래그가 없으면 이 규칙은 저장할
+  자리가 없어 구현되지 않는다. **소스 커넥션은 이 제한 대상이 아니다.**
 - 이미 `source`로 등록된 **같은 host·port·database**를 타깃으로 등록하려는 경우, 화면에서
   명시적으로 한 번 더 확인받는다. "프로덕션을 읽으려다 프로덕션에 쓰게 되는" 사고의 대부분이
   이 지점에서 난다.
@@ -175,8 +176,9 @@ GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON <대상 테이블들> TO ditte
 
 > **DITTER가 사람에게 열어주는 SQL 실행 경로는 여전히 읽기 전용 하나뿐입니다.** 파이프라인 타깃
 > 쓰기는 사람이 SQL을 넣을 수 없는 별도 경로이고, 실행 가능한 문장이 세 가지로 유한하며, 전용
-> 계정·전용 스키마에서만 일어나고, 전부 감사 로그에 남습니다. 콘솔 계정에는 여전히 읽기 권한만
-> 주면 됩니다.
+> 계정·전용 스키마에서만 일어나고, 전부 감사 로그에 남습니다. 콘솔 계정에는 여전히 **읽는
+> 권한만** 주면 됩니다 — 운영 관찰을 쓸 때 붙는 `pg_read_all_stats`까지 포함해서 전부 읽기
+> 권한입니다.
 
 ## 관련
 
@@ -184,4 +186,4 @@ GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON <대상 테이블들> TO ditte
 - [read-only-enforcement.md](read-only-enforcement.md) (P3) — 완화되지 않는 쪽
 - [credential-management.md](credential-management.md) (P4)
 - [audit-logging.md](audit-logging.md) (P7)
-- 담당 STEP: [step-09-pipeline-foundation.md](../todo/step-09-pipeline-foundation.md)
+- 담당 STEP: [9A 쓰기 경계 긋기](../todo/step-09a-write-boundary.md)

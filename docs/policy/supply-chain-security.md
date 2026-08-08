@@ -19,7 +19,7 @@
 | S5 | 설치 스크립트 차단 | `npm ci --ignore-scripts` 기본화. postinstall이 악성코드 주요 침투 경로 | STEP 0 |
 | S6 | 런타임 권한 제한 | Node의 `--permission` 플래그로 파일·네트워크 접근 최소화 | STEP 12 |
 | S7 | 컨테이너 격리 | non-root 실행, 최소 베이스 이미지, Trivy 스캔 | STEP 12 |
-| S8 | prototype pollution 방어 | Fastify `onProtoPoisoning: 'error'` 확인 + 스키마에 `additionalProperties: false` + `Object.create(null)` | STEP 3 |
+| S8 | prototype pollution 방어 | Fastify `onProtoPoisoning: 'error'` 확인 + 스키마에 `additionalProperties: false` + `Object.create(null)` | **STEP 1** — 첫 라우트와 함께 |
 | S9 | GitHub Actions 고정 | 워크플로의 `uses:`를 커밋 SHA로 고정하고 버전은 주석으로 남긴다 | STEP 0 |
 
 ### S9는 npm 게이트를 우회하는 경로를 막는다
@@ -47,6 +47,10 @@ Node의 permission model은 최신 버전에서 experimental을 졸업해 쓸 �
 ### S8은 흔한 오해가 있다
 
 JSON Schema 검증(Ajv)은 입력 *형태*를 제약할 뿐 `__proto__` 오염 자체를 막는 게 아니다. Fastify의 실제 방어는 내부 secure JSON 파서 설정(`onProtoPoisoning`)에서 온다. 구현 시 기본값을 반드시 확인하라.
+
+**시점은 STEP 1이다.** 외부 입력을 받는 첫 Fastify 라우트가 거기서 생긴다 — 접속 설정 등록과 쿼리
+실행 API다. 이 설정이 첫 라우트보다 늦게 붙으면, 그 사이에 만들어진 라우트들은 방어 없이
+작성되고 나중에 전수로 되짚어야 한다.
 
 ## 가장 강력한 방어
 

@@ -67,81 +67,99 @@ F7 범위에서 뺀 것 (확장 지점만 남긴다 — [pipeline/README.md](../
 
 ## STEP 목록
 
+STEP 1과 STEP 9는 다른 STEP의 서너 배 분량이라 하위 문서로 나눠 두었다. 상위 STEP 문서는
+목표·완료 조건·리뷰 게이트를 모아 두는 허브다.
+
 | STEP | 문서 | 시작 조건 | 비고 |
 |---|---|---|---|
-| 0 | [개발 환경 만들기](step-00-dev-environment.md) | 없음 | ✅ 완료 — 완료 조건 둘 다 확인 |
-| 1 | [DB에 안전하게 접속하기](step-01-db-connection.md) | STEP 0 | 모든 것의 병목. 2인 리뷰 필수 |
-| 2 | [웹 SQL 콘솔](step-02-web-console.md) | STEP 1 | |
-| 3 | [AI에게 줄 "근거" 만들기](step-03-ai-context-builder.md) | STEP 1 | mock으로 선행 가능 |
-| 4 | [AI 쿼리 작성 보조](step-04-ai-query-assist.md) | STEP 2 + 3 | |
-| 5 | [🚩 실행 전 위험 예측](step-05-risk-prediction.md) | STEP 4 | **하드 게이트** — 데모 관통 확인 |
-| 6 | [EXPLAIN 해석 + 튜닝 제안](step-06-explain-tuning.md) | STEP 5 | |
-| 7 | [운영 관찰](step-07-operations-monitoring.md) | STEP 1 | STEP 4~6과 병렬 가능 |
-| 8 | [감사 로그 + 인증](step-08-audit-log-auth.md) | STEP 2 | 병렬 가능, STEP 9 전 필수 완료 |
-| 9 | [파이프라인 기반](step-09-pipeline-foundation.md) | STEP 1 + 8 | **쓰기 경계(P9)부터 긋는다. 2인 리뷰 필수** |
-| 10 | [파이프라인 캔버스](step-10-pipeline-canvas.md) | STEP 9 (+ STEP 2) | 심사에서 보여줄 화면 |
-| 11 | [파이프라인 운영](step-11-pipeline-operations.md) | STEP 10 | 스케줄·워터마크·재시작 |
-| 12 | [🔒 보안 전수 점검](step-12-security-review.md) | STEP 6+7+8+11 | |
-| 13 | [🚩 데모 다듬고 제출](step-13-demo-submission.md) | STEP 12 | |
+| 0 | [개발 환경 만들기](step-00-dev-environment.md) | 없음 | ✅ 완료 |
+| **1** | **[DB에 안전하게 접속하기](step-01-db-connection.md)** | STEP 0 | **모든 것의 병목. 2인 리뷰 필수** |
+| 1A | └ [접속 등록과 커넥션 풀](step-01a-connection-registry.md) | STEP 0 | 자격증명 2인 리뷰 |
+| 1B | └ [읽기 전용 AST 검증기](step-01b-readonly-validator.md) | STEP 0 | **순수 로직 — DB 없이 착수** |
+| 1C | └ [스키마 조회와 쿼리 실행 API](step-01c-schema-catalog.md) | 1A + 1B | 2인 리뷰 |
+| 2 | [웹 SQL 콘솔](step-02-web-console.md) | 1C | |
+| 3 | [AI에게 줄 "근거" 만들기](step-03-ai-context-builder.md) | 1C | mock으로 선행 가능 |
+| 4 | [AI 쿼리 작성 보조](step-04-ai-query-assist.md) | 2 + 3 | |
+| 5 | [🚩 실행 전 위험 예측](step-05-risk-prediction.md) | 4 | **하드 게이트** — 데모 관통 확인 |
+| 6 | [EXPLAIN 해석 + 튜닝 제안](step-06-explain-tuning.md) | 5 | |
+| 7 | [운영 관찰](step-07-operations-monitoring.md) | 1C | STEP 4~6과 병렬 |
+| 8 | [감사 로그 + 인증](step-08-audit-log-auth.md) | **STEP 0** | STEP 1과 병렬. 9·12 전 필수 완료 |
+| **9** | **[파이프라인 기반](step-09-pipeline-foundation.md)** | 1 + 8 | **쓰기 경계(P9). 2인 리뷰 필수** |
+| 9A | └ [쓰기 경계 긋기](step-09a-write-boundary.md) | 1 + 8 | **9D보다 먼저.** 2인 리뷰 |
+| 9B | └ [커넥터 패키지](step-09b-connectors.md) | 없음 | **순수 라이브러리 — mock 선행** |
+| 9C | └ [DAG 스펙과 저장](step-09c-dag-spec.md) | 스펙 없음 / 검증 9A | **순수 타입 — mock 선행** |
+| 9D | └ [실행 엔진과 워커](step-09d-execution-engine.md) | 9A+9B+9C | 2인 리뷰 |
+| 10 | [파이프라인 캔버스](step-10-pipeline-canvas.md) | 9 (+ 2) | 심사에서 보여줄 화면 |
+| 11 | [파이프라인 운영](step-11-pipeline-operations.md) | 10 | 스케줄·워터마크·재시작 |
+| 12 | [🔒 보안 전수 점검](step-12-security-review.md) | 6+7+8+11 | |
+| 13 | [🚩 데모 다듬고 제출](step-13-demo-submission.md) | 12 | |
 
 ## 순서 한눈에 보기
 
 ```
-STEP 0  개발 환경
+STEP 0  개발 환경  ✅
    │
-   ▼
-STEP 1  DB 안전 접속  ◀── 모든 것의 병목. 최우선.
-   │
-   ├──────────────┬─────────────────┬──────────────┐
-   ▼              ▼                 ▼              │
-STEP 2         STEP 3            STEP 7            │
-웹 콘솔     AI 근거 만들기      운영 관찰          │
-  (F1)      (mock으로 선행)        (F5)            │
-   │              │             STEP 4~6과        │
-   └──────┬───────┘              병렬 가능         │
-          ▼                         │              ▼
-      STEP 4  AI 쿼리 보조 (F2)      │          STEP 8
-          │                         │        감사로그+인증
-          ▼                         │            (F6)
-      STEP 5 🚩 위험 예측 (F3)       │              │
-          │   + 데모 관통 확인       │              │
-          ▼                         │              ▼
-      STEP 6  해석 + 튜닝 (F4)       │        STEP 9  파이프라인 기반 (F7)
-          │                         │        🔒 쓰기 경계(P9) · 2인 리뷰
-          │                         │              │
-          │                         │              ▼
-          │                         │        STEP 10  파이프라인 캔버스
-          │                         │              │
-          │                         │              ▼
-          │                         │        STEP 11 🚩 파이프라인 운영
-          │                         │              │   워터마크 유실 없음 확인
-          └─────────┬───────────────┴──────────────┘
-                    ▼
-              STEP 12 🔒 보안 전수 점검
-                    │
-                    ▼
-              STEP 13 🚩 데모 + 제출
+   ├──────────────┬──────────────┬──────────────┬──────────────┐
+   ▼              ▼              ▼              ▼              │
+ 1A 접속·풀     1B AST검증기   STEP 8        9B 커넥터        │
+   │              │          감사로그+인증   9C DAG스펙       │
+   └──────┬───────┘            (F6)         (mock 선행)       │
+          ▼                      │              │              │
+      1C 스키마·실행 API ◀━━━━━━━┙(감사로그 연결) │              │
+          │  ◀── 여기까지가 STEP 1. 병목.        │              │
+   ┌──────┼──────────────┬───────────────┐      │              │
+   ▼      ▼              ▼               │      │              │
+STEP 2  STEP 3        STEP 7             │      │              │
+웹 콘솔  AI 근거      운영 관찰           │      │              │
+ (F1)    (F2 준비)      (F5)             │      │              │
+   └──┬───┘                              │      │              │
+      ▼                                  ▼      ▼              │
+  STEP 4  AI 쿼리 보조 (F2)          9A 쓰기 경계 🔒            │
+      │                                  └──┬───┘              │
+      ▼                                     ▼                  │
+  STEP 5 🚩 위험 예측 (F3)              9D 실행 엔진 · 워커 🔒  │
+      │   + 데모 관통 확인                   │                  │
+      ▼                                     ▼                  │
+  STEP 6  해석 + 튜닝 (F4)            STEP 10 파이프라인 캔버스 │
+      │                                     │                  │
+      │                                     ▼                  │
+      │                               STEP 11 🚩 운영          │
+      │                                     │  워터마크 유실 없음│
+      └────────────┬────────────────────────┴──────────────────┘
+                   ▼
+             STEP 12 🔒 보안 전수 점검
+                   │
+                   ▼
+             STEP 13 🚩 데모 + 제출
 ```
 
 ## 병렬로 돌릴 수 있는 것
 
-- **STEP 3의 AI 부분은 가짜 데이터로 STEP 1 완료 전에 시작**할 수 있다. 순수 로직으로 분리했기 때문이다. 백엔드를 기다리지 마라.
-- **STEP 7(운영 관찰)은 STEP 4~6과 완전히 독립**이다. 백엔드 여력이 남으면 여기로 흘려보내라.
-- **STEP 8(감사 로그 + 인증)도 STEP 2 이후 아무 때나** 진행할 수 있다. 단 STEP 9와 STEP 12 전에는 반드시 끝낸다.
-- **STEP 5의 시드 데이터는 STEP 2~3 진행 중에 미리** 만들어 둔다.
-- **STEP 9~11(파이프라인)은 STEP 4~6(AI)과 독립이다.** STEP 1 + 8만 서 있으면 시작할 수 있다. 백엔드·프런트가 나뉘어 있다면 AI 라인과 파이프라인 라인을 동시에 굴릴 수 있다.
-- **커넥터 계약과 DAG 스펙은 순수 타입·순수 로직이므로 mock으로 선행**할 수 있다. STEP 3의 컨텍스트 빌더를 mock으로 먼저 짠 것과 같은 이유다.
+- **[1B](step-01b-readonly-validator.md)는 STEP 0만 있으면 시작한다.** 순수 로직이라 DB도 백엔드도
+  필요 없다. **병목인 STEP 1 안에서 유일하게 앞당길 수 있는 갈래**다.
+- **[STEP 8](step-08-audit-log-auth.md)도 STEP 0부터** 시작한다. 인증 백엔드는 콘솔 화면과 무관하다.
+  감사 로그를 실행 경로에 꽂는 것만 1C를 기다린다.
+- **[9B](step-09b-connectors.md)·[9C](step-09c-dag-spec.md)는 순수 타입·순수 로직이라 mock으로
+  선행**한다. STEP 3의 컨텍스트 빌더를 mock으로 먼저 짠 것과 같은 이유다. **이게 늦으면 STEP 9~11이
+  통째로 밀린다.**
+- **[STEP 3](step-03-ai-context-builder.md)의 AI 부분은 가짜 데이터로** 1C 완료 전에 시작할 수 있다.
+- **[STEP 7](step-07-operations-monitoring.md)은 STEP 4~6과 완전히 독립**이다.
+- **[STEP 5](step-05-risk-prediction.md)의 시드 데이터는 STEP 2~3 진행 중에 미리** 만들어 둔다.
+- **STEP 9~11은 STEP 4~6과 독립이다.** 1 + 8만 서 있으면 시작할 수 있다.
 
 ## 지금 당장 착수할 것
 
-| 순서 | 할 일 | 왜 지금인가 |
-|---|---|---|
-| ~~1~~ | ~~저장소·모노레포·Docker 스켈레톤 + CI에 보안 게이트 선탑재~~ (STEP 0에서 완료) | 나중에 넣으면 되돌리기 어렵다 |
-| 2 | PostgreSQL 읽기 전용 접속 + 스키마 읽어오기 API | 다른 모든 작업의 병목이다 |
-| 3 | 에디터 + 결과 그리드 골격 | 2번과 일부 병행 가능 |
-| 4 | 컨텍스트 빌더 인터페이스 + 가짜 데이터로 프롬프트 실험 시작 | 백엔드를 기다릴 필요 없다 |
-| 5 | 시드 데이터 설계 착수 | STEP 5에서 터지지 않게 미리 |
-| 6 | 커넥터 계약 + DAG zod 스펙 초안 (mock 선행) | 순수 타입·순수 로직이라 STEP 1·8을 기다릴 필요가 없다. 이게 늦으면 STEP 9~11이 통째로 밀린다 |
+STEP 0이 끝났으므로 아래는 **서로를 기다리지 않고** 동시에 시작할 수 있다.
+
+| 문서 | 왜 지금인가 |
+|---|---|
+| [1A 접속 등록과 커넥션 풀](step-01a-connection-registry.md) | 다른 모든 작업의 병목이다 |
+| [1B 읽기 전용 AST 검증기](step-01b-readonly-validator.md) | 순수 로직이라 1A를 기다릴 필요가 없다. STEP 4·9C도 이걸 쓴다 |
+| [STEP 8 감사 로그 + 인증](step-08-audit-log-auth.md) | 인증 백엔드는 콘솔과 무관하다. 미루면 무인증 개발 기간이 길어진다 |
+| [9B 커넥터 패키지](step-09b-connectors.md) · [9C DAG 스펙](step-09c-dag-spec.md) | 순수 타입·순수 라이브러리다. 늦으면 STEP 9~11이 통째로 밀린다 |
+
+착수 **전에** 「[팀이 먼저 결정해야 할 것](#팀이-먼저-결정해야-할-것)」의 2번(자격증명 키 관리)을
+정한다 — 1A가 그것 없이는 끝나지 않는다.
 
 ## 리스크와 대응
 

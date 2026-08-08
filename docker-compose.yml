@@ -1,5 +1,8 @@
-# `docker compose up` 한 줄로 빈 앱 + 로컬 PostgreSQL 이 함께 뜬다 (STEP 0 완료 조건).
-# 일상 개발에서는 DB 만 띄우고(`docker compose up -d db`) 앱은 호스트에서 `npm run dev` 로 돌린다.
+# 로컬 개발 환경 전체를 컨테이너로 띄운다 — `docker compose up`, 이거 하나면 된다.
+# PostgreSQL·백엔드·프런트가 함께 뜨고, 소스는 bind mount 라 호스트에서 고치면 그대로 반영된다.
+#
+# 이 파일은 **로컬 개발 전용**이다. 배포용 구성이 아니다 — 이미지는 dev 서버를 그대로 띄우고,
+# 아래 비밀번호도 저장소에 적힌 고정값이다. 공개 포트를 전부 `127.0.0.1` 에 묶는 이유가 이것이다.
 
 services:
   db:
@@ -13,6 +16,9 @@ services:
     # 포트는 호스트 루프백에만 공개한다. 인터페이스를 지정하지 않으면 Docker 가 모든
     # 인터페이스에 바인딩하고 리눅스에서는 호스트 방화벽도 우회한다 — 위 비밀번호가
     # 저장소에 적힌 값이라 신뢰할 수 없는 네트워크에서 그대로 노출된다.
+    #
+    # 이 포트 공개는 앱을 위한 게 아니다(앱은 아래 `db` 서비스 이름으로 붙는다). psql·GUI
+    # 클라이언트로 호스트에서 들여다보려고 열어 둔다.
     ports:
       - '127.0.0.1:5432:5432'
     volumes:
@@ -27,7 +33,20 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    # 기동할 때마다 공유 타입을 먼저 빌드한다. `dist` 는 커밋 대상이 아니고 아래 익명 볼륨에
+    # 담기므로, 이 단계가 없으면 타입 패키지를 고친 뒤 컨테이너가 옛 산출물을 그대로 쓴다.
+    #
+    # `dev` 가 아니라 `dev:poll` 인 이유: `node --watch` 는 inotify 이벤트에 의존하는데 그 이벤트가
+    # bind mount 를 넘어오지 않아, 저장해도 서버가 조용히 옛 코드를 계속 돌린다
+    # (backend/scripts/dev-watch.mjs 의 주석 참고).
+    #
+    # 마지막 명령 앞의 `exec` 는 sh 를 그 프로세스로 치환한다. 없으면 sh 가 컨테이너의 1번
+    # 프로세스로 남아 SIGTERM 을 자식(dev-watch.mjs)에 넘기지 않고, `docker compose down`·
+    # `restart` 가 매번 정지 유예 시간을 다 쓰고 SIGKILL 로 끝난다.
+    command: sh -c "npm run build --workspace=packages/shared-types && exec npm run dev:poll --workspace=backend"
     environment:
+      # 컨테이너 안에서는 0.0.0.0 으로 바인딩해야 아래 포트 매핑이 닿는다. 공개 범위를 정하는
+      # 것은 이 값이 아니라 `ports` 의 `127.0.0.1` 이다.
       HOST: 0.0.0.0
       PORT: 4000
       POSTGRES_HOST: db
@@ -37,6 +56,30 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ditter_local_dev_only}
     ports:
       - '127.0.0.1:4000:4000'
+    # 첫 기동에는 위 command 의 공유 타입 빌드가 끝나야 서버가 뜬다. healthcheck 가 없으면
+    # `docker compose up --wait` 는 컨테이너가 running 이 된 시점(빌드 중)에 바로 통과해 버려,
+    # 뒤이은 확인 요청이 아직 응답하지 않는 서버에 닿아 실패로 보인다.
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'node -e "fetch(\"http://127.0.0.1:4000/api/health\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+    volumes:
+      # 소스는 호스트에서 가져온다 — 고치면 `node --watch` 가 다시 띄운다. 이미지 재빌드는
+      # 의존성(package.json·lockfile)이 바뀔 때만 필요하다.
+      - ./backend:/app/backend
+      - ./packages:/app/packages
+      # 아래 익명 볼륨들은 bind mount 가 컨테이너 안의 것을 덮지 않게 막는다. 빼면 안 된다:
+      #   node_modules — 호스트 것은 macOS 바이너리라 리눅스 컨테이너에서 못 쓴다
+      #   dist         — 호스트에 없거나 낡은 산출물이 컨테이너 빌드 결과를 가린다
+      - /app/backend/node_modules
+      - /app/packages/shared-types/node_modules
+      - /app/packages/shared-types/dist
     depends_on:
       db:
         condition: service_healthy
@@ -45,13 +88,37 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+    # 마지막 명령 앞의 `exec` 는 sh 를 그 프로세스로 치환해, 종료 신호가 sh 를 거치지 않고
+    # Vite dev 서버까지 곧바로 닿게 한다 (backend 서비스와 동일한 이유).
+    command: sh -c "npm run build --workspace=packages/shared-types && exec npm run dev --workspace=frontend"
     environment:
       VITE_API_PROXY_TARGET: http://backend:4000
       # 컨테이너 안에서는 0.0.0.0 으로 바인딩해야 위 포트 매핑이 닿는다. 호스트에서 직접
       # 돌릴 때(`npm run dev`)는 지정하지 않아 vite.config.ts 의 루프백 기본값이 쓰인다.
       VITE_DEV_HOST: 0.0.0.0
+      # bind mount 를 통한 파일 변경은 호스트(macOS·Windows)에서 컨테이너 안으로 inotify
+      # 이벤트가 전달되지 않는다. 폴링이 없으면 저장해도 화면이 갱신되지 않는다.
+      VITE_DEV_POLL: 'true'
     ports:
       - '127.0.0.1:5173:5173'
+    # 첫 기동에는 위 command 의 공유 타입 빌드가 끝나야 dev 서버가 뜬다. backend 서비스와
+    # 같은 이유로 healthcheck 없이는 `--wait` 가 준비 전에 통과해 버린다.
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'node -e "fetch(\"http://127.0.0.1:5173\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+    volumes:
+      - ./frontend:/app/frontend
+      - ./packages:/app/packages
+      - /app/frontend/node_modules
+      - /app/packages/shared-types/node_modules
+      - /app/packages/shared-types/dist
     depends_on:
       - backend
 

@@ -9,6 +9,15 @@
 .requirements
 docs
 *.log
+# 컨테이너가 죽으면서 bind mount 된 소스 디렉토리에 떨군 코어 덤프. 슬래시 없는 패턴은 모든
+# 깊이에 매칭돼 `backend/src/core/` 같은 소스 디렉토리까지 이미지 빌드 컨텍스트에서 빠질 수
+# 있으므로, 덤프가 실제로 떨어지는 위치만 정확히 짚는다 (.gitignore 와 동일한 이유).
+/backend/core
+/backend/core.*
+/frontend/core
+/frontend/core.*
+/packages/*/core
+/packages/*/core.*
 .env
 .env.*
 !.env.example

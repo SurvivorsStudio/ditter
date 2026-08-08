@@ -1,13 +1,20 @@
 ---
-description: 로컬 개발 스택(PostgreSQL + 백엔드 + 프런트) 을 docker compose 로 기동·재시작
+name: "source-command-dev"
+description: "로컬 개발 스택(PostgreSQL + 백엔드 + 프런트) 을 docker compose 로 기동·재시작"
 ---
+
+# source-command-dev
+
+Use this skill when the user asks to run the migrated source command `dev`.
+
+## Command Template
 
 이 모노레포의 로컬 개발 스택을 컨테이너로 띄웁니다 — PostgreSQL, 백엔드(Fastify `:4000`),
 프런트(React + Vite `:5173`).
 
 ## 구성
 
-- **앱은 Docker 로 돈다.** [docker-compose.yml](../../docker-compose.yml) 의 `db`·`backend`·
+- **앱은 Docker 로 돈다.** [docker-compose.yml](../../../docker-compose.yml) 의 `db`·`backend`·
   `frontend` 세 서비스이며, 공개 포트는 전부 `127.0.0.1` 에만 묶인다.
 - 소스는 bind mount 다. 호스트에서 고치면 컨테이너에 그대로 반영된다 — 프런트는 HMR,
   백엔드는 프로세스 재시작(`backend/scripts/dev-watch.mjs`).
@@ -60,7 +67,7 @@ description: 로컬 개발 스택(PostgreSQL + 백엔드 + 프런트) 을 docker
    - `curl -s http://127.0.0.1:5173/api/health` — 프런트의 `/api` 프록시를 거쳐 같은 응답이 와야
      한다. 이게 되어야 브라우저에서 실제로 동작한다.
    - 백엔드의 DB 접속 상태 확인은 **STEP 1 이후**에 넣는다. 지금 백엔드에는 DB 접속 코드가 없고,
-     `/api/health` 는 "앱이 떠 있다"만 답한다([health.ts](../../backend/src/routes/health.ts) 주석 참고) —
+     `/api/health` 는 "앱이 떠 있다"만 답한다([health.ts](../../../backend/src/routes/health.ts) 주석 참고) —
      헬스체크 200 을 DB 접속 근거로 삼지 않는다.
    - 결과 보고. **이때 접속 URL을 항상 함께 제공한다** — 아래 두 개는 매번 적는다.
      - 앱(프런트): http://127.0.0.1:5173

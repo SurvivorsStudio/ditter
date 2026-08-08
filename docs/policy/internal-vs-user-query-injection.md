@@ -27,4 +27,4 @@ DITTER는 사용자가 임의의 SQL을 **직접 타이핑하는** 콘솔이다.
 
 ## 관련
 
-- 담당 STEP: [step-01-db-connection.md](../todo/step-01-db-connection.md), [step-04-ai-query-assist.md](../todo/step-04-ai-query-assist.md), [step-06-explain-tuning.md](../todo/step-06-explain-tuning.md)
+- 담당 STEP: [1A](../todo/step-01a-connection-registry.md) · [1C](../todo/step-01c-schema-catalog.md), [step-04-ai-query-assist.md](../todo/step-04-ai-query-assist.md), [step-06-explain-tuning.md](../todo/step-06-explain-tuning.md)

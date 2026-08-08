@@ -6,22 +6,38 @@
 
 "DB를 안전하게 읽는 능력"을 만든다. 화면에는 아직 아무것도 안 보이지만, **이 단계가 모든 것의 병목이다.** 여기서 만드는 스키마 조회 기능이 없으면 에디터 자동완성도, AI 컨텍스트도 만들 수 없다. **가장 먼저, 가장 확실하게 끝낸다.**
 
-## 하는 일
+## 작업 분할 — 세 문서로 나눈다
 
-- postgres.js 접속 풀, 접속 설정 등록·수정·조회 (SQLite에 저장) — **삭제는 만들지 않는다.** 감사 로그가 커넥션을 참조하는데 그 행은 append-only라 지울 수 없다 ([audit-logs.md](../schema/audit-logs.md))
-- 스키마·통계 읽어오는 API (`information_schema`, `pg_catalog`)
-- 쿼리 실행 API — 실행 시간 제한(`statement_timeout`), 반환 행 수 제한, 커넥션 풀 상한 ([query-safety-limits.md](../policy/query-safety-limits.md))
-- 접속 정보(비밀번호 등) 저장·보관 ([credential-management.md](../policy/credential-management.md))
-- DB 접근 코드를 어댑터 인터페이스로 감싼다 (구현은 PostgreSQL 하나)
-- **읽기 전용을 두 겹으로 강제한다** — DB 계정 권한(주방어) + AST 기반 문장 검증(보조). CTE 안에 숨은 DML(`WITH t AS (DELETE FROM users RETURNING *) SELECT * FROM t`) 같은 우회까지 막아야 한다. 방어 원리와 추가로 막아야 할 패턴(`pg_sleep`, `SECURITY DEFINER`, `FOR UPDATE` 등)은 [read-only-enforcement.md](../policy/read-only-enforcement.md) 참고
+병목 STEP의 분량을 쪼갠 것이다. **1B는 순수 로직이라 1A와 완전히 병렬**로 굴릴 수 있다 —
+STEP 1 안에서 앞당길 수 있는 유일한 갈래이므로 놀리지 않는다.
+
+| 문서 | 내용 | 시작 조건 |
+|---|---|---|
+| [1A 접속 등록과 커넥션 풀](step-01a-connection-registry.md) | 풀 · 커넥션 CRUD · 자격증명 암호화 · 어댑터 인터페이스 | STEP 0 |
+| [1B 읽기 전용 AST 검증기](step-01b-readonly-validator.md) | `pgsql-parser` 기반 판정. **DB 없이 착수 가능** | STEP 0 |
+| [1C 스키마 조회와 쿼리 실행 API](step-01c-schema-catalog.md) | 카탈로그 조회 · 실행 API · 실행 제한 | 1A + 1B |
+
+```
+STEP 0 ──┬──▶ 1A 접속·풀·자격증명 ──┐
+         │                          ├──▶ 1C 스키마·실행 API ──▶ STEP 2 · 3 · 7
+         └──▶ 1B AST 검증기 ────────┘
+```
+
+1B가 만든 검증기는 [STEP 4](step-04-ai-query-assist.md)의 AI 생성 SQL과
+[STEP 9C](step-09c-dag-spec.md)의 파이프라인 소스 쿼리도 그대로 탄다. **검증기는 하나뿐이다.**
 
 ## 완료 조건
 
 읽기 전용 계정으로 SELECT가 돌아간다. INSERT/UPDATE/DELETE가 **두 겹 모두에서** 차단된다. [read-only-enforcement.md](../policy/read-only-enforcement.md)의 CTE 우회 쿼리도 차단된다. 스키마 정보가 JSON으로 API에서 나온다.
 
+세 문서의 완료 조건을 **전부** 만족해야 STEP 1이 끝난 것이다.
+
 ## 리뷰 게이트
 
 🔒 **이 단계 코드는 반드시 2명이 리뷰한다.** 읽기 전용 강제와 접속 정보 관리가 뚫리면 제품의 존재 이유가 사라진다.
+
+세 문서 모두 리뷰 대상이다. 특히 **1B(검증기)와 1C(검증기를 호출하는 지점)는 따로 본다** — 판정이
+정확해도 실행 경로가 그걸 안 거치면 아무 의미가 없기 때문이다.
 
 ## 관련 정책
 

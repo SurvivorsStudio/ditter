@@ -1,7 +1,10 @@
 # pipeline_run_logs
 
 파이프라인 실행 중 발생한 노드별 로그. 화면에서 "왜 실패했나"를 보기 위한 것이다.
-[STEP 10](../todo/step-10-pipeline-canvas.md)의 실행 화면이 이걸 읽는다.
+
+**테이블을 만들고 쓰기 시작하는 것은 [STEP 9](../todo/step-09-pipeline-foundation.md)다** — 워커가
+거기서 이미 돌기 때문이다. [STEP 10](../todo/step-10-pipeline-canvas.md)에서 실행 화면이 이걸
+읽는다.
 
 ## 컬럼
 

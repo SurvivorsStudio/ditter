@@ -1,6 +1,6 @@
 # STEP 3 · AI에게 줄 "근거" 만들기
 
-**시작 조건**: STEP 1
+**시작 조건**: [STEP 1C](step-01c-schema-catalog.md) (**mock으로 선행 가능** — 아래 「병렬 진행 요령」)
 
 ## 목표
 

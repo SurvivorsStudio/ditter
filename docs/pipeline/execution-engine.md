@@ -192,5 +192,5 @@ BullMQ 기준. 원본 청사진의 Celery 권고를 옮긴 것이며, 근거는 
 - [connector-contract.md](connector-contract.md)
 - [dag-and-nodes.md](dag-and-nodes.md)
 - [deployment.md](deployment.md)
-- 담당 STEP: [step-09-pipeline-foundation.md](../todo/step-09-pipeline-foundation.md),
-  [step-11-pipeline-operations.md](../todo/step-11-pipeline-operations.md)
+- 담당 STEP: [9D 실행 엔진과 워커](../todo/step-09d-execution-engine.md),
+  [STEP 11 파이프라인 운영](../todo/step-11-pipeline-operations.md)
