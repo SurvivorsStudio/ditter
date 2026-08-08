@@ -97,7 +97,7 @@ commit 한다. 이게 리뷰어 자신이 만든 수정이 새로운 사고를 �
 *.key
 *.pem
 **/migrations/**            # DB 마이그레이션 파일 (경로 컨벤션은 STEP 0/1 스캐폴딩 후 확정)
-.Codex/**
+.codex/**
 docs/policy/**
 docs/schema/**
 docs/conventions/commit-convention.md
@@ -109,7 +109,7 @@ docs/conventions/commit-convention.md
 함께 고쳐야 하는 경우가 잦아(예: 새 환경변수를 도입하면서 코드·compose·예시를 같이 갱신) 여기만
 막아 두면 변경이 반쪽으로 남는다.
 
-**예외**: `.Codex/.review-state.json`은 위 `.Codex/**` 민감 경로 규칙에서 제외한다. 이 파일은
+**예외**: `.claude/.review-state.json`은 위 `.codex/**` 민감 경로 규칙에서 제외한다. 이 파일은
 거버넌스·설정 파일이 아니라 **리뷰어 자신의 사이클 완료 기록**(로컬 전용, `.gitignore` 처리됨)이라
 아래 「절차」6번에 따라 **직접 쓴다** — PR diff 의 `in_scope_files` 여부와도 무관하다(애초에
 diff 대상 파일이 아니다).
@@ -132,11 +132,11 @@ DB 마이그레이션 · 스키마 변경
 인증 · 감사 로직 (STEP 8)
 .github/**, docker-compose.yml       # 인프라 · CI
 docs/policy/**, docs/schema/**       # 정책 · 스키마 계약 SSOT
-.Codex/**                           # 메타 설정 자체
+.codex/**                           # 메타 설정 자체
 ```
 
 > `backend/`·`frontend/`가 아직 스캐폴딩되지 않아(STEP 0 이전) 읽기 전용 강제·인증 로직의 구체
-> 경로는 비어 있다. STEP 0~1이 끝나 실제 디렉터리가 생기면 이 목록과 `.Codex/hooks/pr-review-gate.sh`의
+> 경로는 비어 있다. STEP 0~1이 끝나 실제 디렉터리가 생기면 이 목록과 `.codex/hooks/pr-review-gate.sh`의
 > core-path 패턴을 함께 갱신한다.
 
 ## 절차
@@ -157,9 +157,9 @@ docs/policy/**, docs/schema/**       # 정책 · 스키마 계약 SSOT
    - **거부**: 수정하지 않고 `carry_over_adds`로 이월한다.
 6. **이번 호출로 이 사이클이 진짜 끝나는 경우에만**(최종 status 가 `CLEAN` 또는 `ACTIONED` —
    즉 `NEEDS_USER`로 사용자 응답을 더 기다려야 하는 상태가 아니고, `FAIL`도 아닐 때) 아래 순서로
-   `.Codex/.review-state.json`을 직접 갱신한다:
+   `.claude/.review-state.json`을 직접 갱신한다:
    1. `new_head = $(git rev-parse HEAD)` (5번에서 수락된 수정을 커밋했다면 그 커밋 이후 HEAD).
-   2. 기존 `.Codex/.review-state.json`을 읽는다(없으면 없는 대로 진행).
+   2. 기존 `.claude/.review-state.json`을 읽는다(없으면 없는 대로 진행).
    3. 기존 파일의 `reviewed_head`가 `new_head`와 같으면 `cycles_for_head`를 그 값 + 1로,
       다르거나 파일이 없으면 `1`로 한다.
    4. `{"reviewed_head": "<new_head>", "cycles_for_head": <N>}`을 그 경로에 덮어쓴다.

@@ -11,8 +11,8 @@ Use this skill when the user asks to run the migrated source command `review`.
 
 현재 브랜치의 diff(base: `origin/main`)를 `reviewer` 서브에이전트로 검토한다. **분석은
 공격적으로, 자동수정은 보수적으로** — finding 은 넓게 잡아내되, 사용자가 `수락`한 것만 commit
-한다. 이 커맨드는 push 하지 않는다 — push 는 `/pr`이 하고, `.Codex/hooks/pr-review-gate.sh`가
-**지금 push 하려는 HEAD** 가 이 절차로 충분히 검토됐는지 `.Codex/.review-state.json`(사이클이
+한다. 이 커맨드는 push 하지 않는다 — push 는 `/pr`이 하고, `.codex/hooks/pr-review-gate.sh`가
+**지금 push 하려는 HEAD** 가 이 절차로 충분히 검토됐는지 `.claude/.review-state.json`(사이클이
 `CLEAN`/`ACTIONED`로 끝날 때마다 `reviewer` 자신이 갱신, `.gitignore` 처리된 로컬 상태 파일)으로
 대조해 강제한다. 오케스트레이터(이 커맨드)는 이 파일에 손대지 않는다 — 자세한 이유는
 [reviewer.md](../../../.claude/agents/reviewer.md)의 민감 경로 예외 설명 참고.
@@ -33,7 +33,7 @@ in_scope_files=$(git diff --name-only "$merge_base" HEAD)
 ### 1. 고위험(core paths) 판정 — reviewer 호출 *전*에 확정
 
 ```bash
-CORE_PATH_PATTERN='^(packages/|docs/policy/|docs/schema/|\.Codex/|\.github/|docker-compose\.yml$|docs/conventions/commit-convention\.md$)'
+CORE_PATH_PATTERN='^(packages/|docs/policy/|docs/schema/|\.codex/|\.github/|docker-compose\.yml$|docs/conventions/commit-convention\.md$)'
 ```
 
 - `in_scope_files` 중 하나라도 위 패턴에 걸리면 `high_risk = true` → **최소 2사이클**을 돈다.
@@ -137,7 +137,7 @@ carry_over_existing: {carry_over}
 
     # === 상태 기록은 reviewer 자신이 한다 ===
     # 여기까지 왔으면 이번 사이클은 FAIL/한도 도달 없이 CLEAN 또는 ACTIONED 로 끝난 것이고,
-    # reviewer.md §절차 6번에 따라 reviewer 가 이미 .Codex/.review-state.json 을 스스로
+    # reviewer.md §절차 6번에 따라 reviewer 가 이미 .claude/.review-state.json 을 스스로
     # 갱신했다(오케스트레이터는 이 파일을 쓰지 않는다 — reviewer.md 의 민감 경로 예외 설명
     # 참고). 오케스트레이터는 그 결과를 신뢰하고 다음 단계로 넘어가기만 한다.
 
@@ -160,7 +160,7 @@ output f"  종료 사유: {termination_reason}"
 - 종료 사유가 `"reviewer FAIL"` 또는 `"NEEDS_USER 한도 도달"`(P0/P1 잔여 포함)로 시작하면:
   ```
   ⛔ 코드 리뷰가 정상 종료되지 못했습니다 (사유: <termination_reason>).
-  이 상태로는 /pr 의 push 게이트(.Codex/hooks/pr-review-gate.sh)를 통과할 만큼 reviewer 가
+  이 상태로는 /pr 의 push 게이트(.codex/hooks/pr-review-gate.sh)를 통과할 만큼 reviewer 가
   깨끗하게 돌지 않았을 수 있습니다. 원인을 해결한 뒤 /review 를 다시 실행하세요.
   ```
 - 그 외("리뷰 완료 (...)", "변경 없음")는 정상 종료. commit 해시·이월 목록을 보고한다.
@@ -173,16 +173,16 @@ output f"  종료 사유: {termination_reason}"
 
 ## Notes
 
-- 이 커맨드는 **push 하지 않는다.** push 게이트는 `.Codex/hooks/pr-review-gate.sh`가
-  기계적으로 강제한다 — **지금 push 하려는 HEAD** 가 `.Codex/.review-state.json`에 필요한
+- 이 커맨드는 **push 하지 않는다.** push 게이트는 `.codex/hooks/pr-review-gate.sh`가
+  기계적으로 강제한다 — **지금 push 하려는 HEAD** 가 `.claude/.review-state.json`에 필요한
   횟수만큼 리뷰됐다고 기록돼 있지 않으면 `/pr`의 `git push`가 deny 된다. (이전에는 "이 세션에서
   reviewer 를 몇 번 불렀는지"만 셌는데, 그러면 리뷰 통과 후 같은 세션에서 코드를 더 고치고 다시
   push 할 때 새 변경이 리뷰되지 않은 채 통과했다 — 지금은 HEAD 단위로 대조한다.)
 - `/pr`의 코드 리뷰 단계는 이 절차를 그대로 따른다(SSOT는 이 문서) — `/pr` 쪽에서 중복 설명하지
   않는다.
 - reviewer 의 절대 규칙(범위 밖 파일 금지, 민감 경로 자동수정 금지, 파괴적 git 금지 등)과 4D
-  분류·결정 매트릭스의 본문은 [.Codex/agents/reviewer.md](../../../.claude/agents/reviewer.md) (SSOT).
-- `.Codex/.review-state.json`은 로컬 세션 상태일 뿐이라 `.gitignore` 처리돼 있다 — 팀과
+  분류·결정 매트릭스의 본문은 [.claude/agents/reviewer.md](../../../.claude/agents/reviewer.md) (SSOT).
+- `.claude/.review-state.json`은 로컬 세션 상태일 뿐이라 `.gitignore` 처리돼 있다 — 팀과
   공유되지 않고, 저장소를 새로 클론하면 리뷰 기록도 없이 시작한다(정상 동작).
 - 이 파일은 **`reviewer` 자신만 쓴다** — 오케스트레이터(이 커맨드나 `/pr`)가 대신 써주지
   않는다. 리뷰 게이트가 신뢰하는 유일한 근거를 그 게이트 대상이 아닌 실제 검사자(reviewer)가
