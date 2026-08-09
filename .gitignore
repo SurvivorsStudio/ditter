@@ -13,10 +13,15 @@ build/
 !.env.example
 
 # 로컬 SQLite (접속 설정·감사 로그 등 런타임 데이터 — 커밋 대상 아님)
+# WAL 모드를 켜므로 `-wal`·`-shm` 곁파일이 함께 생긴다. 접미사가 붙어 `*.sqlite` 에 걸리지
+# 않으므로 따로 적는다 (backend/src/db/sqlite.ts).
 *.sqlite
+*.sqlite-wal
+*.sqlite-shm
 *.sqlite3
 *.db
 /data/
+/backend/data/
 
 # 로그
 *.log
