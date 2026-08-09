@@ -318,7 +318,7 @@ import { buildContext } from './context/builder.ts'; //  백엔드
 | `failed to connect to the docker API at unix:///…` | 도커 데몬이 꺼져 있다. colima면 `colima start`(첫 기동 수십 초), Docker Desktop이면 앱 실행, 리눅스면 `systemctl start docker`. 어느 쪽인지는 `docker context ls`. |
 | 프런트가 `5173`이 아니라 **`5174`**에 떴다 | 호스트에서 `npm run dev`로 띄운 서버가 포트를 잡고 있다. 컨테이너와 호스트 경로를 **동시에 쓰지 않는다.** 하나를 내린다. |
 | 백엔드가 `EADDRINUSE` | 같은 이유. `lsof -ti :4000 -c node -a -sTCP:LISTEN \| xargs kill -9` (플래그를 빼먹으면 무관한 node 프로세스까지 죽는다 — [`/dev`](.claude/commands/dev.md) 2단계 참고). |
-| **리눅스**에서 프런트 컨테이너가 기동조차 못 함 | bind mount uid 불일치. `DEV_UID=$(id -u) DEV_GID=$(id -g) docker compose up` 또는 `.env`에 박아둔다. macOS·Windows는 보통 필요 없다. |
+| **리눅스**에서 프런트·백엔드 컨테이너가 기동조차 못 함 | bind mount uid 불일치. 프런트는 Vite가 설정 임시 파일을 쓰고, 백엔드는 로컬 SQLite를 담을 `backend/data/`를 직접 만든다 — 둘 다 bind mount 안이라 쓰기가 막히면 기동 자체가 안 된다. `DEV_UID=$(id -u) DEV_GID=$(id -g) docker compose up` 또는 `.env`에 박아둔다. macOS·Windows는 보통 필요 없다. |
 | 타입을 고쳤는데 반영이 안 됨 | `packages/shared-types`의 `dist` 빌드는 기동 시 1회만 돈다. `docker compose restart backend frontend`. |
 | 소스를 고쳤는데 서버가 옛 코드를 돌린다 | 컨테이너는 폴링 워처를 쓴다(`dev:poll`). 그래도 안 붙으면 해당 서비스만 restart. |
 | `.env`에서 `POSTGRES_DB`·`POSTGRES_USER`를 바꿨는데 안 먹는다 | `initdb`는 볼륨이 빌 때 한 번만 돈다. 헬스체크는 통과하니 더 헷갈린다. `docker compose down -v` 후 재기동 (3절 참고). |
