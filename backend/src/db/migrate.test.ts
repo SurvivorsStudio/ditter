@@ -197,6 +197,39 @@ test('트랜잭션 안에서 정상 동작하는 다른 PRAGMA 는 막지 않는
   expect(db.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 3 });
 });
 
+// 아래 세 개는 검사기가 **주석 본문**을 실행되는 문장으로 착각하지 않는지 본다. 금지어를 왜
+// 쓰면 안 되는지 주석으로 적어두는 것은 마이그레이션에서 자연스러운 일이고(README 규칙 4 와
+// 러너의 오류 메시지가 그 단어들을 그대로 언급한다), 그때마다 백엔드가 뜨지 못하면 안 된다.
+
+test('주석 안에 적힌 VACUUM 은 막지 않는다 — 실행되는 문장이 아니다', () => {
+  const db = openDatabase(':memory:');
+  const dir = migrationsDir({
+    '001_x.sql': '-- VACUUM 은 러너가 막는다\nCREATE TABLE a (id INTEGER PRIMARY KEY);',
+  });
+
+  expect(runMigrations(db, dir)).toEqual(['001_x.sql']);
+});
+
+test('주석 안에 적힌 PRAGMA foreign_keys 도 막지 않는다', () => {
+  const db = openDatabase(':memory:');
+  const dir = migrationsDir({
+    '001_x.sql': '-- PRAGMA foreign_keys 는 트랜잭션 안이라 무시된다\nCREATE TABLE a (id INTEGER);',
+  });
+
+  expect(runMigrations(db, dir)).toEqual(['001_x.sql']);
+});
+
+test('세미콜론 뒤에 오는 주석 안의 금지어도 막지 않는다', () => {
+  const db = openDatabase(':memory:');
+  const dir = migrationsDir({
+    '001_x.sql':
+      'CREATE TABLE a (id INTEGER PRIMARY KEY);\n-- 참고: VACUUM 은 여기서 못 쓴다\nCREATE TABLE b (id INTEGER);',
+  });
+
+  expect(runMigrations(db, dir)).toEqual(['001_x.sql']);
+  expect(tableNames(db)).toContain('b');
+});
+
 test('이름 안에 키워드가 들어간 컬럼은 막지 않는다', () => {
   const db = openDatabase(':memory:');
   const dir = migrationsDir({
