@@ -165,6 +165,38 @@ test('트리거의 BEGIN … END 는 막지 않는다 — 트랜잭션 제어가
   });
 });
 
+test('VACUUM 은 기동을 멈춘다 — 트랜잭션 안에서는 실행 자체가 막힌다', () => {
+  const db = openDatabase(':memory:');
+  const dir = migrationsDir({
+    '001_x.sql': 'CREATE TABLE a (id INTEGER PRIMARY KEY);\nVACUUM;',
+  });
+
+  // 그냥 두면 `cannot VACUUM from within a transaction` 이 나는데, 그 메시지는 러너가 감싼
+  // 트랜잭션을 가리키지 않아 파일 쪽 문제로 오해하게 된다.
+  expect(() => runMigrations(db, dir)).toThrow(/효과가 없는 문장입니다.*VACUUM/s);
+});
+
+test('PRAGMA foreign_keys 는 기동을 멈춘다 — 조용히 무시되는 쪽이라 더 위험하다', () => {
+  const db = openDatabase(':memory:');
+  const dir = migrationsDir({
+    '001_x.sql': 'PRAGMA foreign_keys = OFF;\nCREATE TABLE a (id INTEGER PRIMARY KEY);',
+  });
+
+  // 트랜잭션 안에서는 오류 없이 무시된다. 껐다고 믿은 채 뒤따르는 문장이 돌면 엉뚱한 외래키
+  // 오류가 나고, 원인이 이 한 줄이라는 것을 알아채기 어렵다.
+  expect(() => runMigrations(db, dir)).toThrow(/효과가 없는 문장입니다.*PRAGMA FOREIGN_KEYS/s);
+});
+
+test('트랜잭션 안에서 정상 동작하는 다른 PRAGMA 는 막지 않는다', () => {
+  const db = openDatabase(':memory:');
+  const dir = migrationsDir({
+    '001_x.sql': 'PRAGMA user_version = 3;\nCREATE TABLE a (id INTEGER PRIMARY KEY);',
+  });
+
+  expect(runMigrations(db, dir)).toEqual(['001_x.sql']);
+  expect(db.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 3 });
+});
+
 test('이름 안에 키워드가 들어간 컬럼은 막지 않는다', () => {
   const db = openDatabase(':memory:');
   const dir = migrationsDir({

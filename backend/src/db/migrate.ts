@@ -16,19 +16,50 @@ import type { DatabaseSync } from 'node:sqlite';
 const FILE_NAME_PATTERN = /^(\d{3,})_[a-z0-9-]+\.sql$/;
 
 /**
+ * **문장 맨 앞** — 파일 처음이거나 `;` 뒤, 사이의 공백·주석은 건너뛴다.
+ *
+ * 아래 두 검사가 이 위치에 오는 것만 보는 이유는 `CREATE TRIGGER ... FOR EACH ROW BEGIN ... END`
+ * 를 막지 않기 위해서다 — 트리거 본문의 `BEGIN` 은 문장 중간에 온다.
+ */
+const STATEMENT_START = String.raw`(?:^|;)(?:\s|--[^\n]*|/\*[\s\S]*?\*/)*`;
+
+/**
  * 파일이 스스로 트랜잭션을 다루는 것을 막는다 (backend/migrations/README.md 규칙 4).
  *
  * runMigrations 이 기동 전체를 하나의 트랜잭션으로 감싸므로, 파일 안에서 그 트랜잭션을 끝내면
  * 뒤따르는 문장과 적용 기록이 트랜잭션 밖으로 새어 나간다 — 되돌릴 수 없게 되고, 실패했는데도
  * 적용된 것으로 기록되는 상태가 남는다. 문서로만 금지하면 지켜졌는지 아무도 확인하지 않는다.
  *
- * **문장 맨 앞**(파일 처음이거나 `;` 뒤, 사이의 공백·주석은 건너뛴다)에 오는 것만 본다.
- * `CREATE TRIGGER ... FOR EACH ROW BEGIN ... END` 를 막지 않기 위해서다 — 트리거 본문의
- * `BEGIN` 은 문장 중간에 오고, 그 끝의 `END` 는 트랜잭션 제어가 아니다. 그래서 `END` 단독은
- * 대상에서 빼고 `END TRANSACTION` 만 본다.
+ * 트리거 끝의 `END` 는 트랜잭션 제어가 아니므로 `END` 단독은 대상에서 빼고 `END TRANSACTION`
+ * 만 본다.
  */
-const TRANSACTION_CONTROL_PATTERN =
-  /(?:^|;)(?:\s|--[^\n]*|\/\*[\s\S]*?\*\/)*(BEGIN|COMMIT|END\s+TRANSACTION|ROLLBACK|SAVEPOINT|RELEASE)\b/i;
+const TRANSACTION_CONTROL_PATTERN = new RegExp(
+  `${STATEMENT_START}(BEGIN|COMMIT|END\\s+TRANSACTION|ROLLBACK|SAVEPOINT|RELEASE)\\b`,
+  'i',
+);
+
+/**
+ * 같은 트랜잭션 때문에 **효과가 사라지는** 문장을 막는다.
+ *
+ * 위 트랜잭션 제어문과 달리 이쪽은 파일이 규칙을 어긴 것이 아니다. 트랜잭션 안이라 동작하지
+ * 않을 뿐인데, 그 실패 방식이 서로 다르고 둘 다 사람을 속인다:
+ *
+ * - `VACUUM` — `cannot VACUUM from within a transaction` 으로 실패한다. 오류가 러너의 트랜잭션을
+ *   가리키지 않아 파일 쪽 문제로 오해하기 쉽다.
+ * - `PRAGMA foreign_keys` — **오류 없이 무시된다.** SQLite 가 권장하는 테이블 재구성 절차는
+ *   `PRAGMA foreign_keys=off` 를 트랜잭션 **밖에서** 먼저 실행할 것을 요구하는데, 여기서는 그
+ *   1단계가 조용히 넘어간다. 껐다고 믿은 채 뒤따르는 DROP TABLE 이 돌아 엉뚱한 외래키 오류가
+ *   난다 — 원인을 찾기 가장 어려운 종류다.
+ *
+ * 그래서 조용한 실패를 기동 시점의 시끄러운 실패로 바꾼다. 이 모듈이 이미 택한 태도와 같다.
+ *
+ * `PRAGMA` 는 **`foreign_keys` 만** 겨냥한다. `PRAGMA user_version` 처럼 트랜잭션 안에서 정상
+ * 동작하는 것까지 막으면 쓸 수 있는 문장을 괜히 잃는다.
+ */
+const NO_EFFECT_IN_TRANSACTION_PATTERN = new RegExp(
+  `${STATEMENT_START}(VACUUM|PRAGMA\\s+(?:[a-z_][a-z0-9_]*\\s*\\.\\s*)?foreign_keys)\\b`,
+  'i',
+);
 
 export function runMigrations(db: DatabaseSync, migrationsDir: string): string[] {
   ensureMigrationTable(db);
@@ -106,6 +137,7 @@ function readMigrationFiles(migrationsDir: string): MigrationFile[] {
     }
     const sql = readFileSync(join(migrationsDir, name), 'utf8');
     assertNoTransactionControl(name, sql);
+    assertNoStatementWithoutEffect(name, sql);
     files.push({ name, order: Number(match[1]), sql });
   }
 
@@ -123,6 +155,19 @@ function assertNoTransactionControl(name: string, sql: string): void {
     `마이그레이션 파일 안에서 트랜잭션을 직접 다루면 안 됩니다: ${name} (${keyword}). ` +
       `적용하는 쪽이 파일 전체를 하나의 트랜잭션으로 감쌉니다 — 파일이 트랜잭션을 끝내면 ` +
       `되돌릴 수 없게 되고, 실패한 마이그레이션이 적용된 것으로 기록됩니다.`,
+  );
+}
+
+function assertNoStatementWithoutEffect(name: string, sql: string): void {
+  const match = NO_EFFECT_IN_TRANSACTION_PATTERN.exec(sql);
+  if (match === null) return;
+
+  const keyword = match[1]!.replace(/\s+/g, ' ').toUpperCase();
+  throw new Error(
+    `트랜잭션 안에서는 효과가 없는 문장입니다: ${name} (${keyword}). ` +
+      `기동 한 번에 적용되는 파일 전체가 하나의 트랜잭션이라, VACUUM 은 실행 자체가 막히고 ` +
+      `PRAGMA foreign_keys 는 오류 없이 무시됩니다 — 껐다고 믿은 채 뒤따르는 문장이 그대로 돕니다. ` +
+      `테이블을 재구성해야 한다면 외래키를 켠 채로, 참조하는 테이블까지 같은 파일 안에서 함께 옮기세요.`,
   );
 }
 
