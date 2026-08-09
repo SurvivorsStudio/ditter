@@ -1,8 +1,17 @@
 /** 프로세스 경계에서 환경변수를 읽어 내부 타입으로 좁힌다. */
 
+import { join } from 'node:path';
+
 export type ServerConfig = {
   host: string;
   port: number;
+};
+
+export type DatabaseConfig = {
+  /** 로컬 메타 저장소(SQLite) 파일 경로. 대상 PostgreSQL 이 아니다. */
+  file: string;
+  /** 기동할 때 적용할 마이그레이션 SQL 이 있는 디렉터리. */
+  migrationsDir: string;
 };
 
 export function readServerConfig(env: NodeJS.ProcessEnv): ServerConfig {
@@ -12,6 +21,21 @@ export function readServerConfig(env: NodeJS.ProcessEnv): ServerConfig {
     // 서비스가 HOST=0.0.0.0 을 직접 지정한다.
     host: readEnv(env.HOST) ?? '127.0.0.1',
     port: parsePort(readEnv(env.PORT)) ?? 4000,
+  };
+}
+
+export function readDatabaseConfig(env: NodeJS.ProcessEnv): DatabaseConfig {
+  // 기본 경로는 cwd 가 아니라 이 파일 위치를 기준으로 잡는다. 백엔드는 루트에서
+  // (`npm run dev --workspace=backend`) 도, backend/ 안에서도 실행되기 때문에 cwd 기준으로
+  // 두면 사람마다 다른 파일을 열게 된다.
+  //
+  // `backend/` 아래에 두는 이유는 컨테이너에 bind mount 되는 경로가 여기라서다
+  // (docker-compose.yml). 저장소 루트에 두면 컨테이너 안에만 생겼다가 재생성 때 사라진다.
+  const backendDir = join(import.meta.dirname, '..');
+
+  return {
+    file: readEnv(env.DITTER_SQLITE_PATH) ?? join(backendDir, 'data', 'ditter.sqlite'),
+    migrationsDir: readEnv(env.DITTER_MIGRATIONS_DIR) ?? join(backendDir, 'migrations'),
   };
 }
 

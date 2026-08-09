@@ -2,7 +2,7 @@ import { HEALTH_PATH } from '@ditter/shared-types';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 
 import { buildApp } from './app.ts';
-import { readServerConfig } from './config.ts';
+import { readDatabaseConfig, readServerConfig } from './config.ts';
 
 const app = buildApp();
 
@@ -45,4 +45,17 @@ test('빈 HOST 는 설정하지 않은 것으로 보고 루프백으로 되돌�
 test('빈 PORT 도 마찬가지로 기본값으로 되돌린다', () => {
   expect(readServerConfig({ PORT: '' }).port).toBe(4000);
   expect(readServerConfig({ PORT: ' 4100 ' }).port).toBe(4100);
+});
+
+test('SQLite 기본 경로는 cwd 가 아니라 backend/ 를 기준으로 잡는다', () => {
+  // 루트에서 돌리든 backend/ 안에서 돌리든 같은 파일을 열어야 한다.
+  const config = readDatabaseConfig({});
+
+  expect(config.file).toMatch(/backend\/data\/ditter\.sqlite$/);
+  expect(config.migrationsDir).toMatch(/backend\/migrations$/);
+});
+
+test('SQLite 경로는 환경변수로 덮을 수 있다', () => {
+  expect(readDatabaseConfig({ DITTER_SQLITE_PATH: '/tmp/x.sqlite' }).file).toBe('/tmp/x.sqlite');
+  expect(readDatabaseConfig({ DITTER_SQLITE_PATH: '  ' }).file).toMatch(/backend\/data\//);
 });
