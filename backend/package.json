@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --watch --env-file-if-exists=../.env src/index.ts",
+    "dev": "node --watch --watch-path=src --watch-path=migrations --env-file-if-exists=../.env src/index.ts",
     "dev:poll": "node scripts/dev-watch.mjs",
     "start": "node --env-file-if-exists=../.env src/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
