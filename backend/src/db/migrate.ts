@@ -15,6 +15,21 @@ import type { DatabaseSync } from 'node:sqlite';
 
 const FILE_NAME_PATTERN = /^(\d{3,})_[a-z0-9-]+\.sql$/;
 
+/**
+ * 파일이 스스로 트랜잭션을 다루는 것을 막는다 (backend/migrations/README.md 규칙 4).
+ *
+ * runMigrations 이 기동 전체를 하나의 트랜잭션으로 감싸므로, 파일 안에서 그 트랜잭션을 끝내면
+ * 뒤따르는 문장과 적용 기록이 트랜잭션 밖으로 새어 나간다 — 되돌릴 수 없게 되고, 실패했는데도
+ * 적용된 것으로 기록되는 상태가 남는다. 문서로만 금지하면 지켜졌는지 아무도 확인하지 않는다.
+ *
+ * **문장 맨 앞**(파일 처음이거나 `;` 뒤, 사이의 공백·주석은 건너뛴다)에 오는 것만 본다.
+ * `CREATE TRIGGER ... FOR EACH ROW BEGIN ... END` 를 막지 않기 위해서다 — 트리거 본문의
+ * `BEGIN` 은 문장 중간에 오고, 그 끝의 `END` 는 트랜잭션 제어가 아니다. 그래서 `END` 단독은
+ * 대상에서 빼고 `END TRANSACTION` 만 본다.
+ */
+const TRANSACTION_CONTROL_PATTERN =
+  /(?:^|;)(?:\s|--[^\n]*|\/\*[\s\S]*?\*\/)*(BEGIN|COMMIT|END\s+TRANSACTION|ROLLBACK|SAVEPOINT|RELEASE)\b/i;
+
 export function runMigrations(db: DatabaseSync, migrationsDir: string): string[] {
   ensureMigrationTable(db);
 
@@ -89,16 +104,26 @@ function readMigrationFiles(migrationsDir: string): MigrationFile[] {
         `마이그레이션 파일 이름 규칙에 맞지 않습니다: ${name} (예: 001_create-connections.sql)`,
       );
     }
-    files.push({
-      name,
-      order: Number(match[1]),
-      sql: readFileSync(join(migrationsDir, name), 'utf8'),
-    });
+    const sql = readFileSync(join(migrationsDir, name), 'utf8');
+    assertNoTransactionControl(name, sql);
+    files.push({ name, order: Number(match[1]), sql });
   }
 
   files.sort((a, b) => a.order - b.order);
   assertNoDuplicateOrder(files);
   return files;
+}
+
+function assertNoTransactionControl(name: string, sql: string): void {
+  const match = TRANSACTION_CONTROL_PATTERN.exec(sql);
+  if (match === null) return;
+
+  const keyword = match[1]!.replace(/\s+/g, ' ').toUpperCase();
+  throw new Error(
+    `마이그레이션 파일 안에서 트랜잭션을 직접 다루면 안 됩니다: ${name} (${keyword}). ` +
+      `적용하는 쪽이 파일 전체를 하나의 트랜잭션으로 감쌉니다 — 파일이 트랜잭션을 끝내면 ` +
+      `되돌릴 수 없게 되고, 실패한 마이그레이션이 적용된 것으로 기록됩니다.`,
+  );
 }
 
 /**

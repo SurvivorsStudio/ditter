@@ -123,6 +123,57 @@ test('마이그레이션 디렉터리가 없어도 기동을 막지 않는다', 
   expect(runMigrations(db, join(tmpdir(), 'ditter-does-not-exist'))).toEqual([]);
 });
 
+test('파일 안에서 트랜잭션을 직접 다루면 기동을 멈춘다', () => {
+  const db = openDatabase(':memory:');
+  const dir = migrationsDir({
+    '001_create-a.sql': 'CREATE TABLE a (id INTEGER PRIMARY KEY);\nCOMMIT;',
+  });
+
+  // 그대로 두면 COMMIT 이 바깥 트랜잭션을 끝내버려, 실패한 마이그레이션이 적용된 것으로
+  // 기록되고 되돌리기마저 불가능해진다.
+  expect(() => runMigrations(db, dir)).toThrow(/트랜잭션을 직접 다루면 안 됩니다.*COMMIT/s);
+  expect(tableNames(db)).not.toContain('a');
+  expect(db.prepare('SELECT COUNT(*) c FROM schema_migrations').get()).toMatchObject({ c: 0 });
+});
+
+test('주석 뒤에 숨은 트랜잭션 제어문도 잡는다', () => {
+  const db = openDatabase(':memory:');
+  const dir = migrationsDir({
+    '001_x.sql': '-- 여기서부터 직접 감싼다\nBEGIN;\nCREATE TABLE a (id INTEGER);',
+  });
+
+  expect(() => runMigrations(db, dir)).toThrow(/트랜잭션을 직접 다루면 안 됩니다.*BEGIN/s);
+});
+
+test('트리거의 BEGIN … END 는 막지 않는다 — 트랜잭션 제어가 아니다', () => {
+  const db = openDatabase(':memory:');
+  const dir = migrationsDir({
+    '001_trigger.sql': `
+      CREATE TABLE a (id INTEGER PRIMARY KEY, touched_at TEXT);
+      CREATE TRIGGER a_touch AFTER INSERT ON a
+      FOR EACH ROW
+      BEGIN
+        UPDATE a SET touched_at = 'now' WHERE id = NEW.id;
+      END;
+    `,
+  });
+
+  expect(runMigrations(db, dir)).toEqual(['001_trigger.sql']);
+  db.prepare('INSERT INTO a (id) VALUES (1)').run();
+  expect(db.prepare('SELECT touched_at FROM a WHERE id = 1').get()).toMatchObject({
+    touched_at: 'now',
+  });
+});
+
+test('이름 안에 키워드가 들어간 컬럼은 막지 않는다', () => {
+  const db = openDatabase(':memory:');
+  const dir = migrationsDir({
+    '001_x.sql': 'CREATE TABLE a (id INTEGER PRIMARY KEY, rollback_at TEXT, begin_at TEXT)',
+  });
+
+  expect(runMigrations(db, dir)).toEqual(['001_x.sql']);
+});
+
 test('뒤 파일이 실패하면 앞 파일까지 통째로 취소된다 — 기동 하나가 한 트랜잭션이다', () => {
   const db = openDatabase(':memory:');
   const dir = migrationsDir({
