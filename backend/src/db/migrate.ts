@@ -16,20 +16,6 @@ import type { DatabaseSync } from 'node:sqlite';
 const FILE_NAME_PATTERN = /^(\d{3,})_[a-z0-9-]+\.sql$/;
 
 /**
- * **문장 맨 앞** — 파일 처음이거나 `;` 뒤, 사이의 공백·주석은 건너뛴다.
- *
- * 아래 두 검사가 이 위치에 오는 것만 보는 이유는 `CREATE TRIGGER ... FOR EACH ROW BEGIN ... END`
- * 를 막지 않기 위해서다 — 트리거 본문의 `BEGIN` 은 문장 중간에 온다.
- *
- * 한 줄 주석은 **줄 끝까지 반드시 소비하게** 한다(`(?:\n|$)`). 그냥 `--[^\n]*` 로 두면 역추적으로
- * 주석 **중간**에서 끊길 수 있고, 그러면 주석 본문에 적힌 단어가 "문장 맨 앞에 온 키워드"로
- * 매칭된다 — `-- VACUUM 은 쓰지 않는다` 한 줄이 기동을 막았다. 금지어를 왜 쓰면 안 되는지 주석에
- * 적어두는 것은 자연스러운 일이라(README 규칙 4 와 아래 오류 메시지가 그 단어들을 그대로 언급한다)
- * 실제로 밟기 쉬운 경로였다. 블록 주석은 닫는 기호가 나와야 끝나므로 같은 구멍이 없다.
- */
-const STATEMENT_START = String.raw`(?:^|;)(?:\s|--[^\n]*(?:\n|$)|/\*[\s\S]*?\*/)*`;
-
-/**
  * 파일이 스스로 트랜잭션을 다루는 것을 막는다 (backend/migrations/README.md 규칙 4).
  *
  * runMigrations 이 기동 전체를 하나의 트랜잭션으로 감싸므로, 파일 안에서 그 트랜잭션을 끝내면
@@ -38,11 +24,11 @@ const STATEMENT_START = String.raw`(?:^|;)(?:\s|--[^\n]*(?:\n|$)|/\*[\s\S]*?\*/)
  *
  * 트리거 끝의 `END` 는 트랜잭션 제어가 아니므로 `END` 단독은 대상에서 빼고 `END TRANSACTION`
  * 만 본다.
+ *
+ * 아래 두 패턴은 sticky(`y`) 라 statementStarts 가 알려준 **문장 맨 앞에서만** 맞춰본다.
  */
-const TRANSACTION_CONTROL_PATTERN = new RegExp(
-  `${STATEMENT_START}(BEGIN|COMMIT|END\\s+TRANSACTION|ROLLBACK|SAVEPOINT|RELEASE)\\b`,
-  'i',
-);
+const TRANSACTION_CONTROL_PATTERN =
+  /(BEGIN|COMMIT|END\s+TRANSACTION|ROLLBACK|SAVEPOINT|RELEASE)\b/iy;
 
 /**
  * 같은 트랜잭션 때문에 **효과가 사라지는** 문장을 막는다.
@@ -62,10 +48,95 @@ const TRANSACTION_CONTROL_PATTERN = new RegExp(
  * `PRAGMA` 는 **`foreign_keys` 만** 겨냥한다. `PRAGMA user_version` 처럼 트랜잭션 안에서 정상
  * 동작하는 것까지 막으면 쓸 수 있는 문장을 괜히 잃는다.
  */
-const NO_EFFECT_IN_TRANSACTION_PATTERN = new RegExp(
-  `${STATEMENT_START}(VACUUM|PRAGMA\\s+(?:[a-z_][a-z0-9_]*\\s*\\.\\s*)?foreign_keys)\\b`,
-  'i',
-);
+const NO_EFFECT_IN_TRANSACTION_PATTERN =
+  /(VACUUM|PRAGMA\s+(?:[a-z_][a-z0-9_]*\s*\.\s*)?foreign_keys)\b/iy;
+
+/** 여는 기호 → 닫는 기호. SQLite 가 인정하는 문자열·식별자 인용 방식 전부다. */
+const QUOTE_PAIRS: Record<string, string> = { "'": "'", '"': '"', '`': '`', '[': ']' };
+
+/**
+ * **실행되는 문장이 시작되는 위치**만 모은다.
+ *
+ * 위 두 검사가 문장 맨 앞만 보는 이유는 `CREATE TRIGGER ... FOR EACH ROW BEGIN ... END` 를 막지
+ * 않기 위해서다 — 트리거 본문의 `BEGIN` 은 문장 중간에 온다.
+ *
+ * 정규식으로 `;` 를 찾아 문장 경계로 삼던 방식을 버리고 한 번 훑는 방식으로 바꿨다. 정규식은
+ * **주석과 문자열 안에 있는 `;` 도 문장 경계로 셌기 때문**이다. 그래서 금지어를 왜 쓰면 안 되는지
+ * 적어둔 주석 한 줄(`-- BEGIN; COMMIT 을 파일에 쓰지 않는다`)이나, 값에 세미콜론이 들어간
+ * INSERT(`VALUES ('a; ROLLBACK')`) 가 기동을 막았다. 러너의 오류 메시지와 README 규칙 4 가 그
+ * 단어들을 그대로 언급하니 주석에 옮겨 적기 쉬운 말이고, 실제로 밟기 쉬운 경로였다.
+ *
+ * 여기서는 지금 주석 안인지 인용부호 안인지를 기억하며 지나가므로 그 구간의 `;` 는 세지 않는다.
+ * 작은따옴표·큰따옴표·백틱은 같은 기호를 두 번 써서 이스케이프하는 SQLite 규칙(`'it''s'`)을
+ * 따르고, 대괄호 식별자에는 이스케이프가 없다. 닫히지 않은 구간은 파일 끝까지로 본다 — 어차피
+ * 적용할 때 SQLite 가 문법 오류로 잡는다.
+ */
+function statementStarts(sql: string): number[] {
+  const starts: number[] = [];
+  let expectingStart = true;
+  let index = 0;
+
+  while (index < sql.length) {
+    const char = sql[index]!;
+
+    if (char === '-' && sql[index + 1] === '-') {
+      const lineEnd = sql.indexOf('\n', index);
+      index = lineEnd === -1 ? sql.length : lineEnd + 1;
+      continue;
+    }
+    if (char === '/' && sql[index + 1] === '*') {
+      const commentEnd = sql.indexOf('*/', index + 2);
+      index = commentEnd === -1 ? sql.length : commentEnd + 2;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      index += 1;
+      continue;
+    }
+    if (char === ';') {
+      expectingStart = true;
+      index += 1;
+      continue;
+    }
+
+    if (expectingStart) {
+      starts.push(index);
+      expectingStart = false;
+    }
+
+    const closer = QUOTE_PAIRS[char];
+    index = closer === undefined ? index + 1 : skipQuoted(sql, index, closer);
+  }
+
+  return starts;
+}
+
+/** 인용 구간의 **끝 다음** 위치를 돌려준다. */
+function skipQuoted(sql: string, openIndex: number, closer: string): number {
+  let index = openIndex + 1;
+  while (index < sql.length) {
+    if (sql[index] === closer) {
+      // 같은 기호가 붙어 나오면 닫은 것이 아니라 이스케이프다 (`'it''s'`). 대괄호는 해당 없다.
+      if (closer !== ']' && sql[index + 1] === closer) {
+        index += 2;
+        continue;
+      }
+      return index + 1;
+    }
+    index += 1;
+  }
+  return sql.length;
+}
+
+/** 문장 맨 앞에 걸린 첫 금지 키워드를 오류 메시지에 쓸 형태로 돌려준다. */
+function findStatementKeyword(sql: string, pattern: RegExp): string | null {
+  for (const start of statementStarts(sql)) {
+    pattern.lastIndex = start;
+    const match = pattern.exec(sql);
+    if (match !== null) return match[1]!.replace(/\s+/g, ' ').toUpperCase();
+  }
+  return null;
+}
 
 export function runMigrations(db: DatabaseSync, migrationsDir: string): string[] {
   ensureMigrationTable(db);
@@ -153,10 +224,9 @@ function readMigrationFiles(migrationsDir: string): MigrationFile[] {
 }
 
 function assertNoTransactionControl(name: string, sql: string): void {
-  const match = TRANSACTION_CONTROL_PATTERN.exec(sql);
-  if (match === null) return;
+  const keyword = findStatementKeyword(sql, TRANSACTION_CONTROL_PATTERN);
+  if (keyword === null) return;
 
-  const keyword = match[1]!.replace(/\s+/g, ' ').toUpperCase();
   throw new Error(
     `마이그레이션 파일 안에서 트랜잭션을 직접 다루면 안 됩니다: ${name} (${keyword}). ` +
       `적용하는 쪽이 파일 전체를 하나의 트랜잭션으로 감쌉니다 — 파일이 트랜잭션을 끝내면 ` +
@@ -165,10 +235,9 @@ function assertNoTransactionControl(name: string, sql: string): void {
 }
 
 function assertNoStatementWithoutEffect(name: string, sql: string): void {
-  const match = NO_EFFECT_IN_TRANSACTION_PATTERN.exec(sql);
-  if (match === null) return;
+  const keyword = findStatementKeyword(sql, NO_EFFECT_IN_TRANSACTION_PATTERN);
+  if (keyword === null) return;
 
-  const keyword = match[1]!.replace(/\s+/g, ' ').toUpperCase();
   throw new Error(
     `트랜잭션 안에서는 효과가 없는 문장입니다: ${name} (${keyword}). ` +
       `기동 한 번에 적용되는 파일 전체가 하나의 트랜잭션이라, VACUUM 은 실행 자체가 막히고 ` +

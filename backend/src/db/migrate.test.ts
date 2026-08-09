@@ -230,6 +230,51 @@ test('세미콜론 뒤에 오는 주석 안의 금지어도 막지 않는다', (
   expect(tableNames(db)).toContain('b');
 });
 
+// 아래 네 개는 **주석과 문자열 안의 세미콜론**을 문장 경계로 세지 않는지 본다. 세었을 때는
+// 금지어를 설명하는 주석 한 줄이나 값에 세미콜론이 든 INSERT 가 기동을 막았다.
+
+test('주석 안의 세미콜론 뒤에 온 금지어는 막지 않는다', () => {
+  const db = openDatabase(':memory:');
+  const dir = migrationsDir({
+    '001_x.sql': '-- BEGIN; COMMIT 을 파일에 쓰지 않는다\nCREATE TABLE a (id INTEGER PRIMARY KEY);',
+  });
+
+  expect(runMigrations(db, dir)).toEqual(['001_x.sql']);
+  expect(tableNames(db)).toContain('a');
+});
+
+test('블록 주석 안의 세미콜론 뒤에 온 금지어도 막지 않는다', () => {
+  const db = openDatabase(':memory:');
+  const dir = migrationsDir({
+    '001_x.sql': '/* 주의: a; VACUUM 금지 */\nCREATE TABLE a (id INTEGER PRIMARY KEY);',
+  });
+
+  expect(runMigrations(db, dir)).toEqual(['001_x.sql']);
+  expect(tableNames(db)).toContain('a');
+});
+
+test('문자열 값 안의 세미콜론 뒤에 온 금지어도 막지 않는다', () => {
+  const db = openDatabase(':memory:');
+  const dir = migrationsDir({
+    '001_x.sql': "CREATE TABLE t (v TEXT);\nINSERT INTO t (v) VALUES ('a; ROLLBACK');",
+  });
+
+  expect(runMigrations(db, dir)).toEqual(['001_x.sql']);
+  expect(db.prepare('SELECT v FROM t').get()).toMatchObject({ v: 'a; ROLLBACK' });
+});
+
+test('두 번 쓴 따옴표는 문자열의 끝이 아니다', () => {
+  const db = openDatabase(':memory:');
+  const dir = migrationsDir({
+    '001_x.sql': "CREATE TABLE t (v TEXT);\nINSERT INTO t (v) VALUES ('it''s; COMMIT');",
+  });
+
+  // 이스케이프를 못 읽으면 문자열이 여기서 끝난 것으로 보고, 뒤따르는 `; COMMIT` 을 진짜 문장
+  // 으로 착각한다.
+  expect(runMigrations(db, dir)).toEqual(['001_x.sql']);
+  expect(db.prepare('SELECT v FROM t').get()).toMatchObject({ v: "it's; COMMIT" });
+});
+
 test('이름 안에 키워드가 들어간 컬럼은 막지 않는다', () => {
   const db = openDatabase(':memory:');
   const dir = migrationsDir({
