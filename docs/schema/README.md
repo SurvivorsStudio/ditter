@@ -46,6 +46,31 @@ pipelines.definition(JSON) ─참조─▶ connections.id   ← FK 아님. 교�
 > append-only라 CASCADE도 SET NULL도 걸 수 없기 때문이다 ([audit_logs](audit-logs.md)). 정리가
 > 필요하면 파이프라인은 `paused`로 내리고, 커넥션은 정의에서 교체한다.
 
+## 이 테이블들은 어떻게 만들어지는가
+
+**백엔드가 기동할 때 마이그레이션을 적용한다.** [backend/migrations/](../../backend/migrations/README.md)의
+`NNN_설명.sql` 파일을 번호 순서대로 한 번씩 돌리고, 적용 기록을 같은 DB의 `schema_migrations`
+테이블에 남긴다 ([backend/src/db/migrate.ts](../../backend/src/db/migrate.ts)).
+
+- **외부 마이그레이션 도구를 쓰지 않는다.** Node 내장 `node:sqlite`로 직접 돌린다. 백엔드를 빌드
+  없이 실행하는 것과 같은 판단이며([supply-chain-security.md](../policy/supply-chain-security.md)),
+  드라이버가 반환하는 행이 null-prototype이라 `__proto__` 오염 경로가 하나 줄어드는 것도 이 선택에
+  맞는다.
+- **이미 커밋된 마이그레이션은 고치지 않는다.** 남들은 이미 적용해 다시 돌지 않는다. 변경은 항상
+  새 번호로 추가한다.
+- **어긋난 상태에서는 기동을 멈춘다** — 번호 중복, 머지로 끼어든 앞 번호, 저장소보다 앞선 로컬 DB.
+  로컬 SQLite 파일은 커밋되지 않는 버릴 수 있는 파일이라, 애매하게 굴러가는 것보다 멈추고 다시
+  만드는 편이 싸다.
+- **개발 워처가 `backend/migrations/` 도 감시한다** ([dev-watch.mjs](../../backend/scripts/dev-watch.mjs),
+  호스트에서는 `--watch-path`). 적용은 기동 시점에만 일어나므로, 이게 없으면 스택을 띄워둔 채
+  `git pull` 한 사람이 **옛 스키마 위에서 계속 개발한다.** 스키마 변경이 팀에 퍼지는 경로가 이것이다.
+- 이 장치가 다루는 것은 **DITTER 자체 스키마뿐이다.** 대상 PostgreSQL의 스키마는 DITTER가 만들지도
+  바꾸지도 않는다 ([read-only-enforcement.md](../policy/read-only-enforcement.md)).
+
+> 위 테이블 목록은 **설계**이고, 실제 마이그레이션 파일은 각 STEP에서 하나씩 추가된다. 현재는
+> 러너만 서 있고 파일은 0개다 — 첫 파일은 [STEP 1](../todo/step-01a-connection-registry.md)의
+> `connections`다.
+
 ## 원칙
 
 - append-only·자격증명 암호화 등 데이터 취급 원칙은 [docs/policy](../policy/README.md)를 따른다 — [audit_logs](audit-logs.md)와 [connections](connections.md)가 이 원칙이 실제로 적용되는 테이블이다.
