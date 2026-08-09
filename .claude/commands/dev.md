@@ -47,10 +47,29 @@ description: 로컬 개발 스택(PostgreSQL + 백엔드 + 프런트) 을 docker
    - **의존성이 바뀌었으면** `--build` 를 붙인다 (`package.json`·`package-lock.json`·`Dockerfile`
      변경). 소스만 고쳤으면 붙이지 않는다 — 빌드가 몇 분 걸리는데 얻는 게 없다.
    - 실패하면 반복하지 말고 `docker compose logs <서비스>` 를 확인해 보고한다.
+   - **backend 만 healthy 가 안 되면 마이그레이션부터 의심한다.** 스키마가 어긋나면 백엔드가
+     기동을 거부하도록 만들어 뒀다(`backend/src/db/migrate.ts`). 이때 컨테이너는 워처 때문에
+     계속 `Up` 이고 헬스체크도 실패로 넘어가는 데 시간이 걸려서, `ps` 만 보면 원인이 안 보인다.
+
+     ```bash
+     docker compose logs backend | grep -iE "migrate|앞서|번호|순서"
+     ```
+
+     "앞서 있습니다"·"번호가 겹칩니다"·"순서를 건너뛴" 중 하나가 나오면 로컬 DB 가 저장소와
+     어긋난 것이다. 해결은 로컬 DB 를 버리고 다시 만드는 것인데, **이건 데이터를 지우는 일이라
+     임의로 실행하지 않는다** — 아래를 제안하고 사용자 확인을 받은 뒤에 실행한다.
+
+     ```bash
+     rm -f backend/data/ditter.sqlite*
+     docker compose restart backend
+     ```
 
 4. **재시작만 필요한 경우**
    - 코드 변경은 자동 반영되므로 재시작할 일이 거의 없다. 그래도 필요하면
      `docker compose restart backend` 처럼 서비스를 지정한다.
+   - **마이그레이션(`backend/migrations/*.sql`)은 재시작할 필요가 없다.** 워처가 이 디렉터리도
+     보고 있어서 새 `.sql` 이 들어오면 알아서 다시 띄우며 적용한다 — `git pull` 로 남의
+     마이그레이션을 받았을 때도 마찬가지다. 적용되면 `[migrate] N개 적용: …` 로그가 남는다.
    - 공유 타입(`packages/shared-types`)을 고쳤으면 **컨테이너를 재시작**한다. `dist` 빌드는
      기동할 때 한 번만 돈다.
 
