@@ -19,15 +19,46 @@ export function runMigrations(db: DatabaseSync, migrationsDir: string): string[]
   ensureMigrationTable(db);
 
   const available = readMigrationFiles(migrationsDir);
-  const applied = readAppliedNames(db);
 
-  assertConsistent(available, applied);
+  // 무엇을 적용할지 정하는 것과 실제로 적용하는 것을 **같은 트랜잭션 안에** 둔다. 밖에서 읽고
+  // 안에서 쓰면 그 사이가 비는데, 백엔드와 워커는 같은 파일을 공유하는 것이 전제라(sqlite.ts)
+  // 둘이 비슷한 시점에 기동하면 양쪽 다 같은 파일을 "아직 안 됐다"고 판단해 각자 적용한다.
+  //
+  // `BEGIN` 이 아니라 `BEGIN IMMEDIATE` 인 이유: 기본값(deferred)은 첫 쓰기 시점에야 잠금을
+  // 잡으러 가는데, 그 사이 다른 쪽이 커밋했으면 SQLite 는 busy_timeout 을 기다려주지 않고 곧바로
+  // 실패한다. 처음부터 쓰기 잠금을 잡아야 뒤에 온 쪽이 busy_timeout(5초, sqlite.ts) 만큼 기다린
+  // 뒤, 앞선 쪽이 남긴 결과를 아래 readAppliedNames 에서 실제로 다시 읽게 된다.
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const applied = readAppliedNames(db);
+    assertConsistent(available, applied);
 
-  const pending = available.filter((file) => !applied.includes(file.name));
-  for (const file of pending) {
-    applyOne(db, migrationsDir, file.name);
+    const pending = available.filter((file) => !applied.includes(file.name));
+    for (const file of pending) {
+      applyOne(db, file);
+    }
+
+    db.exec('COMMIT');
+    return pending.map((file) => file.name);
+  } catch (cause) {
+    rollbackQuietly(db);
+    throw cause;
   }
-  return pending.map((file) => file.name);
+}
+
+/**
+ * 되돌리기가 실패해도 **원래 오류를 덮지 않는다.**
+ *
+ * `catch` 안에서 그냥 `ROLLBACK` 을 부르면, 되돌릴 트랜잭션이 이미 없을 때 그 자체가 예외를
+ * 던져 진짜 원인을 밀어낸다. 그러면 어느 파일에서 왜 실패했는지가 사라지고
+ * `cannot rollback - no transaction is active` 한 줄만 남는다.
+ */
+function rollbackQuietly(db: DatabaseSync): void {
+  try {
+    db.exec('ROLLBACK');
+  } catch {
+    // 되돌릴 것이 없다는 뜻이다. 알릴 내용이 아니라 삼킨다 — 알려야 할 것은 바깥의 원래 오류다.
+  }
 }
 
 function ensureMigrationTable(db: DatabaseSync): void {
@@ -39,8 +70,12 @@ function ensureMigrationTable(db: DatabaseSync): void {
   `);
 }
 
-type MigrationFile = { name: string; order: number };
+type MigrationFile = { name: string; order: number; sql: string };
 
+/**
+ * 내용까지 여기서 미리 읽는다. 트랜잭션을 연 뒤에 파일을 읽으면, 읽기가 실패하는 동안 쓰기 잠금을
+ * 붙잡고 있게 된다.
+ */
 function readMigrationFiles(migrationsDir: string): MigrationFile[] {
   if (!existsSync(migrationsDir)) return [];
 
@@ -54,7 +89,11 @@ function readMigrationFiles(migrationsDir: string): MigrationFile[] {
         `마이그레이션 파일 이름 규칙에 맞지 않습니다: ${name} (예: 001_create-connections.sql)`,
       );
     }
-    files.push({ name, order: Number(match[1]) });
+    files.push({
+      name,
+      order: Number(match[1]),
+      sql: readFileSync(join(migrationsDir, name), 'utf8'),
+    });
   }
 
   files.sort((a, b) => a.order - b.order);
@@ -112,21 +151,18 @@ function assertConsistent(available: MigrationFile[], applied: string[]): void {
   }
 }
 
-function applyOne(db: DatabaseSync, migrationsDir: string, name: string): void {
-  const sql = readFileSync(join(migrationsDir, name), 'utf8');
-
-  // 한 파일은 통째로 적용되거나 통째로 취소된다. 절반만 적용된 스키마가 남으면 다음 기동에서
-  // 그 파일을 다시 돌리다 실패하고, 그때부터는 손으로 풀어야 한다.
-  db.exec('BEGIN');
+/**
+ * 트랜잭션은 열지 않는다 — runMigrations 이 이번 기동 전체를 하나로 감싼다. 그래서 한 파일이
+ * 절반만 적용되는 일도, 앞 파일만 적용된 채 뒤 파일에서 멈추는 일도 없다.
+ */
+function applyOne(db: DatabaseSync, file: MigrationFile): void {
   try {
-    db.exec(sql);
+    db.exec(file.sql);
     db.prepare('INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)').run(
-      name,
+      file.name,
       new Date().toISOString(),
     );
-    db.exec('COMMIT');
   } catch (cause) {
-    db.exec('ROLLBACK');
-    throw new Error(`마이그레이션 적용 실패: ${name}`, { cause });
+    throw new Error(`마이그레이션 적용 실패: ${file.name}`, { cause });
   }
 }
