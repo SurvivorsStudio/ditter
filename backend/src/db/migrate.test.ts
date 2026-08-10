@@ -165,6 +165,92 @@ test('트리거의 BEGIN … END 는 막지 않는다 — 트랜잭션 제어가
   });
 });
 
+// 아래 묶음은 단독 `END` 를 본다. SQLite 에서 `END` 는 `COMMIT` 과 같은 뜻이라 바깥 트랜잭션을
+// 끝내는데, 트리거 본문을 닫는 `END` 와 모양이 같아서 한동안 검사에서 통째로 빠져 있었다.
+
+const TRIGGER = (name: string, head = `CREATE TRIGGER ${name}`) =>
+  `${head} AFTER INSERT ON a FOR EACH ROW BEGIN UPDATE a SET t = 'x' WHERE id = NEW.id; END;`;
+
+test('트리거 밖에 홀로 선 END 는 기동을 멈춘다 — COMMIT 과 같은 뜻이다', () => {
+  const db = openDatabase(':memory:');
+  const dir = migrationsDir({
+    '001_x.sql':
+      'CREATE TABLE a (id INTEGER PRIMARY KEY, t TEXT);\nEND;\nCREATE TABLE b (id INTEGER);',
+  });
+
+  expect(() => runMigrations(db, dir)).toThrow(/트랜잭션을 직접 다루면 안 됩니다.*\(END\)/s);
+  // 그냥 두면 END 가 바깥 트랜잭션을 끝내, 뒤 파일이 실패해도 여기까지가 그대로 남고
+  // schema_migrations 에는 적용된 것으로 기록된다 — 로컬 DB 를 지우기 전까지 회복되지 않는다.
+  expect(tableNames(db)).not.toContain('a');
+  expect(tableNames(db)).not.toContain('b');
+  expect(db.prepare('SELECT COUNT(*) c FROM schema_migrations').get()).toMatchObject({ c: 0 });
+});
+
+test('트리거를 다 닫은 뒤에 오는 END 도 잡는다', () => {
+  const db = openDatabase(':memory:');
+  const dir = migrationsDir({
+    '001_x.sql': `CREATE TABLE a (id INTEGER PRIMARY KEY, t TEXT);\n${TRIGGER('tg')}\nEND;`,
+  });
+
+  expect(() => runMigrations(db, dir)).toThrow(/트랜잭션을 직접 다루면 안 됩니다.*\(END\)/s);
+});
+
+test('트리거가 여러 개여도 각 END 를 본문 닫기로 읽는다', () => {
+  const db = openDatabase(':memory:');
+  const dir = migrationsDir({
+    '001_x.sql': [
+      'CREATE TABLE a (id INTEGER PRIMARY KEY, t TEXT);',
+      TRIGGER('tg1'),
+      TRIGGER('tg2', 'CREATE TRIGGER IF NOT EXISTS tg2'),
+      TRIGGER('tg3', 'CREATE TEMP TRIGGER tg3'),
+      TRIGGER('tg4', 'CREATE TEMPORARY TRIGGER tg4'),
+      TRIGGER('tg5', 'CREATE /* 주석이 끼어도 트리거다 */ TRIGGER tg5'),
+    ].join('\n'),
+  });
+
+  expect(runMigrations(db, dir)).toEqual(['001_x.sql']);
+});
+
+test('본문이 여러 문장인 트리거도 막지 않는다 — 본문 문장은 문장 맨 앞이 아니다', () => {
+  const db = openDatabase(':memory:');
+  const dir = migrationsDir({
+    '001_x.sql': `
+      CREATE TABLE a (id INTEGER PRIMARY KEY, t TEXT);
+      CREATE TRIGGER tg BEFORE INSERT ON a
+      FOR EACH ROW WHEN NEW.id < 0
+      BEGIN
+        UPDATE a SET t = 'x' WHERE id = NEW.id;
+        SELECT RAISE(ROLLBACK, '음수 id 는 받지 않는다');
+      END;
+    `,
+  });
+
+  expect(runMigrations(db, dir)).toEqual(['001_x.sql']);
+});
+
+test('CREATE 뒤에 주석이 아무리 많아도 검사가 끝난다', () => {
+  const db = openDatabase(':memory:');
+  const dir = migrationsDir({
+    // 트리거인지 보려고 CREATE 와 TRIGGER 사이의 주석을 넘어가는데, 그 부분이 되짚기에 약하면
+    // TRIGGER 가 아닌 CREATE(여기서는 TABLE) 마다 경우의 수가 폭발해 기동이 영영 끝나지 않는다.
+    '001_x.sql': `CREATE ${'/* 왜 이 테이블이 필요한지 */'.repeat(2000)} TABLE a (id INTEGER);`,
+  });
+
+  expect(runMigrations(db, dir)).toEqual(['001_x.sql']);
+  expect(tableNames(db)).toContain('a');
+});
+
+test('END 없이 트리거가 열린 채 파일이 끝나도 검사가 멈추지 않는다', () => {
+  const db = openDatabase(':memory:');
+  const dir = migrationsDir({
+    '001_x.sql':
+      "CREATE TABLE a (id INTEGER PRIMARY KEY, t TEXT);\nCREATE TRIGGER tg AFTER INSERT ON a BEGIN UPDATE a SET t = 'x';",
+  });
+
+  // 검사기가 붙잡고 도는 일 없이, 문법 오류로 넘어가 SQLite 가 잡는다.
+  expect(() => runMigrations(db, dir)).toThrow(/마이그레이션 적용 실패/);
+});
+
 test('VACUUM 은 기동을 멈춘다 — 트랜잭션 안에서는 실행 자체가 막힌다', () => {
   const db = openDatabase(':memory:');
   const dir = migrationsDir({

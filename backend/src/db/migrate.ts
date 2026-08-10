@@ -22,13 +22,42 @@ const FILE_NAME_PATTERN = /^(\d{3,})_[a-z0-9-]+\.sql$/;
  * 뒤따르는 문장과 적용 기록이 트랜잭션 밖으로 새어 나간다 — 되돌릴 수 없게 되고, 실패했는데도
  * 적용된 것으로 기록되는 상태가 남는다. 문서로만 금지하면 지켜졌는지 아무도 확인하지 않는다.
  *
- * 트리거 끝의 `END` 는 트랜잭션 제어가 아니므로 `END` 단독은 대상에서 빼고 `END TRANSACTION`
- * 만 본다.
+ * 단독 `END` 도 막는다 — SQLite 에서 `COMMIT` 과 **같은 뜻**이다. 다만 트리거 본문을 닫는 `END`
+ * 가 같은 모양이라, 지금 트리거 본문 안인지를 기억하며 트리거 **밖에** 홀로 선 것만 고른다
+ * (findTransactionControl). 예전에는 그 둘을 구분할 수 없어 단독 `END` 를 통째로 뺐는데, 그래서
+ * 파일 안의 `END;` 한 줄이 바깥 트랜잭션을 끝내고도 검사를 통과했다 — 뒤 파일이 실패해도 앞
+ * 내용이 남고, 실패한 마이그레이션이 적용된 것으로 기록됐다. 이 검사가 막으려던 상황 그 자체다.
  *
- * 아래 두 패턴은 sticky(`y`) 라 statementStarts 가 알려준 **문장 맨 앞에서만** 맞춰본다.
+ * 아래 패턴들은 sticky(`y`) 라 statementStarts 가 알려준 **문장 맨 앞에서만** 맞춰본다.
  */
 const TRANSACTION_CONTROL_PATTERN =
   /(BEGIN|COMMIT|END\s+TRANSACTION|ROLLBACK|SAVEPOINT|RELEASE)\b/iy;
+
+/**
+ * 키워드 사이에 올 수 있는 것 — 공백과 주석.
+ *
+ * 세 갈래 모두 **어느 위치에서든 맞는 방법이 하나뿐**이어야 한다. 그렇지 않으면 뒤따르는
+ * `TRIGGER` 가 안 맞을 때(`CREATE … TABLE` 처럼 흔한 경우다) 정규식이 가능한 조합을 전부
+ * 되짚어보며 폭주한다. 블록 주석 안을 게으른 `[\s\S]*?` 로 두면 그 자리에서 끝낼 수도, 뒤의
+ * 닫는 기호를 넘어 다음 주석까지 삼킬 수도 있어 경우의 수가 주석 개수만큼 생기고, 바깥 `+` 와
+ * 곱해져 사실상 멈춘다 — `CREATE` 뒤에 주석 5000개를 둔 파일이 끝나지 않았다. 그래서 별표를
+ * 만나되 닫는 기호는 아닐 때만 넘어가는 형태로 적어 갈림길을 없앤다. 한 줄 주석도 `[^\n]` 이
+ * 줄을 못 넘고 `\n` 이 필수라 같은 성질을 갖는다.
+ */
+const KEYWORD_GAP = String.raw`(?:\s|--[^\n]*\n|/\*(?:[^*]|\*(?!/))*\*/)+`;
+
+/**
+ * 트리거를 만드는 문장의 머리. 이 문장 다음부터 트리거 본문으로 본다.
+ *
+ * `IF NOT EXISTS` 는 `TRIGGER` **뒤에** 오므로 여기서 볼 것이 없다.
+ */
+const TRIGGER_HEAD_PATTERN = new RegExp(
+  `CREATE${KEYWORD_GAP}(?:(?:TEMP|TEMPORARY)${KEYWORD_GAP})?TRIGGER\\b`,
+  'iy',
+);
+
+/** 트리거 본문 안에서는 본문을 닫는 `END`, 밖에서는 `COMMIT` 인 `END`. */
+const END_PATTERN = /END\b/iy;
 
 /**
  * 같은 트랜잭션 때문에 **효과가 사라지는** 문장을 막는다.
@@ -128,13 +157,59 @@ function skipQuoted(sql: string, openIndex: number, closer: string): number {
   return sql.length;
 }
 
+/** 이 문장 맨 앞에 걸린 키워드를 오류 메시지에 쓸 형태로 돌려준다. */
+function matchKeywordAt(sql: string, start: number, pattern: RegExp): string | null {
+  pattern.lastIndex = start;
+  const match = pattern.exec(sql);
+  return match === null ? null : match[1]!.replace(/\s+/g, ' ').toUpperCase();
+}
+
+/** 이 문장 맨 앞에 패턴이 맞는지만 본다. */
+function matchesAt(sql: string, start: number, pattern: RegExp): boolean {
+  pattern.lastIndex = start;
+  return pattern.test(sql);
+}
+
 /** 문장 맨 앞에 걸린 첫 금지 키워드를 오류 메시지에 쓸 형태로 돌려준다. */
 function findStatementKeyword(sql: string, pattern: RegExp): string | null {
   for (const start of statementStarts(sql)) {
-    pattern.lastIndex = start;
-    const match = pattern.exec(sql);
-    if (match !== null) return match[1]!.replace(/\s+/g, ' ').toUpperCase();
+    const keyword = matchKeywordAt(sql, start, pattern);
+    if (keyword !== null) return keyword;
   }
+  return null;
+}
+
+/**
+ * 트랜잭션 제어문을 찾는다. 단독 `END` 는 **트리거 본문 밖**에 있을 때만 걸린다.
+ *
+ * 트리거 본문 안의 문장들도 statementStarts 에 잡힌다 — 본문의 `;` 뒤가 새 문장 시작이 되기
+ * 때문이다. 그래도 검사는 문장 **맨 앞**만 보므로 `SELECT RAISE(ROLLBACK, …)` 같은 본문 문장은
+ * 걸리지 않는다. 본문 맨 앞에 진짜 트랜잭션 제어문이 오는 것은 유효한 SQL 이 아니라, 그대로
+ * 막아도 쓸 수 있는 문장을 잃지 않는다.
+ *
+ * 트리거가 닫히지 않은 채 파일이 끝나면 그 상태로 끝난다. 문장 목록이 유한하므로 더 볼 것이
+ * 없고, 그런 파일은 어차피 적용할 때 SQLite 가 문법 오류로 잡는다.
+ */
+function findTransactionControl(sql: string): string | null {
+  let insideTrigger = false;
+
+  for (const start of statementStarts(sql)) {
+    // 트리거 안이든 밖이든 `COMMIT`·`BEGIN` 같은 것은 그대로 막는다. 여기를 트리거 상태에
+    // 걸어두면 트리거 머리를 잘못 읽은 순간 진짜 제어문까지 함께 놓친다.
+    const keyword = matchKeywordAt(sql, start, TRANSACTION_CONTROL_PATTERN);
+    if (keyword !== null) return keyword;
+
+    if (insideTrigger) {
+      if (matchesAt(sql, start, END_PATTERN)) insideTrigger = false;
+      continue;
+    }
+    if (matchesAt(sql, start, TRIGGER_HEAD_PATTERN)) {
+      insideTrigger = true;
+      continue;
+    }
+    if (matchesAt(sql, start, END_PATTERN)) return 'END';
+  }
+
   return null;
 }
 
@@ -224,13 +299,20 @@ function readMigrationFiles(migrationsDir: string): MigrationFile[] {
 }
 
 function assertNoTransactionControl(name: string, sql: string): void {
-  const keyword = findStatementKeyword(sql, TRANSACTION_CONTROL_PATTERN);
+  const keyword = findTransactionControl(sql);
   if (keyword === null) return;
+
+  // `END` 만으로도 걸리는 이유는 한 번 더 짚어준다 — 트랜잭션 제어문으로 읽히지 않는 모양이라
+  // 메시지에 키워드만 적어두면 왜 멈췄는지 알기 어렵다.
+  const hint =
+    keyword === 'END'
+      ? ` 단독 END 는 SQLite 에서 COMMIT 과 같은 뜻입니다 — 트리거 본문을 닫는 END 는 걸리지 않습니다.`
+      : '';
 
   throw new Error(
     `마이그레이션 파일 안에서 트랜잭션을 직접 다루면 안 됩니다: ${name} (${keyword}). ` +
       `적용하는 쪽이 파일 전체를 하나의 트랜잭션으로 감쌉니다 — 파일이 트랜잭션을 끝내면 ` +
-      `되돌릴 수 없게 되고, 실패한 마이그레이션이 적용된 것으로 기록됩니다.`,
+      `되돌릴 수 없게 되고, 실패한 마이그레이션이 적용된 것으로 기록됩니다.${hint}`,
   );
 }
 
