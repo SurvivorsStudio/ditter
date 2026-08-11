@@ -1,26 +1,30 @@
 # STEP 9C · DAG 스펙과 저장
 
 > **상위**: [STEP 9 · 파이프라인 기반](step-09-pipeline-foundation.md)
-> **시작 조건**: **zod 스펙은 mock으로 선행**. 저장·검증 구현은 [9A](step-09a-write-boundary.md) 이후
+> **시작 조건**: **DAG 스펙(Pydantic 모델)은 mock으로 선행**. 저장·검증 구현은 [9A](step-09a-write-boundary.md) 이후
 
 ## 목표
 
-파이프라인 하나를 **자료구조로 표현하고, 저장하고, 검증**한다. 이 스펙을 프런트(캔버스)·
-백엔드(저장)·워커(실행) 셋이 모두 읽는다.
+파이프라인 하나를 **자료구조로 표현하고, 저장하고, 검증**한다. 이 스펙을 백엔드(저장)·
+워커(실행)가 읽고, 프런트(캔버스)는 여기서 파생된 타입을 읽는다.
 
-## ⚡ zod 스펙 자체는 순수 타입이라 먼저 짤 수 있다
+## ⚡ DAG 스펙 자체는 순수 타입이라 먼저 짤 수 있다
 
 [9B](step-09b-connectors.md)와 같은 이유다. 다만 **저장 검증은 9A가 만든 `role`·`adapter_type`을
 읽어야** 하므로 그 부분만 9A를 기다린다.
 
 ## 하는 일
 
-- `packages/shared-types`에 zod DAG 스키마 **한 벌** ([dag-and-nodes.md](../pipeline/dag-and-nodes.md))
-  — 프런트·백엔드·워커가 같은 정의를 import 한다. **복제하면 반드시 어긋난다**
-- **zod 스키마를 함수 인자로 받을 때 `z.ZodType<T>`가 아니라 `S extends z.ZodTypeAny`로 받는다.**
-  전자는 `.default()`가 붙은 필드를 optional로 새어나가게 하고, DAG 스펙은 기본값이 많아 이 실수가
-  곧장 런타임 `undefined`가 된다
-- **노드 타입 ↔ `adapter_type` 대응표**를 `packages/shared-types`에서 파생시킨다. 화면과 백엔드가
+- 공유 Python 패키지(`packages/dag-spec`)에 **Pydantic v2 DAG 모델 한 벌**
+  ([dag-and-nodes.md](../pipeline/dag-and-nodes.md)) — 백엔드·워커가 같은 정의를 import 한다.
+  프런트엔드는 백엔드 OpenAPI 스펙에서 생성한 타입을 쓴다
+  ([project-structure.md](../conventions/project-structure.md#프런트엔드-백엔드-타입-공유)).
+  **복제하면 반드시 어긋난다**
+- **파싱 헬퍼가 모델 타입을 인자로 받을 때 `type[BaseModel]`이 아니라 `TypeVar` 바운드로 받는다.**
+  전자는 반환 타입이 `BaseModel`로 좁아져 서브클래스 필드 접근이 막히고, DAG 노드마다 필드가
+  달라 이 실수가 곧장 타입 체커 무력화로 이어진다 ([dag-and-nodes.md](../pipeline/dag-and-nodes.md)의
+  예시)
+- **노드 타입 ↔ `adapter_type` 대응표**를 `packages/dag-spec`에서 파생시킨다. 화면과 백엔드가
   각자 매핑을 만들면 어긋난다 — `target.file` ↔ `local_file`처럼 이름이 다른 쌍이 있다
 - `note.*`는 **`NOTE_KINDS` 한 상수**에 모으고 위상 정렬·실행·DAG 검증·노드 수 집계에서 일괄
   제외한다. 지점마다 하드코딩하면 하나를 빼먹고, "메모를 붙였더니 검증에 실패한다"가 된다
@@ -32,7 +36,8 @@
 
 ## 완료 조건
 
-1. `packages/shared-types`의 zod 정의 **한 벌**로 프런트·백엔드·워커가 같은 DAG를 파싱한다.
+1. `packages/dag-spec`의 Pydantic 정의 **한 벌**로 백엔드·워커가 같은 DAG를 파싱하고, 프런트는
+   거기서 생성된 타입을 쓴다.
 2. 타깃 노드에 `role='source'` 커넥션을 붙인 정의가 **저장 거부**된다.
 3. `source.postgres` 노드에 `http_json` 커넥션을 붙인 정의가 **저장 거부**된다.
 4. 소스 `query`에 `WITH t AS (DELETE FROM users RETURNING *) SELECT * FROM t`를 넣으면

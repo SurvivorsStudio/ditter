@@ -8,8 +8,9 @@
 1A의 커넥션과 1B의 검증기를 **하나의 API 표면으로 합친다.** 이 문서가 끝나면 STEP 1이 끝난다.
 
 여기서 나오는 스키마 JSON이 **에디터 자동완성(STEP 2)과 AI 컨텍스트(STEP 3)의 입력**이다. 그래서
-출력 형태를 `packages/shared-types`에 먼저 못 박고 시작한다 — STEP 2·3이 그 타입을 보고 mock을
-만든다.
+출력 형태를 **백엔드 Pydantic 응답 모델로 먼저 못 박고 시작한다** — STEP 2의 프런트는 여기서 나온
+OpenAPI 스펙으로 타입을 생성해 mock을 만들고([project-structure.md](../conventions/project-structure.md#프런트엔드-백엔드-타입-공유)),
+STEP 3은 같은 모델을 Python에서 바로 import한다.
 
 ## 하는 일
 
@@ -23,7 +24,7 @@
     않는다 ([connections](../schema/connections.md))
 - 내부 카탈로그 쿼리는 **파라미터 바인딩을 강제**하고 문자열 연결로 조립하지 않는다
   ([P1](../policy/internal-vs-user-query-injection.md))
-- 스키마 조회 결과 타입을 `packages/shared-types`에 정의한다
+- 스키마 조회 결과를 Pydantic 응답 모델로 정의한다 (프런트 타입은 여기서 생성된다)
 
 ## 완료 조건
 

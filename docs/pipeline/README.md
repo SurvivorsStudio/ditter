@@ -4,9 +4,8 @@
 Application Integration) 기능**. 사용자는 브라우저에서 **드래그앤드롭 캔버스**로 파이프라인을
 구성하고 배치로 실행한다.
 
-이 문서군은 별도 프로젝트로 설계됐던 EAI 플랫폼 청사진을 DITTER의 TypeScript 스택으로 번역한
-것이다. 원본 청사진의 **설계 결정과 함정은 그대로 살리되**, 구현 스택은
-[docs/conventions](../conventions/README.md)를 따른다.
+이 문서군은 별도 프로젝트로 설계됐던 EAI 플랫폼 청사진에서 왔다. 원본 청사진의 **설계 결정과
+함정은 그대로 살린다** — 자세한 경위는 [아래](#청사진과-스택이-같다)에 있다.
 
 ## 왜 SQL 콘솔에 파이프라인이 붙는가
 
@@ -57,12 +56,12 @@ DITTER의 기존 여섯 기능(F1~F6)은 **"프로덕션 DB를 안전하게 읽�
 ## 아키텍처
 
 ```
-[웹 React Flow 캔버스]
+[웹 React Flow 캔버스 (TypeScript)]
    │  REST · WebSocket
    ▼
-[Fastify 백엔드] ──enqueue──▶ [Redis  잡 큐 · WS pub/sub]
+[FastAPI 백엔드] ──enqueue──▶ [Redis  큐 · WS pub/sub]
    │                              │ consume
-   └──▶ [SQLite  메타 저장] ◀─상태갱신─ [Worker  BullMQ · DAG 엔진]
+   └──▶ [SQLite  메타 저장] ◀─상태갱신─ [Celery 워커 · DAG 엔진]
                                         │ build()
                                         ▼
                                   [커넥터 레지스트리]
@@ -75,36 +74,43 @@ DITTER의 기존 여섯 기능(F1~F6)은 **"프로덕션 DB를 안전하게 읽�
 
 ### 의존 방향 (중요)
 
-원본 청사진이 가장 강하게 경고하는 지점이며, 스택을 바꿔도 그대로 적용된다.
+원본 청사진이 가장 강하게 경고하는 지점이며, 지금도 그대로 적용된다.
 
-- **백엔드는 워커 코드를 import 하지 않는다.** 큐에 잡 이름(`pipeline.execute`)과 페이로드만 넣는다.
+- **백엔드는 워커 코드를 import 하지 않는다.** 큐에 태스크 이름(`pipeline.execute`)과 페이로드만 넣는다.
 - 반대로 **워커는 메타 저장(SQLite)을 직접 갱신**하므로 백엔드의 모델·DAG 스펙에 의존한다.
-- **DAG 스펙은 `packages/shared-types`에 한 벌만 둔다.** 백엔드·워커·프런트가 같은 zod 스키마를
-  import 한다. 정의를 복제하면 **반드시** 어긋난다.
-- 커넥터는 백엔드·워커가 공유하는 순수 라이브러리다. Fastify도 BullMQ도 모른다.
+- **DAG 스펙은 공유 Python 패키지(`packages/dag-spec`)에 Pydantic v2 모델로 한 벌만 둔다.**
+  백엔드·워커가 같은 정의를 import 한다. 프런트엔드는 언어가 달라 직접 import하지 못하므로,
+  백엔드의 OpenAPI 스펙에서 생성한 TypeScript 타입을 쓴다
+  ([project-structure.md](../conventions/project-structure.md#프런트엔드-백엔드-타입-공유)). 정의를
+  복제하면 **반드시** 어긋난다.
+- 커넥터는 백엔드·워커가 공유하는 순수 라이브러리다. FastAPI도 Celery도 모른다.
 
-## 청사진 → DITTER 스택 대응
+## 청사진과 스택이 같다
 
-원본 청사진은 Python 기반이었다. DITTER는 TypeScript 모노레포이므로 다음과 같이 번역한다.
-**설계는 그대로, 도구만 바꾼다.**
+원본 청사진은 **Python 기반**이었다. DITTER 백엔드가 TypeScript/Fastify였던 동안에는 아래 표로
+"설계는 그대로, 도구만 바꾼다"는 번역을 유지했지만, **백엔드를 Python으로 결정하면서 그 번역이
+필요 없어졌다** — 청사진의 스택을 그대로 쓴다.
 
-| 영역 | 청사진 (Python) | DITTER (TypeScript) | 비고 |
-|---|---|---|---|
-| 백엔드 | FastAPI | **Fastify** | 기존 백엔드에 라우터 추가 |
-| 스키마 검증 | Pydantic v2 | **zod** | 이미 쓰는 검증기 |
-| 큐/워커 | Celery + Redis | **BullMQ + Redis** | Node 생태계 표준 |
-| 메타 저장 | PostgreSQL | **SQLite (WAL)** | 아래 "메타 저장" 주의 참고 |
-| ORM | SQLAlchemy | 기존 SQLite 접근 계층 | 파라미터 바인딩 강제 (P1) |
-| 마이그레이션 | alembic | 기존 마이그레이션 방식 | |
-| 캔버스 | React Flow (`@xyflow/react`) | **동일** | 프런트가 이미 React |
-| 캔버스 상태 | Zustand | **Zustand** | 캔버스 전용 스토어 신규 |
-| DB 드라이버 | psycopg3 / PyMySQL | **postgres.js** | 기존 어댑터 재사용 |
-| 오브젝트 스토리지 | boto3 | `@aws-sdk/client-s3` | |
-| 시크릿 암호화 | Fernet / AWS KMS | 기존 자격증명 암호화 (P4) | 새 메커니즘을 만들지 않는다 |
-| 인증·인가 | OAuth2/JWT + Argon2id | 기존 인증 (STEP 8) | 새 메커니즘을 만들지 않는다 |
-| 에이전트 노출 | FastMCP | MCP TypeScript SDK | 선택 — MVP 필수 아님 |
-| SAP | pyrfc + 사이드카 | **범위 밖** | |
-| CDC | Debezium + Kafka | **범위 밖** | |
+| 영역 | 청사진이자 지금 DITTER의 스택 | 비고 |
+|---|---|---|
+| 백엔드 | **FastAPI** | |
+| 스키마 검증 | **Pydantic v2** | |
+| 큐/워커 | **Celery + Redis** | |
+| 메타 저장 | **SQLite (WAL)** | 청사진은 "메타DB에 SQLite 불가"라고 못 박았다 — DITTER가 왜 그런데도 SQLite를 쓰는지는 [아래](#️-메타-저장을-sqlite로-두는-것의-한계) 참고 |
+| ORM | **SQLAlchemy** | 파라미터 바인딩 강제 (P1) |
+| 마이그레이션 | **alembic** | |
+| 캔버스 | React Flow (`@xyflow/react`) | 프런트만 TypeScript — 캔버스는 언어가 갈리는 유일한 지점 |
+| 캔버스 상태 | Zustand | 캔버스 전용 스토어 |
+| DB 드라이버 | **psycopg3** (PostgreSQL) · **PyMySQL**(MySQL, [이기종 쿼리엔진](../todo/step-02a-federated-query-engine.md)) | |
+| 오브젝트 스토리지 | **boto3** | |
+| 시크릿 암호화 | **Fernet / AWS KMS** | 자격증명 관리(P4)의 실제 구현 |
+| 인증·인가 | **OAuth2/JWT + Argon2id** | STEP 8에서 구현 |
+| 에이전트 노출 | **FastMCP** | 선택 — MVP 필수 아님. Python이라 번역 없이 그대로 쓴다 |
+| SAP | pyrfc + 사이드카 | **범위 밖** |
+| CDC | Debezium + Kafka | **범위 밖** |
+
+프런트엔드(React + Vite)만 여전히 TypeScript다. 이 경계와 타입을 공유하는 방법은
+[project-structure.md](../conventions/project-structure.md)에 있다.
 
 ### ⚠️ 메타 저장을 SQLite로 두는 것의 한계
 

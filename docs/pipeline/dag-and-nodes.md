@@ -5,33 +5,42 @@
 
 ## 스펙은 한 벌만 존재한다
 
-**DAG 스펙은 `packages/shared-types`에 zod 스키마로 한 벌만 둔다.** 세 곳이 각자 정의를 갖는
-순간 어긋난다 — 이건 가능성이 아니라 시간 문제다.
+**DAG 스펙은 공유 Python 패키지(`packages/dag-spec`)에 Pydantic v2 모델로 한 벌만 둔다.**
+백엔드·워커가 각자 정의를 갖는 순간 어긋난다 — 이건 가능성이 아니라 시간 문제다. 프런트엔드는
+언어가 달라 이 패키지를 직접 import하지 못하므로, 백엔드 OpenAPI 스펙에서 생성한 타입을 쓴다
+([project-structure.md](../conventions/project-structure.md#프런트엔드-백엔드-타입-공유)).
 
 ```
-packages/shared-types/src/pipeline/dag.ts   ← 유일한 정의
-        ├── frontend  : 캔버스가 노드를 만들고 검증
-        ├── backend   : 저장 전 검증, 실행 전 검증
-        └── worker    : 실행 직전 재파싱
+packages/dag_spec/dag.py                    ← 유일한 정의 (Pydantic v2)
+        ├── backend   : 저장 전 검증, 실행 전 검증 (직접 import)
+        ├── worker    : 실행 직전 재파싱 (직접 import)
+        └── frontend  : OpenAPI에서 생성된 타입으로 캔버스가 노드를 만들고 검증 (간접)
 ```
 
 워커는 큐에서 꺼낸 페이로드를 **그대로 믿지 않고 다시 파싱한다.** 백엔드가 검증했더라도, 큐에
 들어간 시점과 실행 시점 사이에 스펙 버전이 달라질 수 있다.
 
-### ⚠️ zod 스키마를 함수 인자로 받을 때
+### ⚠️ 모델 타입을 함수 인자로 받을 때
 
 DAG 스펙을 다루는 헬퍼를 만들 때 자주 밟는 함정이다.
 
-```ts
-// ✗ 나쁨 — .default()가 optional로 새어나가 타입이 실제와 어긋난다
-function parseNode<T>(schema: z.ZodType<T>, raw: unknown): T { ... }
+```py
+from typing import TypeVar
+from pydantic import BaseModel
 
-// ✓ 좋음 — 스키마 타입을 그대로 보존한다
-function parseNode<S extends z.ZodTypeAny>(schema: S, raw: unknown): z.infer<S> { ... }
+# ✗ 나쁨 — 반환 타입이 BaseModel로 좁아져 서브클래스 전용 필드에 타입 체커가 접근을 막는다
+def parse_node(model: type[BaseModel], raw: object) -> BaseModel: ...
+
+# ✓ 좋음 — 넘긴 모델 타입 그대로 보존한다
+T = TypeVar("T", bound=BaseModel)
+
+def parse_node(model: type[T], raw: object) -> T:
+    return model.model_validate(raw)
 ```
 
-`z.ZodType<T>`로 받으면 `.default()`가 붙은 필드가 결과 타입에서 optional이 된다. DAG 스펙은
-기본값이 많아서(모드, 배치 크기, 타임아웃) 이 실수가 곧장 런타임 `undefined`로 이어진다.
+`type[BaseModel]`로 받으면 호출부가 `SourcePostgresNode`를 넘겨도 반환 타입은 `BaseModel`이 되어
+그 노드 전용 필드(`table`, `query` 등)에 mypy가 접근을 막는다. DAG 스펙은 노드 종류마다 필드가
+크게 달라서 이 실수가 곧장 타입 체크 무력화(호출부의 `# type: ignore` 남발)로 이어진다.
 
 ## 노드 종류
 
@@ -93,7 +102,10 @@ function parseNode<S extends z.ZodTypeAny>(schema: S, raw: unknown): z.infer<S> 
 - **`local_file`은 타깃 전용이다.** `source.local_file` 노드는 두지 않는다 — 파일을 소스로 읽는
   기능은 MVP 범위 밖이다.
 - 노드 이름(`target.file`)과 커넥터 이름(`local_file`)이 다른 것은 위 표가 유일한 대응 근거다.
-  화면·백엔드가 각자 매핑을 만들지 않도록 이 표를 `packages/shared-types`에서 파생시킨다.
+  이 표는 `packages/dag-spec`에 Python 상수(`dict[NodeType, ConnectorType]`)로 한 벌만 두고,
+  백엔드·워커는 직접 import한다. 화면(TypeScript)은 언어가 달라 직접 import하지 못하므로,
+  백엔드가 이 표를 API로 노출하고(`GET /pipeline/node-types`) 캔버스가 그 응답으로 커넥션 선택
+  목록을 좁힌다 — 화면이 매핑을 손으로 다시 선언하지 않는다.
 
 읽기 전용 강제와 관련된 규칙(커넥션 역할, `adapter_type` 일치, 소스 쿼리 AST)은 **저장 시
 통과했더라도 실행 직전에 다시 검사한다.** 커넥션의 역할이나 종류가 저장 이후에 바뀌었을 수 있다.

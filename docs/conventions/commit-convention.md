@@ -8,10 +8,10 @@
 ### 1차 분할(필수): 영역 — `frontend/` · `backend/` · `worker/` · `packages/` · `docs/`
 
 - **한 커밋에는 아래 중 하나의 영역만** 포함한다. 경로가 **둘 이상**이면 **커밋을 나눈다**.
-  - **`frontend/`** — 프런트엔드 앱 (React + Vite 웹 콘솔 + 파이프라인 캔버스)
-  - **`backend/`** — 백엔드 앱 (Fastify — DB 어댑터, AI 컨텍스트 빌더, 위험 판정 등)
-  - **`worker/`** — BullMQ 워커 (파이프라인 DAG 실행) — [STEP 9](../todo/step-09-pipeline-foundation.md)에서 생긴다
-  - **`packages/`** — 여러 앱이 공유하는 패키지 — 공유 타입(`shared-types`), 커넥터 라이브러리(`pipeline-connectors`) ([project-structure.md](project-structure.md) 참고)
+  - **`frontend/`** — 프런트엔드 앱 (React + Vite 웹 콘솔 + 파이프라인 캔버스, TypeScript)
+  - **`backend/`** — 백엔드 앱 (FastAPI, Python — DB 어댑터, AI 컨텍스트 빌더, 위험 판정 등)
+  - **`worker/`** — Celery 워커 (파이프라인 DAG 실행, Python) — [STEP 9](../todo/step-09-pipeline-foundation.md)에서 생긴다
+  - **`packages/`** — 백엔드·워커가 공유하는 Python 패키지 — DAG 스펙(`dag-spec`), 커넥터 라이브러리(`pipeline-connectors`) ([project-structure.md](project-structure.md) 참고). 프런트엔드와의 타입 공유는 OpenAPI 코드 생성으로 하므로 이 영역에 들어가지 않는다
   - **`docs/`** — 개발 계획(`todo/`)·보안 정책(`policy/`)·컨벤션(`conventions/`)·스키마(`schema/`)·파이프라인 설계(`pipeline/`) 문서
 - **의도**: 되돌리기·리뷰·히스토리 탐색 시 "어느 층을 건드렸는지"가 커밋 단위로 바로 드러나게 한다.
 - **구현과 문서를 같은 과제로 묶는 경우에도**, **파일 경로 기준으로 커밋은 분리**한다(예: 위험 판정 로직 구현은 `backend/` 커밋, 완료 조건·정책 문구 갱신은 `docs/` 커밋). **한 PR**에 순서대로 올리면 된다.
