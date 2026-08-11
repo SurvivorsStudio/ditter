@@ -11,12 +11,21 @@
 // 호스트에서 직접 돌릴 때는 이게 필요 없다 — `npm run dev` 의 `--watch` 가 그대로 동작한다.
 
 import { spawn } from 'node:child_process';
-import { readdirSync, unwatchFile, watchFile } from 'node:fs';
+import { existsSync, readdirSync, unwatchFile, watchFile } from 'node:fs';
 import path from 'node:path';
 
 const BACKEND_ROOT = path.join(import.meta.dirname, '..');
 const SRC = path.join(BACKEND_ROOT, 'src');
 const ENTRY = path.join(SRC, 'index.ts');
+// 마이그레이션도 감시한다. 이건 편의가 아니라 정확성 문제다 — 스택을 띄워 둔 채 `git pull` 로
+// 남의 마이그레이션을 받으면, 재시작하지 않는 한 **옛 스키마 위에서 계속 돌아간다.** 기동할 때만
+// 적용되기 때문이다(src/db/migrate.ts). 여기를 보면 새 .sql 이 들어온 순간 재시작 → 적용된다.
+const MIGRATIONS = path.join(BACKEND_ROOT, 'migrations');
+/** @type {[dir: string, extension: string][]} */
+const WATCH_TARGETS = [
+  [SRC, '.ts'],
+  [MIGRATIONS, '.sql'],
+];
 const POLL_INTERVAL_MS = 300;
 // 저장 한 번이 여러 이벤트로 쪼개져 오는 경우를 한 번의 재시작으로 묶는다.
 const DEBOUNCE_MS = 100;
@@ -38,22 +47,27 @@ let shuttingDown = false;
 const intentionalKills = new WeakSet();
 
 /**
- * `src` 아래의 `.ts` 파일과 디렉토리를 모두 모은다. 디렉토리까지 보는 이유는 파일이 새로
+ * `dir` 아래에서 해당 확장자 파일과 디렉토리를 모두 모은다. 디렉토리까지 보는 이유는 파일이 새로
  * 생기거나 지워질 때 그 디렉토리의 mtime 이 바뀌기 때문이다 — 그래야 신규 파일도 잡힌다.
+ * 마이그레이션이 바로 이 경우다: `git pull` 로 들어오는 것은 항상 **새 파일**이다.
  */
-function collectPaths(dir) {
+function collectPaths(dir, extension) {
+  // 디렉토리가 없어도 워처는 계속 돈다. migrations/ 는 지금 비어 있을 수 있고, 없다고 해서
+  // 백엔드 개발을 막을 이유가 없다.
+  if (!existsSync(dir)) return [];
+
   const found = [dir];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) found.push(...collectPaths(full));
-    else if (entry.name.endsWith('.ts')) found.push(full);
+    if (entry.isDirectory()) found.push(...collectPaths(full, extension));
+    else if (entry.name.endsWith(extension)) found.push(full);
   }
   return found;
 }
 
 function rewatch() {
   for (const target of watched) unwatchFile(target);
-  watched = collectPaths(SRC);
+  watched = WATCH_TARGETS.flatMap(([dir, extension]) => collectPaths(dir, extension));
   for (const target of watched) {
     watchFile(target, { interval: POLL_INTERVAL_MS }, (curr, prev) => {
       // 폴링은 내용이 그대로여도 콜백이 돈다. mtime 이 실제로 움직였을 때만 재시작한다.
@@ -143,5 +157,6 @@ for (const signal of ['SIGTERM', 'SIGINT']) {
   });
 }
 
-console.log(`[dev-watch] ${SRC} 를 ${POLL_INTERVAL_MS}ms 간격으로 폴링한다`);
+const watchedDirs = WATCH_TARGETS.map(([dir]) => dir).join(', ');
+console.log(`[dev-watch] ${watchedDirs} 를 ${POLL_INTERVAL_MS}ms 간격으로 폴링한다`);
 enqueueRestart();

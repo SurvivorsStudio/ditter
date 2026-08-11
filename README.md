@@ -86,7 +86,8 @@ docs/                     계획·정책·컨벤션·스키마·파이프라인 
 ## 시작하기
 
 **앱은 Docker로 돌린다.** PostgreSQL까지 컨테이너 안에 있어서, 호스트에 Node나 PostgreSQL을
-따로 깔지 않아도 된다.
+따로 깔지 않아도 된다. 처음 합류했다면 [onboarding.md](onboarding.md)에 세팅부터 개발 흐름까지
+정리돼 있다.
 
 ```bash
 docker compose up
