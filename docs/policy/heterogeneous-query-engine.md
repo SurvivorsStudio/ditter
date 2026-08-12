@@ -72,7 +72,8 @@ F7의 "노드 미리보기"와 같은 패턴을 재사용한다 ([pipeline-write
 
 - 실행마다 **관련된 소스 커넥션 각각에 한 건씩** 감사 로그를 남긴다.
 - 여러 건이 "하나의 이기종 조회"였음을 나중에 묶어 볼 수 있도록 **공통 식별자**(예: `federated_query_id`)를
-  같이 남긴다. 컬럼 추가는 [audit-logs.md](../schema/audit-logs.md)에서 다룬다.
+  같이 남긴다. 컬럼 추가는 [STEP 2A](../todo/step-02a-federated-query-engine.md) 구현 시
+  [audit-logs.md](../schema/audit-logs.md)에 반영한다 — 아직 그 문서에는 없다.
 
 ## 엔진 선택 — DuckDB vs Polars (팀 결정 필요)
 
