@@ -197,24 +197,34 @@ STEP 0이 끝났으므로 아래는 **서로를 기다리지 않고** 동시에 
 > **타깃 환경(프레임워크)은 이미 정했다**: React/Vite(프런트엔드, TypeScript) +
 > FastAPI(백엔드, Python) + Celery/Redis(워커) ([docs/conventions/README.md](../conventions/README.md) 참고).
 
-1. AI 모델 기본값을 정한다.
-2. 자격증명 암호화 키 관리 방침을 정한다. ([credential-management.md](../policy/credential-management.md))
-3. HypoPG를 MVP에 넣을지 결정한다.
+### 결정 완료 (2026-08-12)
 
-   HypoPG는 PostgreSQL 확장으로, 인덱스를 실제로 만들지 않고 "만들었다고 가정"한 채 EXPLAIN을 돌려볼 수 있게 해준다. 세션 안에서만 유효하므로 프로덕션에 아무 영향이 없다.
+1. **AI 모델 기본값**: Anthropic(Claude)을 기본으로 고정한다. 로컬 모델 교체는 인터페이스만
+   열어두고 MVP에서 실제 구현하지 않는다.
+2. **자격증명 암호화 키 관리** ([credential-management.md](../policy/credential-management.md)):
+   MVP는 별도 서버를 두지 않고 로컬에서만 실행하므로, 마스터 키는 외부 시크릿 매니저 대신 각자
+   로컬 `.env`(git 비버전관리)에 평문으로 둔다. SQLite에 저장되는 자격증명 자체는 이 키로
+   여전히 암호화한다.
+3. **HypoPG**: MVP에 넣지 않는다. F4는 AI가 "이 인덱스를 만들면 빨라질 겁니다"라고 **말하는**
+   원안 그대로 간다.
 
-   - **현재 계획(F4)**: AI가 "이 인덱스를 만들면 빨라질 겁니다"라고 **말한다**
-   - **HypoPG 적용 시**: 가상 인덱스를 만들고 EXPLAIN을 다시 돌려 **"실행 계획이 실제로 이렇게 바뀝니다"를 보여준다**
+   (참고: HypoPG는 PostgreSQL 확장으로, 인덱스를 실제로 만들지 않고 "만들었다고 가정"한 채
+   EXPLAIN을 돌려볼 수 있게 해준다. 세션 안에서만 유효하므로 프로덕션에 아무 영향이 없다 —
+   다만 별도 설치가 필요한 확장이라 전제가 하나 늘어나는 것이 단점이라 이번엔 넣지 않는다.)
 
-   "추측"과 "검증된 제안"의 차이다. 단점은 별도 설치가 필요한 확장이라 전제가 하나 늘어난다는 것.
+4. **프로덕션 데이터가 외부 AI로 나가는 문제** ([ai-context-and-safety.md](../policy/ai-context-and-safety.md)):
+   로컬 모델 fallback을 실제로 구현하지 않는다. AI 연동은 인터페이스 뒤에 추상화해 두고,
+   "언제든 다른 provider·로컬 모델로 교체 가능하다"는 논리로 대회 발표에서 방어한다.
+5. **파이프라인 메타 저장 SQLite**: [pipeline/README.md](../pipeline/README.md#️-메타-저장을-sqlite로-두는-것의-한계)의
+   전제(단일 노드·워커 소수)와 지키는 조건(WAL 모드, 워커 동시성 2, 짧은 트랜잭션, 진행률은
+   Redis로 분리) · 탈출 조건(멀티 노드로 늘려야 하는 순간 PostgreSQL로 전환)을 그대로 확정한다.
+6. **F7 데모 범위**: 라이브 데모 시연은 **캔버스 구성 + 1회 실행(STEP 10)까지만** 보여준다.
+   STEP 11(스케줄·증분·재시작)은 데모 시연 항목에서 뺀다 — 단, STEP 12·13의 시작 조건에는
+   여전히 걸려 있으므로 **제출 전에는 완료해야 한다.** 데모 준비와 STEP 11 완성은 별도 트랙으로
+   병렬 진행한다.
 
-4. 프로덕션 데이터가 외부 AI로 나가는 문제를 어떻게 설명할지 정한다. ([ai-context-and-safety.md](../policy/ai-context-and-safety.md))
-5. **파이프라인 메타 저장을 SQLite로 갈지 확정한다.** 원본 EAI 청사진은 "큐 모드에서 SQLite 불가"라고
-   못 박았고, 우리는 단일 노드 전제로 SQLite를 유지하기로 했다. 이 전제와 탈출 조건(WAL 모드,
-   워커 동시성 상한, PostgreSQL 전환 시점)에 팀이 합의해야 한다.
-   ([pipeline/README.md](../pipeline/README.md#️-메타-저장을-sqlite로-두는-것의-한계))
-6. **F7을 어디까지 데모에 넣을지 정한다.** 캔버스 구성 + 1회 실행까지만 보여줄지, 스케줄·증분까지
-   보여줄지에 따라 STEP 11의 우선순위가 달라진다.
+### 미정 — 문서 검토만으로 결정 금지
+
 7. **이기종 쿼리엔진(STEP 2A)의 조인 엔진을 DuckDB로 할지 Polars로 할지 정한다.** DuckDB는
    `postgres_scanner`/`mysql_scanner`로 각 소스에 직접 attach해 표준 SQL 한 줄로 조인하지만
    커넥션 통제 지점을 그 확장에 맞춰 새로 만들어야 한다. Polars는 각 소스에서 추출한 결과를
