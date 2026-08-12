@@ -18,7 +18,7 @@
 | `records_read` | INTEGER | NOT NULL, DEFAULT 0 | |
 | `records_written` | INTEGER | NOT NULL, DEFAULT 0 | |
 | `error` | TEXT | NULL 허용 | 실패 요약. **자격증명이나 config 원문을 담지 않는다** ([credential-management.md](../policy/credential-management.md)) |
-| `job_id` | TEXT | NULL 허용 | 큐(BullMQ) 잡 ID. 취소·상태 조회에 쓴다 |
+| `job_id` | TEXT | NULL 허용 | 큐(Celery) 태스크 ID. 취소·상태 조회에 쓴다 |
 | `started_at` | TEXT (ISO8601) | NULL 허용 | 큐에서 꺼내진 시각. `pending` 동안은 NULL |
 | `finished_at` | TEXT (ISO8601) | NULL 허용 | |
 | `created_at` | TEXT (ISO8601) | NOT NULL, DEFAULT now | enqueue 시각 |

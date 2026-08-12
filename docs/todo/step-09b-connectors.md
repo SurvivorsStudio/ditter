@@ -10,18 +10,18 @@
 
 ## ⚡ 이 문서는 STEP 1·8을 기다리지 않는다
 
-`Connector` 인터페이스와 `ReadSpec`은 **순수 타입**이고, 커넥터 구현은 백엔드도 BullMQ도 모르는
+`Connector` 인터페이스와 `ReadSpec`은 **순수 타입**이고, 커넥터 구현은 백엔드도 Celery도 모르는
 **순수 라이브러리**다. [todo README](README.md)의 「지금 당장 착수할 것」 6번이 가리키는 것이
 이 문서다 — **이게 늦으면 STEP 9~11이 통째로 밀린다.**
 
 ## 하는 일
 
-- `packages/pipeline-connectors` 패키지 + `Connector` 인터페이스
+- `packages/pipeline-connectors` 패키지 + `Connector` 프로토콜(Python `Protocol`)
   ([connector-contract.md](../pipeline/connector-contract.md))
-- 레지스트리 + **동적 `import()` 지연 로딩** — 레지스트리를 import 했다고 AWS SDK가 같이 올라오면
-  안 된다
+- 레지스트리 + **`importlib.import_module()` 지연 로딩** — 레지스트리를 import 했다고 AWS SDK가
+  같이 올라오면 안 된다
 - 커넥터 4종: `postgres`(소스·타깃) · `s3` · `local_file` · `http_json`
-- **`read`는 반드시 `AsyncIterable`이다.** 배열을 반환하면 계약 위반이고, 실행 엔진의 스트리밍
+- **`read`는 반드시 `AsyncIterator`다.** 리스트를 반환하면 계약 위반이고, 실행 엔진의 스트리밍
   설계가 통째로 무력화된다
 - **소스 커넥터는 자체 접속을 열지 않는다.** [1A](step-01a-connection-registry.md)의 DB 어댑터를
   경유한다 — 읽기 전용 강제·`statement_timeout`·풀 상한이 전부 거기 붙어 있다. 단 콘솔용

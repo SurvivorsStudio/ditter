@@ -11,9 +11,9 @@
 
 ## 하는 일
 
-- Redis + BullMQ 배선. **백엔드는 워커 코드를 import 하지 않는다** — 잡 이름(`pipeline.execute`)과
+- Redis + Celery 배선. **백엔드는 워커 코드를 import 하지 않는다** — 태스크 이름(`pipeline.execute`)과
   페이로드만 큐에 넣는다 ([project-structure.md](../conventions/project-structure.md))
-- `worker/` 워크스페이스를 만들고 **루트 `package.json`의 `workspaces`에 등록**한다
+- `worker/` 앱을 만들고 백엔드와 같은 `packages/`(공유 Python 패키지)를 의존성으로 물린다
 - **타깃 주도 pull 스트리밍 엔진** ([execution-engine.md](../pipeline/execution-engine.md)) — 타깃이
   배치를 당겨오게 한다. 소스가 밀어내면 타깃이 느릴 때 중간 결과가 메모리에 쌓인다
 - 노드 구현: extract · transform(filter/map) · load

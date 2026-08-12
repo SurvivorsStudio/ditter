@@ -22,8 +22,8 @@ STEP 9는 다른 STEP 하나의 서너 배 분량이고, 그중 절반은 나머
 |---|---|---|
 | [9A 쓰기 경계 긋기](step-09a-write-boundary.md) | `role` 분리 · 라우터 앞단 차단 · 관리자 제한 | STEP 1 + 8 |
 | [9B 커넥터 패키지](step-09b-connectors.md) | `Connector` 계약 + 4종. **mock 선행 가능** | 없음 |
-| [9C DAG 스펙과 저장](step-09c-dag-spec.md) | zod 스펙 · 테이블 · 저장 검증. **스펙은 mock 선행 가능** | 스펙 없음 / 검증 9A |
-| [9D 실행 엔진과 워커](step-09d-execution-engine.md) | BullMQ · pull 스트리밍 · 잠금 · 감사 기록 | 9A + 9B + 9C |
+| [9C DAG 스펙과 저장](step-09c-dag-spec.md) | Pydantic DAG 모델 · 테이블 · 저장 검증. **스펙은 mock 선행 가능** | 스펙 없음 / 검증 9A |
+| [9D 실행 엔진과 워커](step-09d-execution-engine.md) | Celery · pull 스트리밍 · 잠금 · 감사 기록 | 9A + 9B + 9C |
 
 ```
         ┌──▶ 9B 커넥터 ─────────┐

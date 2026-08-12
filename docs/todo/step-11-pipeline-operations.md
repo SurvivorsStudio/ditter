@@ -14,7 +14,7 @@
 
 ### 스케줄
 
-- BullMQ repeatable job으로 cron 스케줄 실행 ([deployment.md](../pipeline/deployment.md))
+- Celery Beat로 cron 스케줄 실행 ([deployment.md](../pipeline/deployment.md))
 - `pipelines.timezone` 기준으로 cron 해석 — **서머타임에 실행이 밀리거나 겹치지 않게**
 - 스케줄 변경 시 **기존 반복 잡을 제거한 뒤 재등록** (유령 스케줄 방지)
 - `status='active'`인 파이프라인만 스케줄 대상

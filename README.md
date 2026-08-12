@@ -26,7 +26,7 @@ ditter는 **실제 DB를 읽는다.** 스키마, 데이터 규모, 인덱스, EX
 
 | # | 기능 | 한 줄 설명 |
 |---|---|---|
-| F1 | 웹 SQL 콘솔 (읽기 전용) | 브라우저에서 쿼리 작성·실행, 결과 표시 |
+| F1 | 웹 SQL 콘솔 (읽기 전용) | 브라우저에서 쿼리 작성·실행, 결과 표시 (+ 이기종 쿼리엔진으로 PostgreSQL·MySQL 조인) |
 | F2 | AI 쿼리 작성 보조 | 자연어 → SQL, 또는 작성 중인 SQL 개선 |
 | F3 | 실행 전 위험 예측 | 실행하기 전에 "이 쿼리 위험합니다" 경고 — **킬러 기능** |
 | F4 | EXPLAIN 해석 + 튜닝 제안 | 왜 느린지 설명하고 어떻게 고칠지 제안 |
@@ -34,8 +34,8 @@ ditter는 **실제 DB를 읽는다.** 스키마, 데이터 규모, 인덱스, EX
 | F6 | 감사 로그 | 누가 언제 무슨 쿼리를 실행했는지 기록 |
 | F7 | 데이터 파이프라인 | 드래그앤드롭으로 구성하는 배치 수집·적재 (증분 · 스케줄) |
 
-대상 DB는 PostgreSQL 하나이며, DB 접근 코드는 어댑터 인터페이스로 감싸 멀티 DB 확장을 염두에
-두고 있다.
+대상 DB는 PostgreSQL과 MySQL 둘이며(파이프라인의 소스·타깃은 여전히 PostgreSQL 하나), DB 접근
+코드는 어댑터 인터페이스로 감싸 멀티 DB 확장을 실제로 검증하고 있다.
 
 ## 데이터 파이프라인 (F7)
 
@@ -70,18 +70,25 @@ F7은 목적 저장소에 쓴다. 그래도 위 주장은 그대로다 — **사
 
 ## 기술 스택
 
-TypeScript 모노레포 — React + Vite(프런트엔드), Fastify(백엔드), PostgreSQL(대상 DB),
-SQLite(로컬 저장). 파이프라인이 붙으면 여기에 Redis + BullMQ(큐·워커)와
+React + Vite(프런트엔드, TypeScript) + FastAPI(백엔드, Python), 대상 DB는 PostgreSQL(+ 이기종
+쿼리엔진에서 MySQL), 로컬 저장은 SQLite다. 파이프라인이 붙으면 여기에 Redis + Celery(큐·워커)와
 React Flow(캔버스)가 더해진다. 자세한 구조는 [docs/conventions](docs/conventions/README.md) 참고.
 
+> ⚠️ **스택 결정 변경**: 백엔드는 원래 TypeScript/Fastify로 시작했으나 Python/FastAPI로
+> 바꾸기로 했다. 아래 구조·명령어는 **목표 설계**이며, [진행 상황](#진행-상황)에 실제 구현이
+> 어디까지 재작업됐는지 남긴다.
+
 ```
-backend/                  Fastify 백엔드 (:4000)
-frontend/                 React + Vite 웹 콘솔 + 파이프라인 캔버스 (:5173)
-worker/                   BullMQ 워커 — 파이프라인 실행 (STEP 9~)
-packages/shared-types/    프런트·백엔드·워커가 공유하는 타입 (DAG 스펙 포함)
-packages/pipeline-connectors/  커넥터 라이브러리 (백엔드·워커 공유)
+backend/                  FastAPI 백엔드 (:4000, Python)
+frontend/                 React + Vite 웹 콘솔 + 파이프라인 캔버스 (:5173, TypeScript)
+worker/                   Celery 워커 — 파이프라인 실행 (STEP 9~, Python)
+packages/dag-spec/        백엔드·워커가 공유하는 DAG 스펙 (Pydantic v2)
+packages/pipeline-connectors/  커넥터 라이브러리 (백엔드·워커 공유, Python)
 docs/                     계획·정책·컨벤션·스키마·파이프라인 설계
 ```
+
+프런트엔드는 백엔드의 OpenAPI 스펙에서 타입을 생성해 쓴다 — 손으로 다시 선언하지 않는다
+([project-structure.md](docs/conventions/project-structure.md#프런트엔드-백엔드-타입-공유)).
 
 ## 시작하기
 
@@ -98,7 +105,7 @@ docker compose up
 | 주소 | 무엇 |
 |---|---|
 | http://127.0.0.1:5173 | 웹 콘솔 (React + Vite) |
-| http://127.0.0.1:4000 | 백엔드 API (Fastify) |
+| http://127.0.0.1:4000 | 백엔드 API (**현재 구현은 Fastify** — FastAPI로 재작업 예정, 아래 [진행 상황](#진행-상황) 참고) |
 | `127.0.0.1:5432` | PostgreSQL — psql·GUI 클라이언트로 붙을 때 쓴다 |
 
 **소스는 bind mount라 고치면 바로 반영된다.** 프런트는 HMR로, 백엔드는 프로세스 재시작으로
@@ -154,12 +161,19 @@ npm run dev               # 백엔드 :4000 + 프런트 :5173
 
 ## 진행 상황
 
-**STEP 0(개발 환경) 완료** — 모노레포·CI 보안 게이트가 서 있고, `docker compose up`으로 세
-컨테이너가 뜨는 것과 `npm run dev` 양쪽 경로를 실제로 확인했다. 제품 기능은 아직 없다.
+**STEP 0(개발 환경)을 TypeScript/Fastify 백엔드로 완료했었다** — 모노레포·CI 보안 게이트가 서
+있고, `docker compose up`으로 세 컨테이너가 뜨는 것과 `npm run dev` 양쪽 경로를 실제로 확인했다.
+제품 기능은 아직 없었다.
+
+> ⚠️ **그 뒤 백엔드 스택을 Python(FastAPI)으로 바꾸기로 했다** ([docs/todo/step-00-dev-environment.md](docs/todo/step-00-dev-environment.md)
+> 상단 참고). `backend/` 워크스페이스와 관련 CI 단계는 재작업이 필요하다 — 아직 라우트 하나
+> (헬스체크) 수준이라 재작업 비용은 크지 않다. 프런트엔드·컨테이너 구성 원칙·보안 게이트는 그대로
+> 유효하며, 이 README의 실행 명령은 **아직 이전 스택 기준**이다.
 
 다음은 [STEP 1 DB 안전 접속](docs/todo/step-01-db-connection.md)이며 모든 것의 병목이다. 다만
-STEP 1을 기다리지 않고 **동시에 시작할 수 있는 작업이 셋 더 있다** — 읽기 전용 AST 검증기,
-감사 로그 + 인증, 커넥터 패키지 셋 다 순수 로직이라 DB도 백엔드도 필요 없다
+STEP 1을 기다리지 않고 **동시에 시작할 수 있는 작업이 넷 더 있다** — 읽기 전용 AST 검증기,
+감사 로그 + 인증, 커넥터 패키지, [이기종 쿼리엔진(STEP 2A)](docs/todo/step-02a-federated-query-engine.md)
+착수 준비는 순수 로직·설계 확정이라 DB도 백엔드도 필요 없다
 ([지금 당장 착수할 것](docs/todo/README.md#지금-당장-착수할-것)).
 
 진행 단계와 완료 조건은 [docs/todo](docs/todo/README.md)에서 추적한다.

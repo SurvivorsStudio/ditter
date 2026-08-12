@@ -1,6 +1,6 @@
 # STEP 12 · 🔒 보안 전수 점검
 
-**시작 조건**: STEP 6 + STEP 7 + STEP 8 + STEP 11 (구현이 모두 끝난 뒤)
+**시작 조건**: STEP 6 + STEP 7 + STEP 8 + STEP 11 + STEP 2A (구현이 모두 끝난 뒤)
 
 ## 목표
 
@@ -11,10 +11,12 @@
 ## 하는 일
 
 - [supply-chain-security.md](../policy/supply-chain-security.md) (S1~S9) 전수 점검
-- DB 접근 정책(P1~P9, `docs/policy` 각 파일) 전수 점검
+- DB 접근 정책(P1~P10, `docs/policy` 각 파일) 전수 점검
 - 컨테이너 하드닝: non-root 실행, 최소 베이스 이미지, Trivy 이미지 스캔 — **`worker` 컨테이너도 같은 기준으로**
-- Node permission model(`--permission`) 적용 — **한계를 알고 쓸 것** (`supply-chain-security.md`의 S6 참고)
-- SBOM 생성, `npm audit` 클린 확보
+- 프런트 빌드 도구에는 Node permission model(`--permission`)을 적용. 백엔드·워커(Python)는
+  대응하는 언어 기능이 없으므로 컨테이너 하드닝으로 흡수한다 — **한계를 알고 쓸 것**
+  (`supply-chain-security.md`의 S6 참고)
+- SBOM 생성, `npm audit`(프런트) + `pip-audit`(백엔드·워커) 클린 확보
 
 ## 점검 방식
 
@@ -46,4 +48,5 @@
 
 - 읽기 전용 강제와 자격증명 처리는 STEP 1에서 이미 2인 리뷰를 거쳤어야 한다
 - 파이프라인 쓰기 경계는 [STEP 9](step-09-pipeline-foundation.md)에서 이미 2인 리뷰를 거쳤어야 한다
-- 제출 전 SBOM + `npm audit` 클린 확보
+- 이기종 쿼리 엔진 경계(P10)는 [STEP 2A](step-02a-federated-query-engine.md)에서 이미 2인 리뷰를 거쳤어야 한다
+- 제출 전 SBOM + `npm audit`(프런트) + `pip-audit`(백엔드·워커) 클린 확보

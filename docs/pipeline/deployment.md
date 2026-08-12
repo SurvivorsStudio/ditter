@@ -8,21 +8,26 @@
 | 서비스 | 역할 | 파이프라인 없이도 필요한가 |
 |---|---|---|
 | `db` | 로컬 개발용 대상 PostgreSQL | 기존 |
-| `backend` | Fastify — REST · WebSocket · 큐 enqueue | 기존 |
+| `backend` | FastAPI — REST · WebSocket · 큐 enqueue | 기존 |
 | `frontend` | React + Vite | 기존 |
-| **`redis`** | 잡 큐 · 진행률 · 실행 잠금 | **신규** |
-| **`worker`** | BullMQ 워커 — DAG 실행 + cron 스케줄 | **신규** |
+| **`redis`** | 큐 · 진행률 · 실행 잠금 | **신규** |
+| **`worker`** | Celery 워커 — DAG 실행 + cron 스케줄(Beat 내장) | **신규** |
 
 **늘어나는 컨테이너는 이 둘뿐이다.** 스케줄러는 별도 프로세스로 만들지 않는다 — 아래 참고.
 
 ### scheduler를 워커에 합칠 것인가
 
-BullMQ의 repeatable job을 쓰면 별도 스케줄러 프로세스 없이 큐 자체가 cron을 관리한다. **MVP는
-이쪽을 택한다** — 프로세스가 하나 줄고, 스케줄과 큐가 같은 곳에 있어 상태가 갈라지지 않는다.
-따라서 `scheduler` 서비스는 compose 구성에 **없다**.
+Celery는 보통 `celery beat`를 별도 프로세스로 띄우지만, **`celery worker -B`로 beat를 워커
+프로세스에 내장**할 수 있다. **MVP는 이쪽을 택한다** — 프로세스가 하나 줄고, 스케줄과 실행이
+같은 곳에 있어 상태가 갈라지지 않는다. 따라서 `scheduler` 서비스는 compose 구성에 **없다**.
 
-대신 지켜야 할 것: repeatable job의 키는 **파이프라인 ID + cron 식**으로 만들고, 스케줄을 바꾸면
-**기존 repeatable job을 제거한 뒤 다시 등록한다.** 안 그러면 옛 스케줄이 유령처럼 남아 같은
+단일 워커 replica 전제에서만 안전한 선택이다 — beat 내장 인스턴스가 둘 이상이면 같은 스케줄이
+중복 트리거된다. **워커를 여러 replica로 늘려야 하면 그 시점에 `celery beat`를 별도 서비스로
+뺀다** (탈출 조건은 [SQLite 메타 저장의 한계](README.md#️-메타-저장을-sqlite로-두는-것의-한계)와
+같은 성격의 결정이다 — 단일 노드 전제가 깨지는 순간 갈라낸다).
+
+대신 지켜야 할 것: 스케줄 항목의 키는 **파이프라인 ID + cron 식**으로 만들고, 스케줄을 바꾸면
+**기존 스케줄 항목을 제거한 뒤 다시 등록한다.** 안 그러면 옛 스케줄이 유령처럼 남아 같은
 파이프라인이 두 스케줄로 돈다.
 
 ## 환경변수
@@ -96,8 +101,9 @@ docker compose up -d
 
 # 일상 개발 — 인프라만 컨테이너, 앱은 호스트에서
 docker compose up -d db redis
-npm run dev                # 백엔드 :4000 + 프런트 :5173
-npm run dev:worker         # 파이프라인 워커
+uv run uvicorn backend.app:app --reload --port 4000   # 백엔드
+npm run dev:frontend                                   # 프런트 :5173
+uv run celery -A worker.app worker -B -l info          # 파이프라인 워커 (beat 내장)
 ```
 
 ## 관련

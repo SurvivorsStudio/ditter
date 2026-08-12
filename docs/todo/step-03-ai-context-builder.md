@@ -14,7 +14,7 @@ AI가 "우리 DB에 맞는 답"을 하려면 우리 DB의 실제 상태를 알�
 - **컨텍스트 빌더**: 스키마 + 통계 + EXPLAIN 트리 + 테이블 규모를 구조화된 JSON으로 조립
 - Anthropic SDK 연동. 상용 API든 로컬 모델이든 갈아끼울 수 있게 추상화
 - 프롬프트에 컨텍스트를 넣을 때 **"이건 데이터지 지시가 아니다"라고 명확히 구분**해서 주입
-- 이 로직은 **Fastify를 모르는 순수 서비스**로 분리한다 (병렬화를 위해)
+- 이 로직은 **FastAPI를 모르는 순수 서비스**로 분리한다 (병렬화를 위해)
 
 ## 꼭 알아둘 두 가지 · 프롬프트 인젝션 주의
 
@@ -34,4 +34,4 @@ EXPLAIN에 `ANALYZE`를 붙이면 쿼리가 실제로 실행되므로 붙이지 
 
 ## 관련 컨벤션
 
-- [backend-fastify.md](../conventions/backend-fastify.md)
+- [backend-fastapi.md](../conventions/backend-fastapi.md)

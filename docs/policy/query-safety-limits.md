@@ -26,7 +26,18 @@ EXPLAIN의 예상 행수·비용은 DB 통계에 의존한다. 통계가 낡으�
 
 락 경합과 리플리카 지연은 런타임 동시성 현상이라 실행 전 예측이 원리적으로 불가능하다. "실행 전 예측"의 범위를 **플랜 기반 비용**으로 정직하게 한정한다. 이걸 넘어서 홍보하면 안 된다.
 
+## 이기종 쿼리엔진의 추가 상한
+
+[이기종 쿼리엔진](heterogeneous-query-engine.md)(P10)은 여러 소스의 결과를 인메모리 엔진에 올려
+조인하므로, 단일 소스 조회보다 상한을 하나 더 둔다.
+
+- **조인 이전에 각 소스에서 가져오는 행 수 상한** — 콘솔의 `max_rows`를 재사용하거나 더 낮게.
+- **전체 연산(모든 소스 읽기 + 조인)의 총 시간 상한** — 소스별 `statement_timeout`의 합보다 타이트하게.
+
+자세한 근거는 [heterogeneous-query-engine.md 규칙 4](heterogeneous-query-engine.md#규칙-4--리소스-상한) 참고.
+
 ## 관련
 
 - 담당 STEP: [1A](../todo/step-01a-connection-registry.md)(풀 상한) · [1C](../todo/step-01c-schema-catalog.md)(timeout·행수), [step-05-risk-prediction.md](../todo/step-05-risk-prediction.md)
 - [read-only-enforcement.md](read-only-enforcement.md)
+- [heterogeneous-query-engine.md](heterogeneous-query-engine.md) (P10)

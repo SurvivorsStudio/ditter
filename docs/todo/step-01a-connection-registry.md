@@ -13,7 +13,7 @@ STEP 1의 세 갈래 중 **가장 먼저 끝나야 하는 것**이다. [1C](step
 
 ## 하는 일
 
-- postgres.js 접속 풀. **커넥션 풀 상한**을 건다 ([query-safety-limits.md](../policy/query-safety-limits.md))
+- psycopg3 접속 풀(SQLAlchemy 비동기 엔진). **커넥션 풀 상한**을 건다 ([query-safety-limits.md](../policy/query-safety-limits.md))
 - 접속 설정 등록·수정·조회 API (SQLite에 저장) — **삭제는 만들지 않는다.** 감사 로그가 커넥션을
   참조하는데 그 행은 append-only라 지울 수 없다 ([audit-logs.md](../schema/audit-logs.md))
 - [connections](../schema/connections.md) 테이블. **`role`·`adapter_type` 컬럼을 지금 넣는다** —
@@ -25,8 +25,9 @@ STEP 1의 세 갈래 중 **가장 먼저 끝나야 하는 것**이다. [1C](step
   이 자리를 지금 만들어 두면 STEP 9의 커넥터 시크릿이 같은 곳을 그대로 쓴다
 - DB 접근 코드를 **어댑터 인터페이스로 감싼다** (구현은 PostgreSQL 하나 —
   [project-structure.md](../conventions/project-structure.md))
-- **첫 Fastify 라우트와 함께 요청 스키마 검증·prototype pollution 방어를 건다**
-  ([backend-fastify.md](../conventions/backend-fastify.md), [S8](../policy/supply-chain-security.md))
+- **첫 FastAPI 라우트와 함께 Pydantic 요청 스키마 검증(`extra="forbid"`)·검증되지 않은 입력을
+  그대로 객체에 병합하지 않는 방어를 건다**
+  ([backend-fastapi.md](../conventions/backend-fastapi.md))
 
 ## 완료 조건
 

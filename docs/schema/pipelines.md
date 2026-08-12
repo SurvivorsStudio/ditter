@@ -9,7 +9,7 @@
 |---|---|---|---|
 | `id` | INTEGER | PK, AUTOINCREMENT | |
 | `name` | TEXT | NOT NULL, UNIQUE | 화면에 노출되는 파이프라인 이름 |
-| `definition` | TEXT (JSON) | NOT NULL | DAG 정의 — `{ nodes, edges }`. 스키마는 `packages/shared-types`의 zod 정의 하나뿐이다 ([dag-and-nodes.md](../pipeline/dag-and-nodes.md)) |
+| `definition` | TEXT (JSON) | NOT NULL | DAG 정의 — `{ nodes, edges }`. 스키마는 `packages/dag-spec`의 Pydantic 정의 하나뿐이다 ([dag-and-nodes.md](../pipeline/dag-and-nodes.md)) |
 | `version` | INTEGER | NOT NULL, DEFAULT 1 | `definition`이 바뀔 때마다 올린다. 실행 레코드가 이 값을 복사해 간다 |
 | `status` | TEXT | NOT NULL, DEFAULT `'draft'`, CHECK `IN ('draft','active','paused')` | `active`만 스케줄 실행 대상이다 |
 | `schedule` | TEXT | NULL 허용 | cron 식. NULL이면 수동 실행 전용 |
