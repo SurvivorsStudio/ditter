@@ -39,6 +39,21 @@ WITH t AS (DELETE FROM users RETURNING *) SELECT * FROM t;
 PostgreSQL과 MySQL을 **하나의 라이브러리로 파싱**할 수 있어, [이기종 쿼리엔진](heterogeneous-query-engine.md)(P10)이
 붙었을 때 방언마다 다른 검증기를 따로 유지하지 않아도 된다.
 
+### ⚠️ `sqlglot`은 각 DB의 공식 파서가 아니라 방언별로 재구현한 근사치다
+
+`libpg-query`(이전 계획)는 PostgreSQL 소스에서 그대로 뽑아낸 파서라 실제 서버 동작과 항상
+일치했다. `sqlglot`은 여러 방언을 각각 구현한 서드파티 파서라, 드문 문법·확장 구문에서 실제 DB
+동작과 미세하게 어긋날 여지가 이론적으로 남는다. 이 검증기가 뚫리면 제품의 존재 이유가
+사라지므로, 이 차이를 다음 두 가지로 못 박는다.
+
+1. **파서가 이해하지 못하는 구문은 무조건 차단(fail-closed)한다.** 파싱 실패·미지원 구문·부분
+   파싱을 "안전하니 통과"로 취급하지 않는다 — 판단이 안 서면 차단이 기본값이다.
+2. **PostgreSQL·MySQL 각각의 위험 우회 패턴(CTE 안 DML, 다중 문장, 방언별 부작용 함수 등)을
+   모은 회귀 테스트 세트를 [testing.md](../conventions/testing.md)에 방언별로 고정한다.** `sqlglot`
+   도입이나 버전 갱신마다 이 세트 전체를 돌린다 — 담당 STEP은
+   [1B](../todo/step-01b-readonly-validator.md)(PostgreSQL)와
+   [2A](../todo/step-02a-federated-query-engine.md)(MySQL 방언 추가)다.
+
 CTE 안에 숨은 DML은 **반드시 차단**해야 한다.
 
 ### 추가로 막아야 할 것들

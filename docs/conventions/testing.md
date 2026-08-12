@@ -16,6 +16,12 @@
 - INSERT/UPDATE/DELETE: 두 겹(DB 권한 + AST) 모두에서 차단
 - CTE 안에 숨은 DML (`WITH t AS (DELETE FROM users RETURNING *) SELECT * FROM t`): 차단
 - `SELECT pg_sleep(...)`, `SECURITY DEFINER` 함수 호출, `SELECT ... FOR UPDATE`: 차단
+- **파서가 파싱에 실패하거나 지원하지 않는 구문을 만나면 차단** (fail-closed) — "판단 불가"를
+  "안전"으로 취급하지 않는다
+- **[STEP 2A](../todo/step-02a-federated-query-engine.md)에서 MySQL 방언이 추가되면, 위 각 패턴의
+  MySQL 대응판을 같은 세트에 추가한다** — CTE 안에 숨은 DML, 다중 문장(stacked queries), 방언별
+  부작용 함수 호출 등. `sqlglot` 버전을 올릴 때마다 PostgreSQL·MySQL 세트 전체를 돌린다
+  ([read-only-enforcement.md](../policy/read-only-enforcement.md#️-sqlglot은-각-db의-공식-파서가-아니라-방언별로-재구현한-근사치다))
 
 ## mock 기반 병렬 개발
 
