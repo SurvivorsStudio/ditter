@@ -15,7 +15,7 @@ Python이므로 이 문서의 대상이 아니다 — 그쪽은 [python-style.md
 - 파일명: kebab-case (`query-editor-pane.tsx`)
 - 타입/인터페이스/클래스: PascalCase
 - 변수/함수: camelCase
-- DB 관련 개념은 PostgreSQL 용어를 그대로 쓴다 (예: `explainPlan`, `seqScan`, `statementTimeout`) — 자체 용어로 재작명해서 문서와 코드 사이 용어가 갈리지 않게 한다. 백엔드가 Python(snake_case)이라 API 응답 필드가 `explain_plan`처럼 올 수 있는데, **경계(API 클라이언트 레이어)에서 camelCase로 변환하고 그 뒤로는 TS 관례를 따른다** — 변환 지점을 흩어두지 않는다.
+- DB 관련 개념은 PostgreSQL 용어를 그대로 쓴다 (예: `explainPlan`, `seqScan`, `statementTimeout`) — 자체 용어로 재작명해서 문서와 코드 사이 용어가 갈리지 않게 한다. 백엔드는 Python(snake_case)이지만 **API 응답은 백엔드가 직렬화 시점에 이미 `camelCase`로 내려준다** ([python-style.md](python-style.md)) — OpenAPI에서 생성된 타입도 이미 camelCase이므로, **프런트는 이름 규칙을 변환하지 않는다.** 변환 레이어를 만들면 생성된 타입과 런타임 데이터가 어긋난다.
 
 ## 에러 처리
 
