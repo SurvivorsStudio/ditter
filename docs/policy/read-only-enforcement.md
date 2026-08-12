@@ -14,7 +14,7 @@
 |---|---|
 | F1~F4 · F6 (콘솔·AI·감사) — PostgreSQL | 대상 스키마 `SELECT` + `default_transaction_read_only = on` |
 | F5 (운영 관찰)까지 — PostgreSQL | 위 + `pg_read_all_stats` 롤 + `pg_stat_statements` 확장 |
-| [이기종 쿼리엔진](heterogeneous-query-engine.md) — MySQL | 대상 스키마 `SELECT`만 부여한 계정 (`INSERT`·`UPDATE`·`DELETE` 권한 없음) — PostgreSQL의 `default_transaction_read_only`에 대응하는 세션 강제가 없으므로, **계정 권한 자체를 SELECT 전용으로 좁히는 것이 MySQL 쪽의 주방어**다 |
+| [이기종 쿼리엔진](heterogeneous-query-engine.md) — MySQL | 대상 스키마 `SELECT`만 부여한 계정 (`INSERT`·`UPDATE`·`DELETE` 권한 없음) — MySQL도 `SET SESSION transaction_read_only = ON`(세션 단위)·`SET GLOBAL transaction_read_only = ON`(서버 전역)은 있지만, PostgreSQL의 `ALTER ROLE ... SET default_transaction_read_only`처럼 **특정 계정에만 자동으로 바인딩되는 기본값**이 없다 — 접속 시마다 애플리케이션이 세션 변수를 직접 세팅해야 하므로 코드 누락에 기댈 수 없고, 그래서 **계정 권한 자체를 SELECT 전용으로 좁히는 것이 MySQL 쪽의 주방어**다 |
 
 **`pg_read_all_stats`도 읽기 권한이다.** 통계 뷰의 마스킹을 푸는 것이지 데이터를 쓰게 하지
 않는다. 그래서 "데이터를 바꿀 수 있는 권한은 어느 경우에도 필요 없다"는 주장은 그대로 유효하다 —

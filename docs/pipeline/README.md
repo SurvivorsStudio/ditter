@@ -103,7 +103,7 @@ DITTER의 기존 여섯 기능(F1~F6)은 **"프로덕션 DB를 안전하게 읽�
 | 캔버스 상태 | Zustand | 캔버스 전용 스토어 |
 | DB 드라이버 | **psycopg3** (PostgreSQL) · **PyMySQL**(MySQL, [이기종 쿼리엔진](../todo/step-02a-federated-query-engine.md)) | |
 | 오브젝트 스토리지 | **boto3** | |
-| 시크릿 암호화 | **Fernet / AWS KMS** | 자격증명 관리(P4)의 실제 구현 |
+| 시크릿 암호화 | **Fernet** (키는 로컬 `.env`) | 자격증명 관리(P4)의 실제 구현. MVP는 로컬 실행 전제라 AWS KMS 등 외부 키 매니저는 도입하지 않는다 |
 | 인증·인가 | **OAuth2/JWT + Argon2id** | STEP 8에서 구현 |
 | 에이전트 노출 | **FastMCP** | 선택 — MVP 필수 아님. Python이라 번역 없이 그대로 쓴다 |
 | SAP | pyrfc + 사이드카 | **범위 밖** |
