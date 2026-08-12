@@ -220,6 +220,10 @@ STEP 0이 끝났으므로 아래는 **서로를 기다리지 않고** 동시에 
    커넥션 통제 지점을 그 확장에 맞춰 새로 만들어야 한다. Polars는 각 소스에서 추출한 결과를
    DataFrame으로 합치므로 커넥션 통제는 단순하지만 조인 표현이 SQL이 아닌 API가 된다. 트레이드오프
    전문은 [heterogeneous-query-engine.md](../policy/heterogeneous-query-engine.md#엔진-선택--duckdb-vs-polars-팀-결정-필요)에 있다.
+   **이 결정은 문서 검토만으로 내리지 않는다** — 어느 쪽이든 "검증한 문장 = 실제로 각 소스에
+   도달하는 문장"을 실측(PoC)으로 확인한 뒤에만 채택한다. 확인 체크리스트는
+   [P10](../policy/heterogeneous-query-engine.md#️-엔진-채택-전에-실측으로-확인해야-하는-것--규칙-2의-pushdown-구멍)에,
+   확인 시점은 STEP 2A 완료 조건 4에 걸려 있다.
 
 ## 관련 문서
 
