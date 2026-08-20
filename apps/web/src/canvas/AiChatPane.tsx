@@ -64,6 +64,15 @@ export function AiChatPane({
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
   }, [state.messages, chat.isPending])
 
+  // 입력창 자동 높이 — 내용에 맞춰 커지다가 최대(200px)에서 멈추고 스크롤(Claude Code 식).
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`
+  }, [input])
+
   // ── AI 연결이 하나도 없으면: 등록 안내 ──
   if (aiConns.length === 0) {
     return (
@@ -232,6 +241,7 @@ export function AiChatPane({
       {/* 입력 */}
       <div className="ai-input-bar">
         <textarea
+          ref={inputRef}
           className="ai-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -242,7 +252,7 @@ export function AiChatPane({
             }
           }}
           placeholder={state.intent === 'sql.tune' ? '튜닝할 SQL 과 요청을 적어주세요…' : 'SQL 로 만들 내용을 적어주세요… (Enter 전송 · Shift+Enter 줄바꿈)'}
-          rows={2}
+          rows={1}
         />
         <button className="btn primary ai-send" onClick={send} disabled={chat.isPending || !input.trim()}>
           <Icon.bolt />

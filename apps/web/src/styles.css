@@ -8402,14 +8402,17 @@ tbody tr:hover {
 }
 .ai-input {
   flex: 1;
-  resize: vertical;
+  /* 높이는 JS 가 내용에 맞춰 잡는다(auto-grow). 최대에서 멈추고 스크롤. */
+  resize: none;
   min-height: 40px;
-  max-height: 180px;
+  max-height: 200px;
+  overflow-y: auto;
   border: 1px solid var(--line);
   border-radius: 9px;
   padding: 9px 11px;
   font-size: 13px;
   font-family: inherit;
+  line-height: 1.5;
   color: var(--ink);
 }
 .ai-input:focus { outline: none; border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15); }
