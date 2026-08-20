@@ -281,6 +281,7 @@ export function useAiChat() {
       db_connection_id?: string | null
       sql?: string | null
       error?: string | null
+      include_samples?: boolean
     }) => api.parsed(aiChatOutSchema, '/ai/chat', { method: 'POST', body }),
   })
 }

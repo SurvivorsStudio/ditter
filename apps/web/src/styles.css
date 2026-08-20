@@ -8424,3 +8424,19 @@ tbody tr:hover {
 .ai-empty-icon svg { width: 26px; height: 26px; }
 .ai-empty h3 { margin: 0 0 6px; font-size: 16px; color: var(--ink); }
 .ai-empty p { margin: 0 0 16px; color: #8a90a0; font-size: 13px; }
+
+/* AI 예시 데이터 토글 */
+.ai-samples-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 7px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #8a90a0;
+}
+.ai-samples-btn svg { width: 13px; height: 13px; }
+.ai-samples-btn.on { border-color: #7c3aed; color: #7c3aed; background: #f4f0fe; font-weight: 700; }

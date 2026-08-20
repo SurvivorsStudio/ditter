@@ -35,6 +35,7 @@ def chat(
         db_connection_id=payload.db_connection_id,
         sql=payload.sql,
         error=payload.error,
+        include_samples=payload.include_samples,
     )
     return AiChatResponse(
         message=AiChatMessage(role="assistant", content=result.content),

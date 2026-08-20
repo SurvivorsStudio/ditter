@@ -111,6 +111,8 @@ export function AiChatPane({
         messages: history.map((m) => ({ role: m.role, content: m.content })),
         intent: state.intent,
         db_connection_id: state.dbConnId || null,
+        // 대상 DB 를 골랐고 예시 데이터를 끄지 않았으면 켠다(정확도↑). undefined=켜짐.
+        include_samples: Boolean(state.dbConnId) && state.samples !== false,
       },
       {
         onSuccess: (out) => {
@@ -181,6 +183,17 @@ export function AiChatPane({
             </button>
           ))}
         </div>
+        {/* 예시 데이터 — 언급 테이블의 실제 행을 프롬프트에 넣어 값→컬럼 매핑 정확도를 높인다.
+            대상 DB 를 골랐을 때만 의미가 있고, 실제 데이터가 AI 로 전송된다. */}
+        {state.dbConnId && (
+          <button
+            className={`ai-samples-btn ${state.samples !== false ? 'on' : ''}`}
+            onClick={() => setState((s) => ({ ...s, samples: s.samples === false ? true : false }))}
+            title="언급한 테이블의 예시 행을 AI 에 보내 정확도를 높입니다 (실제 데이터가 전송됩니다)"
+          >
+            <Icon.table /> 예시 데이터 {state.samples !== false ? 'ON' : 'OFF'}
+          </button>
+        )}
         <div className="ai-toolbar-sp" />
         {state.messages.length > 0 && (
           <button className="btn sm" onClick={clearAll} title="대화 비우기">

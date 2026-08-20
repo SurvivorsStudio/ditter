@@ -130,6 +130,48 @@ def test_mentioned_table_beyond_cap_gets_columns(monkeypatch) -> None:
     assert "public.t79" in system
 
 
+def test_include_samples_injects_rows(monkeypatch) -> None:
+    """예시 데이터 켜면 언급 테이블의 실제 행이 프롬프트에 들어가 값→컬럼 매핑을 돕는다."""
+    tbl = _table("public.t_s10_eqp_tag", [("plant_cd", "varchar", False), ("tag", "text", False)])
+    conn = _AiConnector()
+    _patch(monkeypatch, ai_conn=_Conn("gemini"), connector=conn, db_conn=_Conn("postgres"), tables=[tbl])
+    monkeypatch.setattr(
+        svc,
+        "preview_rows",
+        lambda *a, **k: (["plant_cd", "tag"], [{"plant_cd": "K123", "tag": "A"}], False),
+    )
+    svc.chat(
+        None,  # type: ignore[arg-type]
+        ai_connection_id="ai",
+        messages=[{"role": "user", "content": "t_s10_eqp_tag 에서 K123 조회"}],
+        db_connection_id="db",
+        include_samples=True,
+    )
+    system = conn.seen["system"]
+    assert "예시 데이터" in system
+    assert "plant_cd=K123" in system  # AI 가 K123→plant_cd 를 볼 수 있다
+
+
+def test_samples_off_by_default(monkeypatch) -> None:
+    tbl = _table("public.t_s10_eqp_tag", [("plant_cd", "varchar", False)])
+    conn = _AiConnector()
+    _patch(monkeypatch, ai_conn=_Conn("gemini"), connector=conn, db_conn=_Conn("postgres"), tables=[tbl])
+    called = {"n": 0}
+
+    def _pv(*a, **k):
+        called["n"] += 1
+        return (["plant_cd"], [{"plant_cd": "K123"}], False)
+
+    monkeypatch.setattr(svc, "preview_rows", _pv)
+    svc.chat(
+        None,  # type: ignore[arg-type]
+        ai_connection_id="ai",
+        messages=[{"role": "user", "content": "t_s10_eqp_tag 에서 K123"}],
+        db_connection_id="db",
+    )
+    assert called["n"] == 0  # 기본은 예시 데이터를 안 읽는다(외부 전송 최소)
+
+
 def test_extract_sql_variants() -> None:
     assert _extract_sql("```sql\nSELECT 1\n```") == "SELECT 1"
     assert _extract_sql("설명\n```\nSELECT 2\n```\n끝") == "SELECT 2"
