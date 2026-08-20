@@ -7,6 +7,8 @@ import {
   usePipelines,
 } from '../api/hooks'
 import { SqlWorkbench } from '../canvas/SqlEditor'
+import { AiChatPane } from '../canvas/AiChatPane'
+import { AI_CONN, isChatConn, clearChat } from '../api/aiChatStore'
 import { ConnectionNavigator } from '../components/ConnectionNavigator'
 import { SearchSelect, type SelectOption } from '../components/SearchSelect'
 import { specFor } from '../api/connectorFields'
@@ -367,6 +369,7 @@ function SessionEditor({
   // 「연합 조회」를 목록 맨 위에 둔다 — 연결 하나가 아니라 '여러 연결'이라 성격이 다르고,
   // 아래로 내려가면 연결이 많을 때 스크롤에 묻힌다.
   const connOptions: SelectOption[] = [
+    { value: AI_CONN, label: 'AI 어시스턴트', hint: '자연어 SQL', accent: true },
     { value: DUCK_CONN, label: '연합 조회', hint: '여러 연결', accent: true },
     ...dbConns.map((c) => ({ value: c.id, label: c.name, hint: specFor(c.type).label })),
   ]
@@ -755,6 +758,22 @@ function DockView(props: {
           }
           const s = props.sessions.find((x) => x.id === tabId)
           if (!s) return null
+          if (isChatConn(s.connId)) {
+            // AI 챗 탭 — 파이프라인 탭이 Canvas 를 띄우는 자리와 같다. 캔버스와 달리
+            // 상태가 세션마다 독립이라 싱글턴 소유권은 필요 없다.
+            return (
+              <AiChatPane
+                key={tabId}
+                sessionId={tabId}
+                hidden={hidden}
+                onOpenAsQuery={props.onOpenObjectQuery}
+                onFocus={() => {
+                  props.onFocusDock()
+                  props.onFocusSession(tabId)
+                }}
+              />
+            )
+          }
           if (s.pipelineId) {
             // 캔버스 상태는 모듈 전역 싱글턴이라 **한 번에 하나만** 살 수 있다.
             // 둘을 띄우면 나중에 뜬 쪽이 앞의 그래프를 덮어써, 보고 있는 것과 저장되는 것이
@@ -1018,7 +1037,10 @@ export function SqlEditorPage() {
       isDuckConn(connId) && target && isUntouched(target.sql)
         ? { sql: duckStarter(connections) }
         : {}
-    updateSession(sid, { connId, mongoNs: null, ...seed })
+    // AI 챗으로 바꾸면 탭 이름도 그렇게 — 아직 이름을 안 바꾼 기본 탭일 때만.
+    const rename =
+      isChatConn(connId) && target && /^쿼리 \d+$/.test(target.title) ? { title: 'AI 챗' } : {}
+    updateSession(sid, { connId, mongoNs: null, ...seed, ...rename })
   }
 
   const addTab = (dockId: number) => {
@@ -1079,6 +1101,8 @@ export function SqlEditorPage() {
   const closeTab = (tabId: number) => {
     if (isSpecial(tabId)) return // 연결·저장됨 탭은 닫지 않는다
     insertReg.current.delete(tabId)
+    // AI 챗 탭이면 대화 이력을 정리한다 (설계 D6: 닫으면 폐기).
+    if (L.sessions.find((s) => s.id === tabId && isChatConn(s.connId))) clearChat(tabId)
     setL((L) => {
       let columns = cleanup(mapDock(L.columns, (d) => (d.tabs.includes(tabId) ? removeFromDock(d, tabId) : d)))
       const referenced = new Set(allDocks(columns).flatMap((d) => d.tabs))

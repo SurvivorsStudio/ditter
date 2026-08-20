@@ -1,0 +1,304 @@
+/** AI 챗 탭 — 자연어로 SQL 을 생성·튜닝하는 대화 창 (설계 문서 §7.5).
+ *
+ *  파이프라인 탭이 Canvas 를 띄우는 것과 같은 자리에서 렌더된다(SqlEditor.tsx 본문 분기).
+ *  두 개의 연결을 참조한다: ① AI 모델(gemini) ② 대상 DB(선택 — 스키마 문맥·실행).
+ *  생성된 SQL 은 여기서 실행하지 않고 **새 쿼리 탭**으로 넘겨 기존 안전장치(허용 명령·커밋)
+ *  아래에서 실행한다.
+ */
+
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { SearchSelect, type SelectOption } from '../components/SearchSelect'
+import { Icon } from '../components/icons'
+import { useConnections, useAiChat } from '../api/hooks'
+import { specFor } from '../api/connectorFields'
+import {
+  type ChatIntent,
+  type ChatMessage,
+  type ChatState,
+  chatUid,
+  loadChat,
+  saveChat,
+} from '../api/aiChatStore'
+
+//: 대상 DB 로 쓸 수 있는(스키마 문맥·실행) 커넥터 타입 — 백엔드 ai_service._DIALECT_BY_TYPE 와 맞춘다.
+const DB_TARGET_TYPES = new Set(['postgres', 'mysql', 'mssql'])
+
+type OpenAsQuery = (p: { connId: string; mode: 'sql'; text: string; title: string }) => void
+
+export function AiChatPane({
+  sessionId,
+  hidden,
+  onOpenAsQuery,
+  onFocus,
+}: {
+  sessionId: number
+  hidden: boolean
+  onOpenAsQuery: OpenAsQuery
+  onFocus: () => void
+}) {
+  const navigate = useNavigate()
+  const { data: conns = [] } = useConnections()
+  const chat = useAiChat()
+
+  const aiConns = useMemo(() => conns.filter((c) => specFor(c.type).category === 'ai'), [conns])
+  const dbConns = useMemo(() => conns.filter((c) => DB_TARGET_TYPES.has(c.type)), [conns])
+
+  // 세션별 대화 상태 — 전용 저장소에서 복원하고, 바뀔 때마다 저장한다.
+  const [state, setState] = useState<ChatState>(() => loadChat(sessionId))
+  useEffect(() => {
+    saveChat(sessionId, state)
+  }, [sessionId, state])
+
+  // AI 모델 기본값 — 아직 안 골랐고 연결이 하나라도 있으면 첫 번째로.
+  useEffect(() => {
+    if (!state.aiConnId && aiConns.length > 0) {
+      setState((s) => ({ ...s, aiConnId: aiConns[0].id }))
+    }
+  }, [aiConns, state.aiConnId])
+
+  const [input, setInput] = useState('')
+  const listRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    // 새 메시지가 오면 맨 아래로.
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
+  }, [state.messages, chat.isPending])
+
+  // ── AI 연결이 하나도 없으면: 등록 안내 ──
+  if (aiConns.length === 0) {
+    return (
+      <div
+        className="sql-tab-pane ai-pane"
+        style={{ display: hidden ? 'none' : 'flex' }}
+        onMouseDown={onFocus}
+      >
+        <div className="ai-empty">
+          <div className="ai-empty-icon">
+            <Icon.bolt />
+          </div>
+          <h3>등록된 AI 연결이 없습니다</h3>
+          <p>「연결 관리」에서 AI 모델(Gemini)을 먼저 등록하세요.</p>
+          <button className="btn primary" onClick={() => navigate('/connections?add=gemini')}>
+            <Icon.plus />
+            AI 모델 등록하기
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  const aiOptions: SelectOption[] = aiConns.map((c) => ({
+    value: c.id,
+    label: c.name,
+    hint: specFor(c.type).label,
+  }))
+  const dbOptions: SelectOption[] = [
+    { value: '', label: '대상 DB 없음', hint: '일반 SQL' },
+    ...dbConns.map((c) => ({ value: c.id, label: c.name, hint: specFor(c.type).label })),
+  ]
+
+  const send = () => {
+    const text = input.trim()
+    if (!text || chat.isPending || !state.aiConnId) return
+    const userMsg: ChatMessage = { id: chatUid(), role: 'user', content: text }
+    const history = [...state.messages, userMsg]
+    setState((s) => ({ ...s, messages: history }))
+    setInput('')
+
+    chat.mutate(
+      {
+        ai_connection_id: state.aiConnId,
+        messages: history.map((m) => ({ role: m.role, content: m.content })),
+        intent: state.intent,
+        db_connection_id: state.dbConnId || null,
+      },
+      {
+        onSuccess: (out) => {
+          const asst: ChatMessage = {
+            id: chatUid(),
+            role: 'assistant',
+            content: out.message.content,
+            sql: out.sql,
+            note: out.schema_note,
+          }
+          setState((s) => ({ ...s, messages: [...s.messages, asst] }))
+        },
+        onError: (err) => {
+          const asst: ChatMessage = {
+            id: chatUid(),
+            role: 'assistant',
+            content: err instanceof Error ? err.message : 'AI 호출에 실패했습니다.',
+            error: true,
+          }
+          setState((s) => ({ ...s, messages: [...s.messages, asst] }))
+        },
+      },
+    )
+  }
+
+  const openSql = (sql: string) => {
+    if (!state.dbConnId) return
+    onOpenAsQuery({ connId: state.dbConnId, mode: 'sql', text: sql, title: 'AI SQL' })
+  }
+
+  const clearAll = () => setState((s) => ({ ...s, messages: [] }))
+
+  return (
+    <div
+      className="sql-tab-pane ai-pane"
+      style={{ display: hidden ? 'none' : 'flex' }}
+      onMouseDown={onFocus}
+    >
+      {/* 툴바 — AI 모델 · 대상 DB · 의도 */}
+      <div className="ai-toolbar">
+        <span className="ai-badge">
+          <Icon.bolt /> AI
+        </span>
+        <div className="ai-select">
+          <SearchSelect
+            value={state.aiConnId ?? ''}
+            onChange={(v) => setState((s) => ({ ...s, aiConnId: v }))}
+            options={aiOptions}
+            placeholder="AI 모델…"
+          />
+        </div>
+        <div className="ai-select">
+          <SearchSelect
+            value={state.dbConnId ?? ''}
+            onChange={(v) => setState((s) => ({ ...s, dbConnId: v || undefined }))}
+            options={dbOptions}
+            placeholder="대상 DB (선택)…"
+          />
+        </div>
+        <div className="ai-intent">
+          {(['sql.generate', 'sql.tune'] as ChatIntent[]).map((it) => (
+            <button
+              key={it}
+              className={`ai-intent-btn ${state.intent === it ? 'on' : ''}`}
+              onClick={() => setState((s) => ({ ...s, intent: it }))}
+            >
+              {it === 'sql.generate' ? '생성' : '튜닝'}
+            </button>
+          ))}
+        </div>
+        <div className="ai-toolbar-sp" />
+        {state.messages.length > 0 && (
+          <button className="btn sm" onClick={clearAll} title="대화 비우기">
+            <Icon.trash /> 비우기
+          </button>
+        )}
+      </div>
+
+      {/* 메시지 목록 */}
+      <div className="ai-messages" ref={listRef}>
+        {state.messages.length === 0 && (
+          <div className="ai-hint">
+            <p>자연어로 물어보세요. 예: “최근 7일 주문을 고객별로 합계 내줘”.</p>
+            {!state.dbConnId && <p className="ai-hint-dim">대상 DB 를 고르면 스키마에 맞춘 SQL 을 만듭니다.</p>}
+          </div>
+        )}
+        {state.messages.map((m) => (
+          <ChatBubble key={m.id} msg={m} canOpen={Boolean(state.dbConnId)} onOpenSql={openSql} />
+        ))}
+        {chat.isPending && (
+          <div className="ai-msg assistant">
+            <div className="ai-bubble ai-typing">
+              <span /> <span /> <span />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 입력 */}
+      <div className="ai-input-bar">
+        <textarea
+          className="ai-input"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              send()
+            }
+          }}
+          placeholder={state.intent === 'sql.tune' ? '튜닝할 SQL 과 요청을 적어주세요…' : 'SQL 로 만들 내용을 적어주세요… (Enter 전송 · Shift+Enter 줄바꿈)'}
+          rows={2}
+        />
+        <button className="btn primary ai-send" onClick={send} disabled={chat.isPending || !input.trim()}>
+          <Icon.bolt />
+          전송
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** 말풍선 하나. assistant 응답의 SQL 블록은 코드 박스 + 실행 버튼으로 분리해 보여준다. */
+function ChatBubble({
+  msg,
+  canOpen,
+  onOpenSql,
+}: {
+  msg: ChatMessage
+  canOpen: boolean
+  onOpenSql: (sql: string) => void
+}) {
+  const [copied, setCopied] = useState(false)
+  const copy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1200)
+    } catch {
+      /* 무시 */
+    }
+  }
+
+  if (msg.role === 'user') {
+    return (
+      <div className="ai-msg user">
+        <div className="ai-bubble">{msg.content}</div>
+      </div>
+    )
+  }
+
+  // assistant — SQL 이 있으면 본문에서 코드펜스를 떼어 코드 박스로 보여준다.
+  const [before, after] = msg.sql
+    ? splitAroundFence(msg.content)
+    : [msg.content, '']
+
+  return (
+    <div className={`ai-msg assistant ${msg.error ? 'error' : ''}`}>
+      <div className="ai-bubble">
+        {before && <div className="ai-text">{before}</div>}
+        {msg.sql && (
+          <div className="ai-code">
+            <pre>{msg.sql}</pre>
+            <div className="ai-code-actions">
+              <button className="btn sm" onClick={() => copy(msg.sql!)}>
+                <Icon.copy /> {copied ? '복사됨' : '복사'}
+              </button>
+              <button
+                className="btn sm primary"
+                onClick={() => onOpenSql(msg.sql!)}
+                disabled={!canOpen}
+                title={canOpen ? '새 쿼리 탭에서 실행' : '대상 DB 를 먼저 고르세요'}
+              >
+                <Icon.play /> 새 쿼리 탭
+              </button>
+            </div>
+          </div>
+        )}
+        {after && <div className="ai-text">{after}</div>}
+        {msg.note && <div className="ai-note">{msg.note}</div>}
+      </div>
+    </div>
+  )
+}
+
+/** 첫 ```sql 블록을 기준으로 앞뒤 텍스트를 가른다 (코드는 msg.sql 로 따로 보여준다). */
+function splitAroundFence(content: string): [string, string] {
+  const m = content.match(/```(?:sql)?\s*\n[\s\S]*?```/i)
+  if (!m || m.index === undefined) return [content.trim(), '']
+  return [content.slice(0, m.index).trim(), content.slice(m.index + m[0].length).trim()]
+}
