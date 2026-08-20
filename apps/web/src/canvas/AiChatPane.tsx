@@ -266,7 +266,7 @@ export function AiChatPane({
 
 /** 작고 은은한 드롭다운 (Claude Code 식 모델 선택기). 현재 값을 텍스트로 보이고,
  *  클릭하면 팝오버 메뉴가 뜬다. 큰 pill 셀렉트 대신 하단 바에 어울리게 컴팩트하다. */
-function MiniSelect({
+export function MiniSelect({
   value,
   options,
   onChange,

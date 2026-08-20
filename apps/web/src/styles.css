@@ -8555,3 +8555,90 @@ tbody tr:hover {
   font-weight: 600;
 }
 .ai-quick-chip:hover { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+
+/* ============ AI 인라인 프롬프트 (/aiQuery — 쿼리탭 가운데) ============ */
+.ai-inline-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 22, 30, 0.30);
+  padding: 20px;
+}
+.ai-inline-box {
+  width: min(560px, 94%);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.30);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ai-inline-head { display: flex; align-items: center; gap: 8px; }
+.ai-inline-title { font-weight: 700; font-size: 14px; color: var(--ink); }
+.ai-inline-x {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  font-size: 20px;
+  color: #9aa0ad;
+  cursor: pointer;
+  line-height: 1;
+}
+.ai-inline-x:hover { color: var(--ink); }
+.ai-inline-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 54px;
+  max-height: 220px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.ai-inline-input:focus {
+  outline: none;
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15);
+}
+.ai-inline-bar { display: flex; align-items: center; gap: 8px; }
+.ai-inline-sp { flex: 1; }
+.ai-inline-go { white-space: nowrap; }
+.ai-inline-loading { font-size: 12px; color: #7c3aed; font-weight: 600; }
+.ai-inline-hint { font-size: 11.5px; color: #9aa0ad; }
+.ai-inline-note {
+  font-size: 12.5px;
+  color: var(--ink);
+  background: #f4f0fe;
+  border: 1px solid #e0d5fb;
+  border-radius: 8px;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.ai-inline-error {
+  font-size: 12.5px;
+  color: #b3311c;
+  background: #fff3f0;
+  border: 1px solid #f6c6bd;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.ai-inline-empty {
+  text-align: center;
+  padding: 14px;
+  color: #8a90a0;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
