@@ -161,57 +161,6 @@ export function AiChatPane({
       style={{ display: hidden ? 'none' : 'flex' }}
       onMouseDown={onFocus}
     >
-      {/* 툴바 — AI 모델 · 대상 DB · 의도 */}
-      <div className="ai-toolbar">
-        <span className="ai-badge">
-          <Icon.bolt /> AI
-        </span>
-        <div className="ai-select">
-          <SearchSelect
-            value={state.aiConnId ?? ''}
-            onChange={(v) => setState((s) => ({ ...s, aiConnId: v }))}
-            options={aiOptions}
-            placeholder="AI 모델…"
-          />
-        </div>
-        <div className="ai-select">
-          <SearchSelect
-            value={state.dbConnId ?? ''}
-            onChange={(v) => setState((s) => ({ ...s, dbConnId: v || undefined }))}
-            options={dbOptions}
-            placeholder="대상 DB (선택)…"
-          />
-        </div>
-        <div className="ai-intent">
-          {(['sql.generate', 'sql.tune'] as ChatIntent[]).map((it) => (
-            <button
-              key={it}
-              className={`ai-intent-btn ${state.intent === it ? 'on' : ''}`}
-              onClick={() => setState((s) => ({ ...s, intent: it }))}
-            >
-              {it === 'sql.generate' ? '생성' : '튜닝'}
-            </button>
-          ))}
-        </div>
-        {/* 예시 데이터 — 언급 테이블의 실제 행을 프롬프트에 넣어 값→컬럼 매핑 정확도를 높인다.
-            대상 DB 를 골랐을 때만 의미가 있고, 실제 데이터가 AI 로 전송된다. */}
-        {state.dbConnId && (
-          <button
-            className={`ai-samples-btn ${state.samples !== false ? 'on' : ''}`}
-            onClick={() => setState((s) => ({ ...s, samples: s.samples === false ? true : false }))}
-            title="언급한 테이블의 예시 행을 AI 에 보내 정확도를 높입니다 (실제 데이터가 전송됩니다)"
-          >
-            <Icon.table /> 예시 데이터 {state.samples !== false ? 'ON' : 'OFF'}
-          </button>
-        )}
-        <div className="ai-toolbar-sp" />
-        {state.messages.length > 0 && (
-          <button className="btn sm" onClick={clearAll} title="대화 비우기">
-            <Icon.trash /> 비우기
-          </button>
-        )}
-      </div>
-
       {/* 메시지 목록 */}
       <div className="ai-messages" ref={listRef}>
         {state.messages.length === 0 && (
@@ -238,8 +187,8 @@ export function AiChatPane({
         )}
       </div>
 
-      {/* 입력 */}
-      <div className="ai-input-bar">
+      {/* 입력 + 설정(모델·대상 DB·의도·예시) — Claude Code 처럼 하단에 모은다 */}
+      <div className="ai-composer">
         <textarea
           ref={inputRef}
           className="ai-input"
@@ -254,10 +203,65 @@ export function AiChatPane({
           placeholder={state.intent === 'sql.tune' ? '튜닝할 SQL 과 요청을 적어주세요…' : 'SQL 로 만들 내용을 적어주세요… (Enter 전송 · Shift+Enter 줄바꿈)'}
           rows={1}
         />
-        <button className="btn primary ai-send" onClick={send} disabled={chat.isPending || !input.trim()}>
-          <Icon.bolt />
-          전송
-        </button>
+        <div className="ai-composer-bar">
+          <div className="ai-composer-controls">
+            <div className="ai-select">
+              <SearchSelect
+                value={state.aiConnId ?? ''}
+                onChange={(v) => setState((s) => ({ ...s, aiConnId: v }))}
+                options={aiOptions}
+                placeholder="AI 모델…"
+              />
+            </div>
+            <div className="ai-select">
+              <SearchSelect
+                value={state.dbConnId ?? ''}
+                onChange={(v) => setState((s) => ({ ...s, dbConnId: v || undefined }))}
+                options={dbOptions}
+                placeholder="대상 DB…"
+              />
+            </div>
+            <div className="ai-intent">
+              {(['sql.generate', 'sql.tune'] as ChatIntent[]).map((it) => (
+                <button
+                  key={it}
+                  className={`ai-intent-btn ${state.intent === it ? 'on' : ''}`}
+                  onClick={() => setState((s) => ({ ...s, intent: it }))}
+                >
+                  {it === 'sql.generate' ? '생성' : '튜닝'}
+                </button>
+              ))}
+            </div>
+            {/* 예시 데이터 — 언급 테이블의 실제 행을 프롬프트에 넣어 값→컬럼 매핑 정확도를 높인다.
+                대상 DB 를 골랐을 때만 의미가 있고, 실제 데이터가 AI 로 전송된다. */}
+            {state.dbConnId && (
+              <button
+                className={`ai-samples-btn ${state.samples !== false ? 'on' : ''}`}
+                onClick={() =>
+                  setState((s) => ({ ...s, samples: s.samples === false ? true : false }))
+                }
+                title="언급한 테이블의 예시 행을 AI 에 보내 정확도를 높입니다 (실제 데이터가 전송됩니다)"
+              >
+                <Icon.table /> 예시 {state.samples !== false ? 'ON' : 'OFF'}
+              </button>
+            )}
+          </div>
+          <div className="ai-composer-actions">
+            {state.messages.length > 0 && (
+              <button className="ai-clear-btn" onClick={clearAll} title="대화 비우기">
+                <Icon.trash />
+              </button>
+            )}
+            <button
+              className="btn primary ai-send"
+              onClick={send}
+              disabled={chat.isPending || !input.trim()}
+            >
+              <Icon.bolt />
+              전송
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )

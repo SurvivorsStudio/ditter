@@ -8393,29 +8393,66 @@ tbody tr:hover {
 .ai-typing span:nth-child(3) { animation-delay: 0.4s; }
 @keyframes ai-blink { 0%, 80%, 100% { opacity: 0.3; } 40% { opacity: 1; } }
 
-.ai-input-bar {
+/* 하단 컴포저 — 입력창 + 설정(모델·대상 DB·의도·예시)을 한 상자에 (Claude Code 식) */
+.ai-composer {
+  margin: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 8px 10px;
   display: flex;
-  gap: 8px;
-  padding: 10px;
-  border-top: 1px solid var(--line2);
-  align-items: flex-end;
+  flex-direction: column;
+  gap: 6px;
+}
+.ai-composer:focus-within {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.12);
 }
 .ai-input {
-  flex: 1;
+  width: 100%;
   /* 높이는 JS 가 내용에 맞춰 잡는다(auto-grow). 최대에서 멈추고 스크롤. */
   resize: none;
-  min-height: 40px;
+  min-height: 36px;
   max-height: 200px;
   overflow-y: auto;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  padding: 9px 11px;
+  border: 0;
+  padding: 4px 2px;
   font-size: 13px;
   font-family: inherit;
   line-height: 1.5;
   color: var(--ink);
+  background: transparent;
 }
-.ai-input:focus { outline: none; border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15); }
+.ai-input:focus { outline: none; }
+.ai-composer-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.ai-composer-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+.ai-composer .ai-select { min-width: 116px; flex: 1 1 116px; }
+.ai-composer-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.ai-clear-btn {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 7px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: #8a90a0;
+}
+.ai-clear-btn:hover { color: #b3311c; border-color: #f6c6bd; }
+.ai-clear-btn svg { width: 14px; height: 14px; }
 .ai-send { white-space: nowrap; }
 
 .ai-empty { margin: auto; text-align: center; max-width: 340px; padding: 24px; }
