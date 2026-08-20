@@ -32,7 +32,9 @@ from .errors import ConfigurationError, ConnectionFailed, ReadFailed, Unsupporte
 
 #: Gemini 는 순수 HTTP 라 별도 엔드포인트가 기본값이다. 프록시·리전용으로 config 에서 덮을 수 있다.
 DEFAULT_ENDPOINT = "https://generativelanguage.googleapis.com"
-DEFAULT_MODEL = "gemini-2.0-flash"
+#: 모델명은 Google 이 주기적으로 폐기한다(구모델은 404 + 최신 모델 안내). 연결마다 config 로
+#: 덮을 수 있고, 이 기본값은 새 연결에만 적용된다.
+DEFAULT_MODEL = "gemini-3.6-flash"
 
 
 @dataclass(frozen=True, slots=True)

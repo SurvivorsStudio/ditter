@@ -328,9 +328,9 @@ export const CONNECTOR_SPECS: Record<string, ConnectorSpec> = {
         label: '모델',
         kind: 'text',
         required: true,
-        default: 'gemini-2.0-flash',
-        placeholder: 'gemini-2.0-flash · gemini-1.5-pro …',
-        hint: 'Google AI Studio 에서 쓸 수 있는 모델 이름.',
+        default: 'gemini-3.6-flash',
+        placeholder: 'gemini-3.6-flash · gemini-3.6-pro …',
+        hint: 'Google AI Studio 에서 쓸 수 있는 모델 이름. 폐기된 모델은 404 로 최신 모델을 안내합니다.',
       },
       {
         key: 'api_key',
