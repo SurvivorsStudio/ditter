@@ -171,7 +171,7 @@ function mergeCompletions(
   return a.from >= b.from ? a : b
 }
 
-function makeTableCompletion(tables: CompletionTable[]): CompletionSource {
+export function makeTableCompletion(tables: CompletionTable[]): CompletionSource {
   const tableOptions = tables.map((t) => {
     const qualified = t.namespace ? `${t.namespace}.${t.name}` : t.name
     return { label: t.name, detail: t.namespace ?? '테이블', type: 'class', apply: qualified }

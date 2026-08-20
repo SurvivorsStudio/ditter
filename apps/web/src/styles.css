@@ -8590,24 +8590,27 @@ tbody tr:hover {
   line-height: 1;
 }
 .ai-inline-x:hover { color: var(--ink); }
-.ai-inline-input {
-  width: 100%;
-  resize: vertical;
-  min-height: 54px;
-  max-height: 220px;
+/* 프롬프트 입력 — 미니 CodeMirror (쿼리 편집기와 같은 테이블·컬럼 자동완성) */
+.ai-inline-cm {
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 10px 12px;
-  font-size: 13px;
-  font-family: inherit;
-  line-height: 1.5;
-  color: var(--ink);
+  overflow: hidden;
+  background: #fff;
 }
-.ai-inline-input:focus {
-  outline: none;
+.ai-inline-cm:focus-within {
   border-color: #7c3aed;
   box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15);
 }
+.ai-inline-cm .cm-editor { background: transparent; font-size: 13px; }
+.ai-inline-cm .cm-editor.cm-focused { outline: none; }
+.ai-inline-cm .cm-scroller {
+  min-height: 54px;
+  max-height: 220px;
+  font-family: inherit;
+  line-height: 1.5;
+}
+.ai-inline-cm .cm-content { padding: 10px 12px; color: var(--ink); font-family: inherit; }
+.ai-inline-cm .cm-placeholder { color: #a2a7b5; }
 .ai-inline-bar { display: flex; align-items: center; gap: 8px; }
 .ai-inline-sp { flex: 1; }
 .ai-inline-go { white-space: nowrap; }
