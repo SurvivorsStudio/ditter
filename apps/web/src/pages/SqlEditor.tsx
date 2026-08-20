@@ -8,7 +8,7 @@ import {
 } from '../api/hooks'
 import { SqlWorkbench } from '../canvas/SqlEditor'
 import { AiChatPane } from '../canvas/AiChatPane'
-import { AI_CONN, isChatConn, clearChat } from '../api/aiChatStore'
+import { isChatConn, clearChat } from '../api/aiChatStore'
 import { ConnectionNavigator } from '../components/ConnectionNavigator'
 import { SearchSelect, type SelectOption } from '../components/SearchSelect'
 import { specFor } from '../api/connectorFields'
@@ -75,6 +75,7 @@ const FAV_TAB = -2 // 즐겨찾기(자주 쓰는 쿼리)
 /** 잠깐 존재했던 별도 「파이프라인」 탭. 지금은 저장됨 트리가 파이프라인까지 담으므로
  *  없앴고, 이미 저장된 워크스페이스에서 지워 내기 위해서만 남는다. */
 const DEAD_PIPE_TAB = -3
+const AI_TAB = -4 // AI 어시스턴트 — 연결·저장됨처럼 고유의 특수 탭
 const isSpecial = (id: number) => id <= 0
 
 // 한 컬럼(세로 열)에 쌓을 수 있는 도크 최대 개수
@@ -166,7 +167,7 @@ const WS_KEY = 'eai_sql_workspace_v1'
 const defaultWorkspace = (): Workspace => ({
   sessions: [blankSession(1)],
   columns: [
-    { id: 1, docks: [{ id: 1, tabs: [CONN_TAB, SAVED_TAB, FAV_TAB], active: CONN_TAB }] },
+    { id: 1, docks: [{ id: 1, tabs: [CONN_TAB, SAVED_TAB, FAV_TAB, AI_TAB], active: CONN_TAB }] },
     { id: 2, docks: [{ id: 2, tabs: [1], active: 1 }] },
   ],
   focused: 2,
@@ -186,8 +187,32 @@ function validWorkspace(ws: Workspace): boolean {
   // 통과시킨 뒤 `stripDeadPipeTab` 이 조용히 빼낸다.
   return allTabs.every(
     (t) =>
-      t === CONN_TAB || t === SAVED_TAB || t === FAV_TAB || t === DEAD_PIPE_TAB || sessionIds.has(t),
+      t === CONN_TAB ||
+      t === SAVED_TAB ||
+      t === FAV_TAB ||
+      t === AI_TAB ||
+      t === DEAD_PIPE_TAB ||
+      sessionIds.has(t),
   )
+}
+
+/** 예전 워크스페이스에는 AI 탭이 없다 — 즐겨찾기(없으면 저장됨) 옆에 끼워 넣는다. */
+function ensureAiTab(ws: Workspace): Workspace {
+  const has = ws.columns.some((c) => c.docks.some((d) => d.tabs.includes(AI_TAB)))
+  if (has) return ws
+  let injected = false
+  const columns = ws.columns.map((c) => ({
+    ...c,
+    docks: c.docks.map((d) => {
+      if (injected) return d
+      const anchor = d.tabs.includes(FAV_TAB) ? FAV_TAB : d.tabs.includes(SAVED_TAB) ? SAVED_TAB : null
+      if (anchor === null) return d
+      injected = true
+      const at = d.tabs.indexOf(anchor) + 1
+      return { ...d, tabs: [...d.tabs.slice(0, at), AI_TAB, ...d.tabs.slice(at)] }
+    }),
+  }))
+  return { ...ws, columns }
 }
 
 /** 예전 워크스페이스에는 즐겨찾기 탭이 없다 — 저장됨 탭이 있는 도크에 끼워 넣는다. */
@@ -247,7 +272,7 @@ function loadWorkspace(): Workspace {
     const raw = localStorage.getItem(WS_KEY)
     if (raw) {
       const ws = JSON.parse(raw) as Workspace
-      if (validWorkspace(ws)) return migrate(stripDeadPipeTab(ensureFavTab(ws)))
+      if (validWorkspace(ws)) return migrate(stripDeadPipeTab(ensureAiTab(ensureFavTab(ws))))
     }
   } catch {
     /* 손상된 값은 무시하고 기본값 */
@@ -368,8 +393,8 @@ function SessionEditor({
 
   // 「연합 조회」를 목록 맨 위에 둔다 — 연결 하나가 아니라 '여러 연결'이라 성격이 다르고,
   // 아래로 내려가면 연결이 많을 때 스크롤에 묻힌다.
+  // AI 어시스턴트는 이제 고유의 특수 탭(AI_TAB)이라 여기 드롭다운에는 넣지 않는다.
   const connOptions: SelectOption[] = [
-    { value: AI_CONN, label: 'AI 어시스턴트', hint: '자연어 SQL', accent: true },
     { value: DUCK_CONN, label: '연합 조회', hint: '여러 연결', accent: true },
     ...dbConns.map((c) => ({ value: c.id, label: c.name, hint: specFor(c.type).label })),
   ]
@@ -631,10 +656,19 @@ function DockView(props: {
           const isConn = tabId === CONN_TAB
           const isSaved = tabId === SAVED_TAB
           const isFav = tabId === FAV_TAB
+          const isAi = tabId === AI_TAB
           const special = isSpecial(tabId)
           const s = special ? null : props.sessions.find((x) => x.id === tabId)
           if (!special && !s) return null
-          const label = isConn ? '연결' : isSaved ? '저장됨' : isFav ? '즐겨찾기' : (s?.title ?? '')
+          const label = isConn
+            ? '연결'
+            : isSaved
+              ? '저장됨'
+              : isFav
+                ? '즐겨찾기'
+                : isAi
+                  ? 'AI 어시스턴트'
+                  : (s?.title ?? '')
           // 쿼리 탭은 제목 앞에 그 탭이 선택한 연결의 DB 배지를 보여준다.
           // 아직 연결을 안 골랐으면 코드(<>) 아이콘으로 대체한다.
           const tabConn = !special && s?.connId ? props.navConnections.find((c) => c.id === s.connId) : null
@@ -645,6 +679,8 @@ function DockView(props: {
             <Icon.save />
           ) : isFav ? (
             <Icon.star />
+          ) : isAi ? (
+            <Icon.bolt />
           ) : s && isPipelineSession(s) ? (
             <Icon.flow />
           ) : s && isDuckSession(s) ? (
@@ -714,6 +750,18 @@ function DockView(props: {
                   onOpenQuery={props.onOpenObjectQuery}
                 />
               </div>
+            )
+          }
+          if (tabId === AI_TAB) {
+            // AI 어시스턴트 — 연결·저장됨과 같은 고유의 특수 탭. 대화는 이 탭 id 로 유지된다.
+            return (
+              <AiChatPane
+                key="ai"
+                sessionId={AI_TAB}
+                hidden={hidden}
+                onOpenAsQuery={props.onOpenObjectQuery}
+                onFocus={props.onFocusDock}
+              />
             )
           }
           if (tabId === SAVED_TAB) {
@@ -1111,7 +1159,9 @@ export function SqlEditorPage() {
         columns = [
           {
             id: ++colSeq.current,
-            docks: [{ id: ++dockSeq.current, tabs: [CONN_TAB, SAVED_TAB, FAV_TAB], active: CONN_TAB }],
+            docks: [
+              { id: ++dockSeq.current, tabs: [CONN_TAB, SAVED_TAB, FAV_TAB, AI_TAB], active: CONN_TAB },
+            ],
           },
         ]
       return { sessions, columns, focused: refocus(columns, L.focused) }
