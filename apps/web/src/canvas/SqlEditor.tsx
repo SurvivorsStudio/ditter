@@ -72,9 +72,10 @@ function parseFromRefs(doc: string): FromRef[] {
 /** 편집기 슬래시 명령. 괄호를 쓰지 않는다(자동완성 괄호와 충돌하던 문제 회피).
  *  - loadQuery: `/loadQuery.` 를 넣고 인라인 즐겨찾기 드롭다운을 띄운다(이름으로 바로).
  *  - loadQueryList: 큰 모달 피커를 연다(전체 목록 + SQL 미리보기). */
-const SLASH_COMMANDS: { name: string; desc: string; kind: 'inline' | 'modal' }[] = [
+const SLASH_COMMANDS: { name: string; desc: string; kind: 'inline' | 'modal' | 'ai' }[] = [
   { name: 'loadQuery', desc: '즐겨찾기 바로 불러오기 (이름)', kind: 'inline' },
   { name: 'loadQueryList', desc: '즐겨찾기 목록 팝업', kind: 'modal' },
+  { name: 'aiQuery', desc: 'AI 로 SQL 생성', kind: 'ai' },
 ]
 
 /** 인라인 자동완성 — `/` 명령 목록과 `/loadQuery.이름` 직접 필터를 담당한다.
@@ -82,6 +83,8 @@ const SLASH_COMMANDS: { name: string; desc: string; kind: 'inline' | 'modal' }[]
 function makeLoadQueryCompletion(
   getFavs: () => Favorite[],
   openModal: (range: { from: number; to: number }) => void,
+  /** AI 명령 실행기(range → 프롬프트). 없으면(mongo·연합조회) `/aiQuery` 를 목록에서 숨긴다. */
+  getOpenAi: () => ((range: { from: number; to: number }) => void) | undefined,
 ): CompletionSource {
   return (ctx) => {
     // 즐겨찾기 직접 필터: '/loadQuery.<이름조각>' — 인라인 드롭다운으로 바로 고른다. (대소문자 무시)
@@ -94,19 +97,22 @@ function makeLoadQueryCompletion(
       const prev = cmd.from > 0 ? ctx.state.sliceDoc(cmd.from - 1, cmd.from) : ''
       if (prev && !/\s/.test(prev)) return null
       const frag = cmd.text.slice(1).toLowerCase()
-      const options = SLASH_COMMANDS.filter((c) => c.name.toLowerCase().startsWith(frag)).map((c) => ({
+      const options = SLASH_COMMANDS.filter(
+        (c) => (c.kind !== 'ai' || getOpenAi()) && c.name.toLowerCase().startsWith(frag),
+      ).map((c) => ({
         label: '/' + c.name,
         detail: '명령',
         type: 'keyword',
         info: c.desc,
         apply: (view: EditorView) => {
-          if (c.kind === 'modal') {
-            // 명령 텍스트는 지우고 그 자리에 즐겨찾기 SQL 을 넣을 지점으로 모달을 연다.
+          if (c.kind === 'modal' || c.kind === 'ai') {
+            // 명령 텍스트는 지우고 그 자리에 결과(즐겨찾기 SQL / AI 생성 SQL)를 넣을 지점을 넘긴다.
             view.dispatch({ changes: { from: cmd.from, to: ctx.pos, insert: '' }, selection: { anchor: cmd.from } })
             closeCompletion(view)
-            // 모달 열기를 다음 틱으로 미룬다 — 확정한 Enter 가 갓 열린 모달의 선택까지
+            // 열기를 다음 틱으로 미룬다 — 확정한 Enter 가 갓 열린 팝업의 선택까지
             // 이어져 첫 항목이 자동 선택되는 경쟁 상태를 막는다.
-            setTimeout(() => openModal({ from: cmd.from, to: cmd.from }), 0)
+            const open = c.kind === 'ai' ? getOpenAi() : openModal
+            if (open) setTimeout(() => open({ from: cmd.from, to: cmd.from }), 0)
           } else {
             // '/loadQuery.' 로 만들어 인라인 즐겨찾기 드롭다운을 잇는다.
             const insert = '/loadQuery.'
@@ -585,7 +591,7 @@ export function SqlEditor({
     })
     // 슬래시(`/`) 문맥이면 즐겨찾기/명령만 배타적으로 보이고, 아니면 언어 자동완성으로 넘긴다.
     // override 로 언어의 기본 소스(SQL 키워드 등)를 대체해, 슬래시 문맥에 키워드가 섞이지 않게 한다.
-    const loadQuery = makeLoadQueryCompletion(() => favRef.current, openModal)
+    const loadQuery = makeLoadQueryCompletion(() => favRef.current, openModal, () => onAiRef.current)
     const asResult = (r: ReturnType<CompletionSource>): CompletionResult | null =>
       r && !(r instanceof Promise) ? r : null
     if (language === 'javascript') {
