@@ -9,7 +9,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import CodeMirror from '@uiw/react-codemirror'
-import { acceptCompletion, autocompletion, type CompletionSource } from '@codemirror/autocomplete'
+import {
+  acceptCompletion,
+  autocompletion,
+  completionStatus,
+  startCompletion,
+  type CompletionSource,
+} from '@codemirror/autocomplete'
 import { EditorView, keymap } from '@codemirror/view'
 import { Prec } from '@codemirror/state'
 import { Icon } from '../components/icons'
@@ -21,8 +27,8 @@ import type { CompletionTable } from './SqlEditor'
 
 type Msg = { role: 'user' | 'assistant'; content: string }
 
-/** 프롬프트용 스키마 자동완성 — SQL 문법(FROM 뒤)에 매이지 않는다.
- *  단어를 치면 **테이블**을, `테이블.` 을 치면 그 **컬럼**을 추천한다(먼저 테이블, 다음 컬럼).
+/** 프롬프트용 스키마 자동완성 — **`@` 로 테이블을 멘션**하고, 이후 `.` 로 그 컬럼을 낸다.
+ *  산문 아무 단어에서 뜨지 않게 `@` 를 트리거로 둔다(먼저 테이블, 다음 컬럼).
  *  쿼리 편집기의 makeTableCompletion 은 FROM/JOIN 문맥 전용이라 여기선 못 쓴다. */
 function schemaPromptCompletion(tables: CompletionTable[]): CompletionSource {
   const tableOptions = tables.map((t) => {
@@ -34,7 +40,7 @@ function schemaPromptCompletion(tables: CompletionTable[]): CompletionSource {
     if (t.columns?.length) colsByTable.set(t.name.toLowerCase(), t.columns)
   }
   return (ctx) => {
-    // `테이블.컬럼조각` → 그 테이블의 컬럼
+    // `테이블.컬럼조각` → 그 테이블의 컬럼 (@ 로 넣은 테이블 뒤에 . 만 찍으면 된다)
     const dotted = ctx.matchBefore(/(\w+)\.(\w*)$/)
     if (dotted) {
       const m = /(\w+)\.(\w*)$/.exec(dotted.text)!
@@ -47,10 +53,17 @@ function schemaPromptCompletion(tables: CompletionTable[]): CompletionSource {
         validFor: /^\w*$/,
       }
     }
-    // 그 외 단어 → 테이블 목록 (CodeMirror 가 타이핑으로 걸러낸다)
-    const word = ctx.matchBefore(/\w+/)
-    if (!word || (word.from === word.to && !ctx.explicit)) return null
-    return { from: word.from, options: tableOptions, validFor: /^\w*$/ }
+    // `@테이블조각` → 테이블 (멘션). `@` 위치부터 정식 이름으로 교체한다.
+    const at = ctx.matchBefore(/@\w*/)
+    if (at) {
+      const frag = at.text.slice(1).toLowerCase()
+      const matched = frag
+        ? tableOptions.filter((o) => o.label.toLowerCase().includes(frag))
+        : tableOptions
+      if (!matched.length) return null
+      return { from: at.from, options: matched, filter: false }
+    }
+    return null
   }
 }
 
@@ -113,7 +126,20 @@ export function AiInlinePrompt({
         },
       ]),
     )
-    return [EditorView.lineWrapping, keys, autocompletion(src ? { override: [src] } : {})]
+    // `@단어` 또는 `테이블.단어` 를 치면 자동완성을 연다 (@ 는 낱단어 트리거가 아니라 직접 연다).
+    const trigger = EditorView.updateListener.of((u) => {
+      if (!src || (!u.docChanged && !u.selectionSet)) return
+      if (completionStatus(u.state) === 'active') return
+      const pos = u.state.selection.main.head
+      const before = u.state.sliceDoc(Math.max(0, pos - 40), pos)
+      if (/@\w*$|\w+\.\w*$/.test(before)) setTimeout(() => startCompletion(u.view), 0)
+    })
+    return [
+      EditorView.lineWrapping,
+      keys,
+      trigger,
+      autocompletion(src ? { override: [src] } : {}),
+    ]
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tables])
 
@@ -181,7 +207,7 @@ export function AiInlinePrompt({
               placeholder={
                 note
                   ? '이어서 답하거나 더 구체적으로…'
-                  : '만들 SQL 을 자연어로… 테이블/컬럼명은 자동완성 (Enter 생성 · Shift+Enter 줄바꿈)'
+                  : '만들 SQL 을 자연어로… @ 로 테이블, 이후 . 로 컬럼 (Enter 생성 · Shift+Enter 줄바꿈)'
               }
               basicSetup={{
                 lineNumbers: false,
@@ -211,7 +237,7 @@ export function AiInlinePrompt({
             </div>
             <div className="ai-inline-hint">
               {dbConnId
-                ? '이 탭의 연결 스키마에 맞춰 만듭니다. 테이블/컬럼명을 적으면 자동완성됩니다.'
+                ? '이 탭의 연결 스키마에 맞춰 만듭니다. @ 로 테이블, 이후 . 로 컬럼을 자동완성합니다.'
                 : '대상 연결이 없어 일반 SQL 로 만듭니다.'}
             </div>
           </>
