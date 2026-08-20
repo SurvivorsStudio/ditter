@@ -75,7 +75,7 @@ def test_generate_and_extract_sql(monkeypatch) -> None:
 def test_schema_context_for_sql_db(monkeypatch) -> None:
     col = type("C", (), {"name": "id", "data_type": "int", "primary_key": True})()
     col2 = type("C", (), {"name": "name", "data_type": "text", "primary_key": False})()
-    tbl = type("T", (), {"qualified_name": "public.users", "columns": [col, col2]})()
+    tbl = type("T", (), {"qualified_name": "public.users", "name": "users", "columns": [col, col2]})()
     conn = _AiConnector()
     _patch(monkeypatch, ai_conn=_Conn("gemini"), connector=conn, db_conn=_Conn("postgres"), tables=[tbl])
     out = svc.chat(
@@ -101,6 +101,33 @@ def test_unsupported_db_type_notes(monkeypatch) -> None:
     )
     assert out.dialect is None
     assert out.schema_note and "지원하지 않아" in out.schema_note
+
+
+def _table(qn: str, cols: list[tuple[str, str, bool]]):
+    name = qn.split(".")[-1]
+    columns = [type("C", (), {"name": c, "data_type": d, "primary_key": pk})() for c, d, pk in cols]
+    return type("T", (), {"qualified_name": qn, "name": name, "columns": columns})()
+
+
+def test_mentioned_table_beyond_cap_gets_columns(monkeypatch) -> None:
+    """테이블이 상한을 넘어도, 사용자가 언급한 테이블은 컬럼까지 실리고 전체 이름은 다 나온다."""
+    # 상한(60)을 넘기는 더미 테이블 + 사용자가 콕 집은 t_s10_eqp_tag(맨 뒤)
+    tables = [_table(f"public.t{i}", [("id", "int", True)]) for i in range(80)]
+    tables.append(_table("public.t_s10_eqp_tag", [("plant_cd", "varchar", False), ("tag", "text", False)]))
+    conn = _AiConnector()
+    _patch(monkeypatch, ai_conn=_Conn("gemini"), connector=conn, db_conn=_Conn("postgres"), tables=tables)
+    svc.chat(
+        None,  # type: ignore[arg-type]
+        ai_connection_id="ai",
+        messages=[{"role": "user", "content": "t_s10_eqp_tag 에서 K123 조회해줘"}],
+        db_connection_id="db",
+    )
+    system = conn.seen["system"]
+    # 언급한 테이블의 컬럼이 상세에 들어갔다
+    assert "public.t_s10_eqp_tag(plant_cd varchar" in system
+    # 컬럼을 못 실은 테이블도 이름은 전부 들어간다
+    assert "전체 테이블 이름" in system
+    assert "public.t79" in system
 
 
 def test_extract_sql_variants() -> None:

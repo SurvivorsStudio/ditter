@@ -22,8 +22,9 @@ from .errors import ValidationError
 #: 대상 DB 커넥터 타입 → 프롬프트에 쓸 방언 이름. 여기 없으면 스키마 문맥을 붙이지 않는다.
 _DIALECT_BY_TYPE = {"postgres": "PostgreSQL", "mysql": "MySQL", "mssql": "SQL Server"}
 
-#: 스키마 문맥 상한 — 큰 DB 전체를 프롬프트에 넣지 않는다. 넘으면 잘린 사실을 알린다.
-_MAX_TABLES = 60
+#: **컬럼까지** 프롬프트에 싣는 테이블 수 상한 — 전체 컬럼을 다 넣으면 토큰이 폭발한다.
+#: 테이블 '이름'은 (싸므로) 전부 넣어, 언급한 테이블이 상세에서 빠져도 "없다"고 답하지 않게 한다.
+_MAX_DETAIL_TABLES = 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,7 +109,11 @@ def chat(
         # AI 커넥터가 아니면(일반 DB 연결을 잘못 고른 경우) 조용히 실패하지 않는다
         raise ValidationError(f"'{ai_conn.name}' 은 AI 모델 연결이 아닙니다")
 
-    dialect, schema_text, schema_note = _schema_context(session, db_connection_id)
+    # 대화에서 언급된 테이블을 스키마 상세에 우선 싣기 위해 텍스트를 넘긴다.
+    convo_text = "\n".join(str(m.get("content", "")) for m in messages)
+    if sql:
+        convo_text += "\n" + sql
+    dialect, schema_text, schema_note = _schema_context(session, db_connection_id, convo_text)
     system = _INTENTS[intent](dialect, schema_text, sql, error)
 
     result = connector.generate(list(messages), system=system)  # ConnectorError 는 전역 핸들러가 처리
@@ -125,9 +130,13 @@ def chat(
 
 
 def _schema_context(
-    session: Session, db_connection_id: str | None
+    session: Session, db_connection_id: str | None, convo_text: str = ""
 ) -> tuple[str | None, str | None, str | None]:
     """대상 DB 스키마를 프롬프트용 요약으로 만든다.
+
+    큰 DB(테이블 수백 개)라도 **이름은 전부** 싣는다 — 카탈로그에 있는 테이블을 "없다"고
+    답하지 않게 하려는 것이다. **컬럼 상세**는 토큰이 비싸므로 대화에서 언급된 테이블을
+    먼저, 그다음 상위 몇 개만 싣는다.
 
     실패해도 치명 아님 — 문맥 없이 진행하되 그 사실을 note 로 알린다.
     """
@@ -143,16 +152,40 @@ def _schema_context(
     except Exception as exc:  # 스키마 실패는 챗을 막지 않는다 — 문맥 없이 진행
         return dialect, None, f"스키마를 읽지 못해({exc}) 스키마 없이 생성합니다."
 
-    note: str | None = None
-    if len(tables) > _MAX_TABLES:
-        note = f"테이블이 많아 {_MAX_TABLES}개만 문맥에 넣었습니다 (전체 {len(tables)}개)."
-        tables = tables[:_MAX_TABLES]
+    if not tables:
+        return dialect, None, None
 
-    lines: list[str] = []
+    lowered = convo_text.lower()
+
+    def mentioned(t: Any) -> bool:
+        return t.name.lower() in lowered or t.qualified_name.lower() in lowered
+
+    # 컬럼 상세를 실을 테이블: 언급된 것 먼저, 상한까지 앞에서 채운다.
+    detail: list[Any] = [t for t in tables if mentioned(t)]
+    seen = {t.qualified_name for t in detail}
     for t in tables:
-        cols = ", ".join(_format_column(c) for c in getattr(t, "columns", []) or [])
-        lines.append(f"{t.qualified_name}({cols})")
-    return dialect, "\n".join(lines) if lines else None, note
+        if len(detail) >= _MAX_DETAIL_TABLES:
+            break
+        if t.qualified_name not in seen:
+            detail.append(t)
+            seen.add(t.qualified_name)
+
+    lines = [
+        f"{t.qualified_name}({', '.join(_format_column(c) for c in getattr(t, 'columns', []) or [])})"
+        for t in detail
+    ]
+    schema = "테이블 컬럼(상세):\n" + "\n".join(lines)
+
+    note: str | None = None
+    if len(tables) > len(detail):
+        # 컬럼을 다 못 실은 테이블도 **이름은** 알려준다 — 있는데 "없다"고 답하지 않도록.
+        names = ", ".join(t.qualified_name for t in tables)
+        schema += f"\n\n전체 테이블 이름({len(tables)}개 — 위 {len(detail)}개만 컬럼 포함):\n{names}"
+        note = (
+            f"테이블 {len(tables)}개 중 관련·상위 {len(detail)}개만 컬럼을 실었습니다"
+            " (이름은 전체 포함 — 원하는 테이블을 콕 집어 물으면 그 컬럼까지 봅니다)."
+        )
+    return dialect, schema, note
 
 
 def _format_column(col: Any) -> str:
