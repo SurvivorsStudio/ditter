@@ -97,8 +97,8 @@ export function AiChatPane({
     ...dbConns.map((c) => ({ value: c.id, label: c.name, hint: specFor(c.type).label })),
   ]
 
-  const send = () => {
-    const text = input.trim()
+  const sendText = (raw: string) => {
+    const text = raw.trim()
     if (!text || chat.isPending || !state.aiConnId) return
     const userMsg: ChatMessage = { id: chatUid(), role: 'user', content: text }
     const history = [...state.messages, userMsg]
@@ -137,6 +137,7 @@ export function AiChatPane({
       },
     )
   }
+  const send = () => sendText(input)
 
   const openSql = (sql: string) => {
     if (!state.dbConnId) return
@@ -211,7 +212,13 @@ export function AiChatPane({
           </div>
         )}
         {state.messages.map((m) => (
-          <ChatBubble key={m.id} msg={m} canOpen={Boolean(state.dbConnId)} onOpenSql={openSql} />
+          <ChatBubble
+            key={m.id}
+            msg={m}
+            canOpen={Boolean(state.dbConnId)}
+            onOpenSql={openSql}
+            onPick={sendText}
+          />
         ))}
         {chat.isPending && (
           <div className="ai-msg assistant">
@@ -251,10 +258,12 @@ function ChatBubble({
   msg,
   canOpen,
   onOpenSql,
+  onPick,
 }: {
   msg: ChatMessage
   canOpen: boolean
   onOpenSql: (sql: string) => void
+  onPick: (text: string) => void
 }) {
   const [copied, setCopied] = useState(false)
   const copy = async (text: string) => {
@@ -280,10 +289,22 @@ function ChatBubble({
     ? splitAroundFence(msg.content)
     : [msg.content, '']
 
+  // SQL 이 없는 = 되묻는 답변이면, 제시된 후보를 빠른 답장 칩으로 보여준다.
+  const options = !msg.sql && !msg.error ? parseOptions(msg.content) : []
+
   return (
     <div className={`ai-msg assistant ${msg.error ? 'error' : ''}`}>
       <div className="ai-bubble">
         {before && <div className="ai-text">{before}</div>}
+        {options.length > 0 && (
+          <div className="ai-quick">
+            {options.map((o) => (
+              <button key={o} className="ai-quick-chip" onClick={() => onPick(o)}>
+                {o}
+              </button>
+            ))}
+          </div>
+        )}
         {msg.sql && (
           <div className="ai-code">
             <pre>{msg.sql}</pre>
@@ -307,6 +328,21 @@ function ChatBubble({
       </div>
     </div>
   )
+}
+
+/** 되묻는 답변에서 제시된 후보를 뽑아 빠른 답장 칩으로 만든다.
+ *  원문자(①②③) 또는 1)/2) 형식으로 2개 이상일 때만 — 오탐을 줄인다. */
+function parseOptions(content: string): string[] {
+  const clean = (s: string) => s.trim().replace(/[.。,·:\s]+$/, '').trim()
+  const circled = [...content.matchAll(/[①②③④⑤⑥⑦⑧⑨]\s*([^\n①②③④⑤⑥⑦⑧⑨]{1,40})/g)]
+    .map((m) => clean(m[1]))
+    .filter(Boolean)
+  if (circled.length >= 2) return circled.slice(0, 6)
+  const numbered = [...content.matchAll(/(?:^|\n)\s*\d+[)．.]\s*([^\n]{1,40})/g)]
+    .map((m) => clean(m[1]))
+    .filter(Boolean)
+  if (numbered.length >= 2) return numbered.slice(0, 6)
+  return []
 }
 
 /** 첫 ```sql 블록을 기준으로 앞뒤 텍스트를 가른다 (코드는 msg.sql 로 따로 보여준다). */

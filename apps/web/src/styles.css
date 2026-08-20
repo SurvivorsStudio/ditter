@@ -8440,3 +8440,17 @@ tbody tr:hover {
 }
 .ai-samples-btn svg { width: 13px; height: 13px; }
 .ai-samples-btn.on { border-color: #7c3aed; color: #7c3aed; background: #f4f0fe; font-weight: 700; }
+
+/* AI 되묻기 빠른 답장 칩 */
+.ai-quick { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
+.ai-quick-chip {
+  border: 1px solid #c9b8f5;
+  background: #f4f0fe;
+  color: #6a30d0;
+  border-radius: 14px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.ai-quick-chip:hover { background: #7c3aed; color: #fff; border-color: #7c3aed; }
