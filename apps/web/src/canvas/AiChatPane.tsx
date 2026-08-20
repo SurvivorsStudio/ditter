@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { SearchSelect, type SelectOption } from '../components/SearchSelect'
+import { type SelectOption } from '../components/SearchSelect'
 import { Icon } from '../components/icons'
 import { useConnections, useAiChat } from '../api/hooks'
 import { specFor } from '../api/connectorFields'
@@ -203,24 +203,15 @@ export function AiChatPane({
           placeholder={state.intent === 'sql.tune' ? '튜닝할 SQL 과 요청을 적어주세요…' : 'SQL 로 만들 내용을 적어주세요… (Enter 전송 · Shift+Enter 줄바꿈)'}
           rows={1}
         />
+        {/* 하단 컨트롤 바 — 왼쪽: 대상 DB·의도·예시 / 오른쪽: 모델·전송 (Claude Code 식) */}
         <div className="ai-composer-bar">
-          <div className="ai-composer-controls">
-            <div className="ai-select">
-              <SearchSelect
-                value={state.aiConnId ?? ''}
-                onChange={(v) => setState((s) => ({ ...s, aiConnId: v }))}
-                options={aiOptions}
-                placeholder="AI 모델…"
-              />
-            </div>
-            <div className="ai-select">
-              <SearchSelect
-                value={state.dbConnId ?? ''}
-                onChange={(v) => setState((s) => ({ ...s, dbConnId: v || undefined }))}
-                options={dbOptions}
-                placeholder="대상 DB…"
-              />
-            </div>
+          <div className="ai-composer-left">
+            <MiniSelect
+              value={state.dbConnId ?? ''}
+              options={dbOptions}
+              onChange={(v) => setState((s) => ({ ...s, dbConnId: v || undefined }))}
+              placeholder="대상 DB"
+            />
             <div className="ai-intent">
               {(['sql.generate', 'sql.tune'] as ChatIntent[]).map((it) => (
                 <button
@@ -232,37 +223,96 @@ export function AiChatPane({
                 </button>
               ))}
             </div>
-            {/* 예시 데이터 — 언급 테이블의 실제 행을 프롬프트에 넣어 값→컬럼 매핑 정확도를 높인다.
-                대상 DB 를 골랐을 때만 의미가 있고, 실제 데이터가 AI 로 전송된다. */}
+            {/* 예시 데이터 — 언급 테이블의 실제 행을 프롬프트에 넣어 값→컬럼 매핑 정확도를 높인다. */}
             {state.dbConnId && (
               <button
-                className={`ai-samples-btn ${state.samples !== false ? 'on' : ''}`}
+                className={`ai-icon-btn ${state.samples !== false ? 'on' : ''}`}
                 onClick={() =>
                   setState((s) => ({ ...s, samples: s.samples === false ? true : false }))
                 }
-                title="언급한 테이블의 예시 행을 AI 에 보내 정확도를 높입니다 (실제 데이터가 전송됩니다)"
+                title={`예시 데이터 ${state.samples !== false ? '켜짐' : '꺼짐'} — 언급한 테이블의 실제 행을 AI 에 보내 정확도를 높입니다(데이터가 전송됩니다)`}
               >
-                <Icon.table /> 예시 {state.samples !== false ? 'ON' : 'OFF'}
+                <Icon.table />
               </button>
             )}
           </div>
-          <div className="ai-composer-actions">
+          <div className="ai-composer-right">
             {state.messages.length > 0 && (
-              <button className="ai-clear-btn" onClick={clearAll} title="대화 비우기">
+              <button className="ai-icon-btn" onClick={clearAll} title="대화 비우기">
                 <Icon.trash />
               </button>
             )}
+            <MiniSelect
+              value={state.aiConnId ?? ''}
+              options={aiOptions}
+              onChange={(v) => setState((s) => ({ ...s, aiConnId: v }))}
+              placeholder="AI 모델"
+              align="right"
+            />
             <button
-              className="btn primary ai-send"
+              className="ai-send-btn"
               onClick={send}
               disabled={chat.isPending || !input.trim()}
+              title="전송 (Enter)"
             >
-              <Icon.bolt />
-              전송
+              ↵
             </button>
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+/** 작고 은은한 드롭다운 (Claude Code 식 모델 선택기). 현재 값을 텍스트로 보이고,
+ *  클릭하면 팝오버 메뉴가 뜬다. 큰 pill 셀렉트 대신 하단 바에 어울리게 컴팩트하다. */
+function MiniSelect({
+  value,
+  options,
+  onChange,
+  placeholder,
+  align = 'left',
+}: {
+  value: string
+  options: SelectOption[]
+  onChange: (v: string) => void
+  placeholder: string
+  align?: 'left' | 'right'
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    window.addEventListener('mousedown', onDoc)
+    return () => window.removeEventListener('mousedown', onDoc)
+  }, [open])
+  const current = options.find((o) => o.value === value)
+  return (
+    <div className={`ai-mini ${align === 'right' ? 'right' : ''}`} ref={ref}>
+      <button className="ai-mini-btn" onClick={() => setOpen((o) => !o)}>
+        <span className="ai-mini-label">{current?.label ?? placeholder}</span>
+        <Icon.chevron />
+      </button>
+      {open && (
+        <div className="ai-mini-menu">
+          {options.map((o) => (
+            <button
+              key={o.value}
+              className={`ai-mini-item ${o.value === value ? 'on' : ''}`}
+              onClick={() => {
+                onChange(o.value)
+                setOpen(false)
+              }}
+            >
+              <span>{o.label}</span>
+              {o.hint && <span className="ai-mini-hint">{o.hint}</span>}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
