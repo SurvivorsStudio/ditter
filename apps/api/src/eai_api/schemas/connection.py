@@ -19,6 +19,8 @@ SECRET_KEYS = frozenset(
         "api_token",
         # SAP 접속 비밀번호 (방안 A: 연결에 저장)
         "passwd",
+        # AI 모델(Gemini 등) API Key — 이게 없으면 평문 config 에 키가 남는다
+        "api_key",
     }
 )
 

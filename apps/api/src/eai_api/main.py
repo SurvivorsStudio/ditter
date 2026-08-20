@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 
 from .config import get_settings
 from .mcp_server import mcp
-from .routers import auth, connections, duck, health, hooks, pipelines, runs, streams, sync
+from .routers import ai, auth, connections, duck, health, hooks, pipelines, runs, streams, sync
 from .services.errors import ServiceError
 
 
@@ -120,6 +120,7 @@ app.include_router(runs.router)
 app.include_router(hooks.router)
 app.include_router(streams.router)
 app.include_router(sync.router)
+app.include_router(ai.router)
 
 # LLM/에이전트용 MCP 엔드포인트 (Streamable HTTP)
 app.mount("/mcp-server", mcp_app)

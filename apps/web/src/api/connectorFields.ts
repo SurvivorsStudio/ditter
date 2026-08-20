@@ -24,25 +24,27 @@ export type FieldSpec = {
 
 /** 저장소 유형. 타입 선택 화면에서 이 단위로 묶는다 —
  *  6개를 평평하게 늘어놓는 것보다 "어떤 종류를 찾는가"로 좁히는 편이 빠르다. */
-export type ConnectorCategory = 'rdb' | 'document' | 'erp' | 'storage'
+export type ConnectorCategory = 'rdb' | 'document' | 'erp' | 'storage' | 'ai'
 
 /** 표시 순서를 겸한다 — 배열 순서대로 그룹이 나온다 */
-export const CATEGORY_ORDER: ConnectorCategory[] = ['rdb', 'document', 'erp', 'storage']
+export const CATEGORY_ORDER: ConnectorCategory[] = ['rdb', 'document', 'erp', 'storage', 'ai']
 
 export const CATEGORY_META: Record<ConnectorCategory, { label: string; hint: string }> = {
   rdb: { label: '관계형 DB', hint: 'RDS · 테이블 기반' },
   document: { label: '문서형 DB', hint: 'DocumentDB · 컬렉션 기반' },
   erp: { label: '전사 시스템', hint: 'SAP · ERP' },
   storage: { label: '파일 스토리지', hint: '오브젝트 스토리지' },
+  ai: { label: 'AI 모델', hint: '자연어 SQL 생성 · 튜닝' },
 }
 
 /** 커넥터가 파이프라인에서 맡을 수 있는 역할 — 타입을 고를 때 알아야 할 정보다 */
-export type ConnectorRole = 'both' | 'source' | 'target'
+export type ConnectorRole = 'both' | 'source' | 'target' | 'ai'
 
 export const ROLE_LABEL: Record<ConnectorRole, string> = {
   both: '소스 · 타깃',
   source: '소스 전용',
   target: '타깃 전용',
+  ai: 'AI 어시스턴트',
 }
 
 export type ConnectorSpec = {
@@ -307,6 +309,42 @@ export const CONNECTOR_SPECS: Record<string, ConnectorSpec> = {
         required: true,
         placeholder: 'exports',
         hint: '서버의 파일 루트 아래 하위 폴더명입니다. 실제 경로는 노드의 경로 prefix·실행ID로 더 나뉩니다.',
+      },
+    ],
+  },
+
+  gemini: {
+    label: 'Google Gemini',
+    category: 'ai',
+    abbr: 'AI',
+    color: '#7c3aed',
+    description: '자연어로 SQL 생성 · 튜닝',
+    role: 'ai',
+    summary: (c) => String(c.model || 'gemini'),
+    // 필드 키는 백엔드 registry.py 의 _GEMINI_KEYS 와 반드시 같아야 한다.
+    fields: [
+      {
+        key: 'model',
+        label: '모델',
+        kind: 'text',
+        required: true,
+        default: 'gemini-2.0-flash',
+        placeholder: 'gemini-2.0-flash · gemini-1.5-pro …',
+        hint: 'Google AI Studio 에서 쓸 수 있는 모델 이름.',
+      },
+      {
+        key: 'api_key',
+        label: 'API Key',
+        kind: 'password',
+        required: true,
+        hint: 'Google AI Studio 의 API 키. 암호화 저장되며 이후 화면에 다시 표시되지 않습니다.',
+      },
+      {
+        key: 'endpoint',
+        label: '엔드포인트 (선택)',
+        kind: 'text',
+        placeholder: 'https://generativelanguage.googleapis.com',
+        hint: '프록시·리전 엔드포인트를 쓸 때만. 비우면 기본값.',
       },
     ],
   },
