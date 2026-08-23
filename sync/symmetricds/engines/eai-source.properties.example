@@ -1,0 +1,62 @@
+# 노드 A — 원본 (WMS / SQL Server). 기획안 §5-1.
+#
+# 이 파일을 `eai-source.properties` 로 복사해 값을 채운다.
+# **engine.name 은 API 설정 EAI_SYMMETRIC_SOURCE_ENGINE 과 반드시 같아야 한다** —
+# 어긋나면 설정은 DB 에 들어가는데 "지금 반영하라"만 조용히 실패해서, 트리거가 늦게
+# 생기는 이유를 찾기 어려워진다. 착수 점검이 엔진 목록을 대조해 경고한다.
+
+engine.name=eai-source
+group.id=source
+external.id=001
+
+db.driver=com.microsoft.sqlserver.jdbc.SQLServerDriver
+# 구버전 SQL Server 연동에서 가장 흔한 실패 지점이 TLS 협상이다 (기획안 §8).
+#  - 2008 R2 는 SP3, 2012 는 SP2 이상 + TLS 1.2 지원 패치가 있어야 TLS 1.2 를 쓴다
+#  - 최신 JDBC 드라이버는 encrypt 기본값이 true 라 명시하지 않으면 붙지 않는 경우가 있다
+db.url=jdbc:sqlserver://WMS_HOST:1433;databaseName=WMS;encrypt=true;trustServerCertificate=true
+db.user=sym_user
+db.password=CHANGE_ME
+
+# 다른 노드가 이 노드에 닿는 주소. 노드를 두 호스트로 나누면 **상대가 닿을 수 있는**
+# 주소여야 한다 — 여기가 어긋나면 등록만 되고 전송이 안 된다.
+sync.url=http://symmetricds:31415/sync/eai-source
+# 소스는 등록의 기준점이라 자기 registration.url 은 비운다.
+registration.url=
+
+# SYM_* 테이블 접두어. API 설정 EAI_SYMMETRIC_TABLE_PREFIX 와 같아야 한다 —
+# API 가 이 접두어로 SYM_TRIGGER·SYM_ROUTER 에 직접 쓴다.
+sync.table.prefix=SYM
+
+# 타깃 노드가 스스로 등록하도록 허용한다. **이게 없으면 타깃이 영영 붙지 못한다** —
+# 로그에 "target:002:? was not allowed to register" 와 "Registration is not open" 이
+# 반복되고, 설정은 다 들어갔는데 데이터만 한 건도 가지 않는다.
+# 노드 둘을 우리가 직접 관리하는 구성이라 자동 등록으로 둔다. 외부 노드가 임의로
+# 붙을 수 있는 망이라면 이것을 끄고 SYM_NODE_SECURITY 로 하나씩 열어야 한다.
+auto.registration=true
+
+# SQL Server 에서 **캡처 테이블을 유니코드로 만든다.** 없으면 SYM_DATA.row_data 가
+# varchar 로 생기고, DB 콜레이션이 유니코드가 아니면(예: SQL_Latin1_General_CP1_CI_AS)
+# 트리거가 nvarchar 한글을 담는 순간 글자마다 '?' 로 치환된다.
+# **원본 DB 안에서 이미 손실**되므로 타깃을 아무리 UTF8 로 만들어도 되돌릴 수 없다 —
+# 복제는 성공한 것처럼 보이고 글자만 깨지는, 가장 늦게 발견되는 종류의 사고다.
+mssql.use.ntypes.for.sync=true
+
+# --- 운영 파라미터 (기획안 §7) ---
+# SYM_DATA 는 **원본 DB 안에** 생긴다. 방치하면 원본 용량과 트랜잭션 로그가 계속 증가한다.
+purge.retention.minutes=1440
+job.purge.period.time.ms=600000
+# 캡처된 변경을 배치로 묶는 주기. **여기가 실시간성의 실제 병목이다.**
+# 기본값 10초라 트리거는 즉시 잡아도 전송은 평균 5초, 최대 10초를 기다린다 —
+# push 를 1초로 낮춰도 보낼 배치가 그때까지 안 만들어지므로 소용이 없다.
+# 실측: routing 10초 기본값에서 INSERT 도착까지 16초. 1초로 낮추면 2~3초대가 된다.
+# 대가는 소스 DB 조회가 잦아지는 것이다 — 부하 테스트 때 이 값으로 함께 재야 한다.
+job.routing.period.time.ms=1000
+# Push 주기 — 실시간성을 좌우한다. 짧을수록 지연이 줄고 원본 조회가 잦아진다.
+job.push.period.time.ms=1000
+# 배치 크기는 부하 테스트 결과로 조정한다 (기획안 §9).
+routing.max.batch.size=10000
+http.timeout.ms=30000
+# 설정 변경(SYM_TRIGGER)을 실제 트리거에 반영하는 주기.
+# API 가 REST 로 즉시 반영을 요청하지만, 사이드카에 닿지 못하면 이 주기가 안전망이 된다 —
+# 기본값(1시간)이면 "왜 안 도나"를 한 시간 기다리게 되므로 짧게 둔다.
+job.synctriggers.period.time.ms=60000

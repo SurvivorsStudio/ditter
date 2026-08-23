@@ -1,0 +1,32 @@
+digraph G {
+  rankdir=LR; bgcolor="white";
+  node [fontname="Noto Sans CJK KR", fontsize=10, shape=box, style="rounded,filled"];
+  edge [fontname="Noto Sans CJK KR", fontsize=9, color="#5b6472"];
+  graph [fontname="Noto Sans CJK KR", fontsize=12, nodesep=0.35, ranksep=0.7, compound=true];
+
+  subgraph cluster_a {
+    label="① 배치 수집 (DB → DB / S3)"; style="rounded,filled"; fillcolor="#ecfdf5"; color="#a7f3d0"; fontcolor="#065f46"; fontname="Noto Sans CJK KR";
+    a_src [label="Source DB\nMySQL/MSSQL/PG/Mongo", fillcolor="#d1fae5"];
+    a_ext [label="Batch Extractor\n(JDBC/드라이버, 증분키/타임스탬프)", fillcolor="#a7f3d0"];
+    a_tgt [label="Target\nDB / S3(Parquet)", fillcolor="#d1fae5"];
+    a_src -> a_ext -> a_tgt;
+  }
+
+  subgraph cluster_b {
+    label="② SAP 수집 (RFC / BAPI)"; style="rounded,filled"; fillcolor="#fdf2f8"; color="#fbcfe8"; fontcolor="#9d174b"; fontname="Noto Sans CJK KR";
+    b_src [label="SAP ECC / S4HANA", fillcolor="#fce7f3"];
+    b_rfc [label="RFC 커넥터\nNW RFC SDK + ctypes\n(BAPI/RFC_READ_TABLE)", fillcolor="#fbcfe8"];
+    b_tgt [label="Target\nDB / S3", fillcolor="#fce7f3"];
+    b_src -> b_rfc -> b_tgt;
+  }
+
+  subgraph cluster_c {
+    label="③ CDC 수집 (실시간, Debezium)"; style="rounded,filled"; fillcolor="#eff6ff"; color="#bfdbfe"; fontcolor="#1e40af"; fontname="Noto Sans CJK KR";
+    c_src [label="Source DB\n(binlog/WAL/oplog)", fillcolor="#dbeafe"];
+    c_dbz [label="Debezium\n(Kafka Connect)", fillcolor="#bfdbfe"];
+    c_k [label="Kafka\n(변경 이벤트 토픽)", shape=cylinder, fillcolor="#dbeafe"];
+    c_sink [label="Sink Worker\n(적재/변환)", fillcolor="#bfdbfe"];
+    c_tgt [label="Target\nDB / S3", fillcolor="#dbeafe"];
+    c_src -> c_dbz -> c_k -> c_sink -> c_tgt;
+  }
+}

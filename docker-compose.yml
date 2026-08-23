@@ -1,59 +1,219 @@
-# `docker compose up` 한 줄로 빈 앱 + 로컬 PostgreSQL 이 함께 뜬다 (STEP 0 완료 조건).
-# 일상 개발에서는 DB 만 띄우고(`docker compose up -d db`) 앱은 호스트에서 `npm run dev` 로 돌린다.
+name: ditter
+
+x-api-env: &api-env
+  EAI_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-eai}:${POSTGRES_PASSWORD:-eai}@postgres:5432/${POSTGRES_DB:-eai}
+  EAI_REDIS_URL: redis://redis:6379/0
+  EAI_SECRET_BACKEND: ${EAI_SECRET_BACKEND:-local}
+  EAI_LOCAL_SECRET_KEY: ${EAI_LOCAL_SECRET_KEY:?set EAI_LOCAL_SECRET_KEY in .env}
+  EAI_JWT_SECRET: ${EAI_JWT_SECRET:?set EAI_JWT_SECRET in .env}
+  EAI_AUTH_ENABLED: ${EAI_AUTH_ENABLED:-true}
+  # SAP 연결이 사이드카 주소를 비워두면 쓰는 기본값. 사이드카가 하나면 이걸로 충분하다.
+  EAI_SAP_DEFAULT_SIDECAR_URL: ${EAI_SAP_DEFAULT_SIDECAR_URL:-http://sap-connector:8100}
+  # SymmetricDS 사이드카. 설정은 원본 DB 의 SYM_* 에 API 가 직접 넣으므로 이 주소는
+  # "방금 넣은 설정을 지금 반영하라"에만 쓴다 — 닿지 않아도 다음 주기에 반영된다.
+  # 엔진 이름은 sync/symmetricds/engines/*.properties 의 engine.name 과 반드시 같아야 한다.
+  EAI_SYMMETRIC_URL: ${EAI_SYMMETRIC_URL:-http://symmetricds:31415}
+  EAI_SYMMETRIC_SOURCE_ENGINE: ${EAI_SYMMETRIC_SOURCE_ENGINE:-eai-source}
+  EAI_SYMMETRIC_TARGET_ENGINE: ${EAI_SYMMETRIC_TARGET_ENGINE:-eai-target}
+  EAI_SYMMETRIC_TABLE_PREFIX: ${EAI_SYMMETRIC_TABLE_PREFIX:-SYM}
+  # 로컬 파일 타깃의 격리 루트. 모든 파일은 이 아래에만 생성된다. exportsdata 볼륨으로
+  # api·worker 가 공유하고, 호스트에서 보려면 이 경로를 bind mount 로 바꾸면 된다.
+  EAI_LOCAL_FILE_ROOT: ${EAI_LOCAL_FILE_ROOT:-/data/exports}
+  # DuckDB 연합 조회(이기종 조인)는 api 프로세스 안에서 돈다 — 조인이 커지면 그 메모리를
+  # api 가 그대로 쓰므로 상한을 둔다. 확장(postgres·mysql)은 이미지에 구워져 있고
+  # 경로는 Dockerfile 의 EAI_DUCKDB_EXTENSION_DIR 가 정한다.
+  EAI_DUCKDB_MEMORY_LIMIT: ${EAI_DUCKDB_MEMORY_LIMIT:-1GB}
+  AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+  AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-}
 
 services:
-  db:
-    image: postgres:17-alpine
+  postgres:
+    image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-ditter_dev}
-      POSTGRES_USER: ${POSTGRES_USER:-ditter}
-      # 로컬 개발 전용 값이다. 실제 대상 DB 자격증명은 저장소에 두지 않는다.
-      # (docs/policy/credential-management.md)
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ditter_local_dev_only}
-    # 포트는 호스트 루프백에만 공개한다. 인터페이스를 지정하지 않으면 Docker 가 모든
-    # 인터페이스에 바인딩하고 리눅스에서는 호스트 방화벽도 우회한다 — 위 비밀번호가
-    # 저장소에 적힌 값이라 신뢰할 수 없는 네트워크에서 그대로 노출된다.
-    ports:
-      - '127.0.0.1:5432:5432'
+      POSTGRES_USER: ${POSTGRES_USER:-eai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-eai}
+      POSTGRES_DB: ${POSTGRES_DB:-eai}
     volumes:
-      - db-data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-ditter} -d ${POSTGRES_DB:-ditter_dev}']
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-eai}"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 20
 
-  backend:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
     build:
       context: .
-      dockerfile: backend/Dockerfile
-    environment:
-      HOST: 0.0.0.0
-      PORT: 4000
-      POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: ${POSTGRES_DB:-ditter_dev}
-      POSTGRES_USER: ${POSTGRES_USER:-ditter}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ditter_local_dev_only}
-    ports:
-      - '127.0.0.1:4000:4000'
+      dockerfile: apps/api/Dockerfile
+    environment: *api-env
     depends_on:
-      db:
-        condition: service_healthy
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - exportsdata:/data/exports  # 로컬 파일 타깃 (연결 테스트 시 쓰기 확인)
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn eai_api.main:app --host 0.0.0.0 --port 8000"
 
-  frontend:
+  worker:
     build:
       context: .
-      dockerfile: frontend/Dockerfile
-    environment:
-      VITE_API_PROXY_TARGET: http://backend:4000
-      # 컨테이너 안에서는 0.0.0.0 으로 바인딩해야 위 포트 매핑이 닿는다. 호스트에서 직접
-      # 돌릴 때(`npm run dev`)는 지정하지 않아 vite.config.ts 의 루프백 기본값이 쓰인다.
-      VITE_DEV_HOST: 0.0.0.0
-    ports:
-      - '127.0.0.1:5173:5173'
+      dockerfile: apps/worker/Dockerfile
+    environment: *api-env
     depends_on:
-      - backend
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    volumes:
+      - exportsdata:/data/exports  # 로컬 파일 타깃 산출물 (api 와 공유)
+    command: ["celery", "-A", "eai_worker.celery_app:app", "worker", "-l", "info", "-Q", "eai.default"]
+    deploy:
+      replicas: ${WORKER_REPLICAS:-1}
+
+  beat:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    environment: *api-env
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    command: ["python", "-m", "eai_worker.scheduler"]
+
+  web:
+    build:
+      context: apps/web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-http://localhost:8000}
+        VITE_AUTH_ENABLED: ${EAI_AUTH_ENABLED:-true}
+    depends_on: [api]
+    ports:
+      - "${WEB_PORT:-5173}:80"
+
+  # --- Phase 3 (SAP RFC 전용 사이드카) ---
+  # 기본은 목 백엔드로 뜬다. 실제 SAP 에 붙이려면 vendor/nwrfcsdk 를 채우고
+  # WITH_NWRFC=1 로 빌드한 뒤 EAI_SAP_BACKEND=nwrfc 와 접속 정보를 준다.
+  sap-connector:
+    build:
+      context: .
+      dockerfile: apps/sap-connector/Dockerfile
+      args:
+        WITH_NWRFC: ${SAP_WITH_NWRFC:-0}
+    environment:
+      EAI_SAP_BACKEND: ${EAI_SAP_BACKEND:-mock}
+      EAI_SAP_MOCK_FIXTURE: /app/fixtures/sap_mock.json
+      EAI_SAP_API_TOKEN: ${EAI_SAP_API_TOKEN:-}
+      # SAP 접속 정보는 이제 연결 설정(UI)에 저장되어 요청 body 로 전달된다.
+      # 아래 EAI_SAP_* 는 요청에 접속 정보가 전혀 없을 때의 폴백으로만 쓰인다 — 보통 비워둔다.
+      EAI_SAP_ASHOST: ${EAI_SAP_ASHOST:-}
+      EAI_SAP_CLIENT: ${EAI_SAP_CLIENT:-}
+      EAI_SAP_USER: ${EAI_SAP_USER:-}
+      EAI_SAP_PASSWD: ${EAI_SAP_PASSWD:-}
+    ports:
+      - "${SAP_PORT:-8100}:8100"
+
+  # --- Phase 4 (CDC). `docker compose --profile cdc up -d` 로만 기동 ---
+  # CDC Sink Worker — Kafka 토픽을 구독해 타깃에 적재하는 상주 프로세스 (worker 이미지 재사용).
+  # scheduler(beat)와 같은 계열이라 무상태이며, 상태는 Kafka 오프셋·메타DB 에만 있다.
+  cdc-sink:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    profiles: ["cdc"]
+    environment: *api-env
+    depends_on:
+      postgres: {condition: service_healthy}
+      kafka: {condition: service_started}
+      # api 가 alembic 마이그레이션을 끝낸(=healthy) 뒤에 뜬다 — cdc_streams 테이블이
+      # 아직 없을 때 조회하다 죽는 경쟁 조건을 막는다.
+      api: {condition: service_healthy}
+    command: ["python", "-m", "eai_worker.cdc_sink"]
+
+  kafka:
+    # Bitnami 가 2025-08 부터 docker.io/bitnami 의 옛 버전 태그를 내리고 bitnamilegacy 로 옮겼다.
+    # KAFKA_CFG_* 환경변수와 /bitnami/kafka 볼륨 경로는 그대로라 이미지 이름만 바꾸면 된다.
+    image: bitnamilegacy/kafka:3.7
+    profiles: ["cdc"]
+    environment:
+      KAFKA_CFG_NODE_ID: "1"
+      KAFKA_CFG_PROCESS_ROLES: broker,controller
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+    volumes:
+      - kafkadata:/bitnami/kafka
+
+  debezium:
+    # Debezium 공식 이미지는 quay.io 에 게시된다 (Docker Hub 미러엔 이 태그가 없다).
+    image: quay.io/debezium/connect:2.7
+    profiles: ["cdc"]
+    depends_on: [kafka]
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: eai-connect
+      CONFIG_STORAGE_TOPIC: _eai_connect_configs
+      OFFSET_STORAGE_TOPIC: _eai_connect_offsets
+      STATUS_STORAGE_TOPIC: _eai_connect_status
+    ports:
+      - "8083:8083"
+
+  # --- 실시간 DB 동기화 (SymmetricDS). `docker compose --profile sync up -d` 로만 기동 ---
+  #
+  # CDC 와 달리 Kafka 가 필요 없다 — 노드 A(소스)와 노드 B(타깃)가 HTTP 로 직접 주고받는다.
+  # 여기서는 엔진 둘을 **한 컨테이너**에서 돌린다(개발·단일노드). 운영에서는 노드 A 를 원본
+  # 가까이, 노드 B 를 타깃 가까이 두는 편이 지연이 작다 — 그때는 이 서비스를 둘로 나눈다.
+  #
+  # 동기화 대상(트리거·라우터·채널)은 여기에 적지 않는다. 그것은 캔버스에서 정하고 API 가
+  # 원본 DB 의 SYM_* 테이블에 넣는다. 이 파일이 정하는 것은 "어느 DB 에 어떤 이름으로 붙나"뿐이다.
+  symmetricds:
+    # 공식 이미지에 JDBC 드라이버가 없어(h2 뿐) 얇게 한 겹 얹는다 — sync/symmetricds/Dockerfile.
+    build:
+      context: .
+      dockerfile: sync/symmetricds/Dockerfile
+      args:
+        SYMMETRIC_VERSION: ${SYMMETRIC_VERSION:-3.15}
+    profiles: ["sync"]
+    # 이미지 기본 명령은 `sym_service start && tail -F ...` 라 **데몬으로 띄우고 로그만 본다.**
+    # PID 1 이 tail 이라, 래퍼가 스스로를 "abandoned" 로 판단하면 컨테이너가 통째로 죽는다
+    # (실제로 겪었다 — 로그에 "Stopping abandoned wrapper" 가 반복되고 exit 129).
+    # `sym --server` 는 포그라운드로 돈다. PID 1 이 곧 SymmetricDS 라 죽으면 도커가 안다.
+    command: ["/opt/symmetric-ds/bin/sym", "--server", "--port", "31415"]
+    restart: unless-stopped
+    volumes:
+      # 설치 경로는 **/opt/symmetric-ds** 다 (symmetric-server 가 아니다 — 3.15.22 로 확인).
+      # 여기가 어긋나면 컨테이너는 멀쩡히 뜨는데 "No engine *.properties files found" 로
+      # 엔진이 하나도 없고, 동기화를 켜도 아무 일이 일어나지 않는다.
+      #
+      # 엔진 접속 정보. engines/*.properties.example 를 .properties 로 복사해 채운다.
+      - ./sync/symmetricds/engines:/opt/symmetric-ds/engines
+      - symlogs:/opt/symmetric-ds/logs
+    ports:
+      - "${SYMMETRIC_PORT:-31415}:31415"
 
 volumes:
-  db-data:
+  pgdata:
+  redisdata:
+  kafkadata:
+  symlogs:      # SymmetricDS 노드 로그 (전송 실패 원인이 여기 남는다)
+  exportsdata:  # 로컬 파일 타깃 산출물 (api·worker 공유)

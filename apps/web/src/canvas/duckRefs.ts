@@ -1,0 +1,112 @@
+/** DuckDB 연합 조회에서 테이블을 가리키는 표기.
+ *
+ * 백엔드 `services/duck_service.py` 가 이 표기를 파싱한다 — **문법의 단일 출처는 그쪽**이고
+ * 여기는 화면이 같은 문자열을 만들어 주기 위한 복제다. 한쪽만 고치면 편집기가 넣어 주는
+ * 이름을 서버가 못 알아본다 (`variables.ts` ↔ `variables.py` 와 같은 관계).
+ *
+ *     MySQL              연결이름.데이터베이스.테이블
+ *     PostgreSQL·MSSQL   연결이름[.데이터베이스].스키마.테이블
+ *
+ * "연결 이름 + 그 엔진의 정식 이름"이 규칙이다. MySQL 의 정식 이름은 `데이터베이스.테이블`,
+ * PostgreSQL·MSSQL 은 `데이터베이스.스키마.테이블` — 단계 수가 갈리는 건 그래서다.
+ * 뒤의 둘은 연결이 이미 데이터베이스를 알고 있어 서버가 그 자리를 생략해도 받아 준다.
+ *
+ * 여기(트리 클릭·자동완성)는 **항상 전체 형태**를 넣는다. 생략형은 손으로 칠 때의 편의고,
+ * 넣어 주는 이름은 어느 데이터베이스인지가 눈에 보이는 편이 낫다.
+ */
+
+/** 연결 선택 드롭다운에서 「연합 조회」를 고른 상태를 나타내는 값.
+ *
+ *  연합 조회는 **연결 하나를 고르는 일이 아니다** — 무엇을 읽을지는 SQL 안의 참조가
+ *  정한다. 그래도 선택지를 따로 두지 않고 연결 목록에 한 항목으로 넣는 이유는,
+ *  사용자가 "이 탭이 무엇을 조회하는가"를 한 곳에서만 정하게 하기 위해서다.
+ *  실제 연결 id 와 겹치지 않도록 식별자로 쓸 수 없는 모양을 골랐다. */
+export const DUCK_CONN = '__federated__'
+
+export const isDuckConn = (connId: string | null | undefined): boolean => connId === DUCK_CONN
+
+/** 연합 조회에 쓸 수 있는 연결 타입. 백엔드 `duck_service.DUCK_TYPES` 와 같아야 한다.
+ *  (MongoDB 는 ATTACH 할 수 있는 DuckDB 확장이 없어 낄 수 없다.) */
+export const DUCK_TYPES = ['mysql', 'postgres', 'mssql'] as const
+
+export type DuckType = (typeof DUCK_TYPES)[number]
+
+export const isDuckType = (type: string): type is DuckType =>
+  (DUCK_TYPES as readonly string[]).includes(type)
+
+/** 인용하지 않아도 되는 식별자 — 라틴 글자·숫자·밑줄만, 숫자로 시작하지 않는 것.
+ *  한글·공백이 들어간 연결 이름은 큰따옴표로 감싸야 경계가 잡힌다. */
+const BARE = /^[A-Za-z_][A-Za-z0-9_$]*$/
+
+/** 필요할 때만 큰따옴표로 감싼다 — 멀쩡한 이름까지 감싸면 읽기 나빠진다. */
+export function quotePart(name: string): string {
+  return BARE.test(name) ? name : `"${name.replace(/"/g, '""')}"`
+}
+
+/** 트리에서 고른 테이블 하나를 연합 조회 표기로. `namespace` 는 PostgreSQL 의 스키마다.
+ *
+ *  `database` 는 연결 설정에서 온다 — 연결이 그 값을 안 담고 있으면(드물다) 이름을 만들
+ *  수 없으므로 `null` 을 돌려주고, 호출부가 안내를 띄운다. 아무 이름이나 지어 넣으면
+ *  실행할 때까지 틀린 줄 모른다. */
+export function duckRef(opts: {
+  connectionName: string
+  connectionType: string
+  database: string | null | undefined
+  namespace: string | null | undefined
+  table: string
+}): string | null {
+  const { connectionName, connectionType, database, namespace, table } = opts
+  if (!database) return null
+  const parts = [connectionName, database]
+  // PostgreSQL·MSSQL 만 스키마 단계를 갖는다. MySQL 은 데이터베이스가 곧 그 자리다.
+  if (connectionType === 'postgres' || connectionType === 'mssql') {
+    if (!namespace) return null
+    parts.push(namespace)
+  }
+  parts.push(table)
+  return parts.map(quotePart).join('.')
+}
+
+/** 연합 조회 자동완성 한 항목 — 어느 연결의 어느 테이블인지까지 담는다.
+ *  한 편집기에 여러 연결의 테이블이 섞이므로 이름만으로는 구분이 안 된다. */
+export type DuckTable = {
+  connectionName: string
+  connectionType: string
+  database: string
+  /** PostgreSQL 스키마. MySQL 은 없다. */
+  namespace: string | null
+  name: string
+  columns?: { name: string; data_type?: string }[]
+  /** 완성해서 넣을 정규화된 이름 (`duckRef` 결과) */
+  ref: string
+}
+
+/** 연결 하나가 연합 조회에서 쓰는 데이터베이스 이름 (연결 설정의 `database`). */
+export function duckDatabase(config: Record<string, unknown> | undefined): string | null {
+  const db = config?.database
+  return typeof db === 'string' && db.trim() ? db.trim() : null
+}
+
+/** 새 DuckDB 탭이 처음 보여 줄 예시. 연결이 있으면 그 이름으로 채워 실제로 돌아가는
+ *  문장을 준다 — 빈 편집기보다 "무엇을 어떻게 쓰는가"를 훨씬 빨리 알려 준다. */
+export function duckStarter(
+  conns: { name: string; type: string; config?: Record<string, unknown> }[],
+): string {
+  const usable = conns.filter((c) => isDuckType(c.type) && duckDatabase(c.config))
+  if (usable.length === 0) {
+    return [
+      '-- 여러 연결의 테이블을 한 번에 조회합니다 (MySQL · PostgreSQL · SQL Server).',
+      '--   MySQL             연결이름.데이터베이스.테이블',
+      '--   PostgreSQL·MSSQL  연결이름.데이터베이스.스키마.테이블',
+      '',
+      'SELECT ',
+    ].join('\n')
+  }
+  const [first] = usable
+  const db = duckDatabase(first.config)!
+  const shape =
+    first.type === 'mysql'
+      ? `${quotePart(first.name)}.${quotePart(db)}.테이블`
+      : `${quotePart(first.name)}.${quotePart(db)}.스키마.테이블`
+  return `-- 왼쪽 「연결」 트리에서 테이블을 누르면 이름이 커서에 들어옵니다.\nSELECT *\nFROM ${shape}\n`
+}

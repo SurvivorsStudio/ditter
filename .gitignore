@@ -1,56 +1,41 @@
-# 의존성
-node_modules/
-
-# 빌드 산출물
-dist/
-build/
-.vite/
-*.tsbuildinfo
-
-# 환경 변수 (DB 접속 정보 등 비밀값 — docs/policy/credential-management.md)
+# ── 시크릿 (절대 커밋 금지) ──────────────────────────────────────────────
 .env
 .env.*
 !.env.example
 
-# 로컬 SQLite (접속 설정·감사 로그 등 런타임 데이터 — 커밋 대상 아님)
-*.sqlite
-*.sqlite3
-*.db
-/data/
+# ── Python ───────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# 로그
-*.log
-npm-debug.log*
+# ── Node / 프론트엔드 ────────────────────────────────────────────────────
+node_modules/
+apps/web/dist/
+dist/
+*.tsbuildinfo
 
-# 테스트 커버리지
-coverage/
+# ── SymmetricDS 엔진 설정 (DB 비밀번호가 평문으로 들어간다) ─────────────
+# 예시(.example)만 커밋한다. 채운 파일은 절대 올리지 않는다.
+/sync/symmetricds/engines/*.properties
+/sync/symmetricds/conf/*.properties
+/sync/symmetricds/lib/*.jar
 
-# 세션 작업 기록 (로컬 전용 — .claude/commands/done.md 참고)
-.done/
+# ── CDC 임시 테스트 세트 (배포 반영 금지) ────────────────────────────────
+# 로컬에서 CDC 를 시험하려고 만든 임시 소스/타깃 구성. 실제 배포와 무관.
+/docker-compose.cdc-test.yml
+/docker-compose.mssql-cdc-test.yml
+/docker-compose.pg-cdc-test.yml
+/cdc-test/
 
-# 로컬 요구사항·기획 메모 (하위 디렉토리 포함, 커밋 대상 아님)
-.requirements/
+# ── 로컬 도구 설정 (개인 환경) ───────────────────────────────────────────
+# Claude Code 의 로컬 설정·기동 구성. 사람마다 달라 공유하지 않는다.
+/.claude/
 
-# Claude Code 개인별 로컬 설정 (팀 공유 설정은 .claude/settings.json)
-.claude/settings.local.json
-
-# /review 세션 상태 (어느 HEAD 를 몇 번 리뷰했는지 — .claude/commands/review.md 참고)
-.claude/.review-state.json
-
-# Docker 로컬 오버라이드
-docker-compose.override.yml
-
-# 에디터/IDE
-.vscode/*
-!.vscode/settings.json
-!.vscode/extensions.json
-.idea/
-
-# macOS
+# ── OS / 에디터 ──────────────────────────────────────────────────────────
 .DS_Store
-
-# Windows
 Thumbs.db
-ehthumbs.db
-Desktop.ini
-$RECYCLE.BIN/

@@ -1,0 +1,57 @@
+[project]
+name = "eai-sap-connector"
+version = "0.1.0"
+description = "SAP RFC 전용 사이드카 — NW RFC SDK 격리 (설계 문서 §2, §3)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.5,<0.116",
+    "uvicorn[standard]>=0.32.1",
+    "pydantic>=2.10.2,<3",
+    "pydantic-settings>=2.6.1,<3",
+]
+
+# pyrfc 는 여기 넣을 수 없다. SAP NW RFC SDK 는 라이선스가 있어야 받을 수 있는
+# 독점 바이너리이고, pyrfc 는 그 SDK 가 있어야 빌드된다. Dockerfile 참고.
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.3",
+    "pytest-cov>=6.0.0",
+    "httpx>=0.28.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+artifacts = ["**/py.typed"]
+packages = ["src/eai_sap"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# B008 은 FastAPI 의존성 주입 관용구
+"src/eai_sap/main.py" = ["B008"]
+# N818: SapCallError 계열은 뿌리인 SapError 가 규칙을 지킨다
+"src/eai_sap/backends/base.py" = ["N818"]
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "src"
+packages = ["eai_sap"]
+strict = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ["pyrfc.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

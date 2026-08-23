@@ -1,0 +1,86 @@
+[project]
+name = "eai-api"
+version = "0.1.0"
+description = "EAI 플랫폼 백엔드 (FastMCP + FastAPI)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.5,<0.116",
+    "uvicorn[standard]>=0.32.1",
+    # FastMCP 는 빠르게 변한다 — 정확한 버전으로 핀 고정한다 (설계 문서 §2 주의사항).
+    # 올릴 때는 pydantic 호환성을 반드시 먼저 확인할 것: 2.10.x 는 pydantic 2.13 과 깨진다.
+    "fastmcp==2.14.0",
+    # fastmcp 2.14.0 은 mcp 의 `McpError` 를 import 한다. 최신 mcp 는 이를 `MCPError` 로
+    # 개명해 깨지는데, pip 는 상한이 없어 최신을 잡는다 (uv 와 달리). uv.lock 이 검증한
+    # 호환 버전으로 핀 고정한다 — fastmcp 를 올릴 때 이 버전도 함께 확인할 것.
+    "mcp==1.27.2",
+    "pydantic>=2.10.2,<3",
+    "pydantic-settings>=2.6.1,<3",
+    "sqlalchemy>=2.0.36,<2.1",
+    "alembic>=1.14.0,<1.15",
+    "psycopg[binary]>=3.2.3,<3.3",
+    "redis>=5.2.0,<6",
+    "celery>=5.4.0,<5.5",
+    "cryptography>=44.0.0",
+    "pyjwt>=2.10.0,<3",
+    "argon2-cffi>=23.1.0,<25",
+    "email-validator>=2.2.0,<3",
+    # 이기종 연합 조회 엔진. postgres·mysql 확장으로 원격 DB 를 카탈로그로 붙인다
+    # (services/duck_service). 확장 ABI 가 마이너 버전마다 갈리므로 상한을 둔다.
+    "duckdb>=1.1.0,<2",
+    # DuckDB 결과(Arrow) → 파이썬 행 변환. DECIMAL·DATE·LIST·STRUCT 를 정확히 푼다.
+    "polars>=1.0.0,<2",
+    "eai-connectors",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.3",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "httpx>=0.28.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+    "types-redis>=4.6.0",
+]
+
+[tool.uv.sources]
+eai-connectors = { path = "../connectors", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+artifacts = ["**/py.typed"]
+packages = ["src/eai_api"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# B008 은 FastAPI 의 의존성 주입 관용구다 — Depends() 는 반드시 기본값 자리에 와야 한다
+"src/eai_api/auth/rbac.py" = ["B008"]
+"src/eai_api/routers/*.py" = ["B008"]
+# N818: AuthenticationFailed 는 "인증이 실패했다"는 사건을 가리키는 이름이 호출부에서 더 잘 읽힌다
+"src/eai_api/services/user_service.py" = ["N818"]
+
+[tool.mypy]
+python_version = "3.12"
+# 소스 루트를 알려줘야 패키지 내부 상대 import 를 해석한다
+mypy_path = "src"
+packages = ["eai_api"]
+strict = true
+warn_unreachable = true
+plugins = []
+
+[[tool.mypy.overrides]]
+module = ["fastmcp.*", "celery.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

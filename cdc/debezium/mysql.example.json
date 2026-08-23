@@ -1,0 +1,21 @@
+{
+  "_comment": "참고용 — 실제 설정은 cdc_connect.build_connector_config() 가 코드로 생성한다. stream_id=00000000-0000-0000-0000-000000000000 예시.",
+  "connector.class": "io.debezium.connector.mysql.MySqlConnector",
+  "tasks.max": "1",
+  "topic.prefix": "eai_00000000_0000_0000_0000_000000000000",
+  "database.hostname": "mysql.internal",
+  "database.port": "3306",
+  "database.user": "eai_cdc",
+  "database.password": "<복호화된 연결 비밀번호>",
+  "database.server.id": "5678",
+  "database.include.list": "shop",
+  "table.include.list": "shop.orders,shop.customers",
+  "snapshot.mode": "initial",
+  "schema.history.internal.kafka.bootstrap.servers": "kafka:9092",
+  "schema.history.internal.kafka.topic": "schema-history.eai_00000000_0000_0000_0000_000000000000",
+  "transforms": "unwrap",
+  "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+  "transforms.unwrap.add.fields": "op,ts_ms",
+  "transforms.unwrap.delete.handling.mode": "rewrite",
+  "transforms.unwrap.drop.tombstones": "true"
+}
