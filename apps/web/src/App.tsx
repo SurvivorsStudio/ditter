@@ -37,8 +37,8 @@ export function App() {
   return (
     <div className="app">
       <div className="rail">
-        <NavLink to="/" className="logo" title="EAI 플랫폼">
-          EAI
+        <NavLink to="/" className="logo" title="ditter">
+          <img src="/logo-dark.png" alt="ditter" />
         </NavLink>
         <div className="nav">
           <NavLink to="/" end>
@@ -63,6 +63,7 @@ export function App() {
           </NavLink>
         </div>
         <div className="spacer" />
+        <div className="rail-sep" />
         <button
           className="avatar"
           title={`${user?.email ?? ''} (${user?.roles.join(', ') ?? ''}) — 클릭하면 로그아웃`}
@@ -74,6 +75,7 @@ export function App() {
           }}
         >
           {initials}
+          <span className="status-dot" title="로컬 환경 · 연결됨" />
         </button>
       </div>
 

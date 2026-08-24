@@ -60,24 +60,27 @@ textarea {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 14px 0;
+  padding: 0 0 14px;
   gap: 6px;
   flex-shrink: 0;
 }
 .logo {
-  width: 40px;
-  height: 40px;
-  border-radius: 11px;
-  background: linear-gradient(135deg, var(--brand), var(--brand2));
+  /* 상단 헤더(.topbar, 60px)와 높이를 맞춘 헤더 셀 (다크 레일) */
+  box-sizing: border-box;
+  width: 76px;
+  height: 60px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  font-weight: 800;
-  font-size: 17px;
-  margin-bottom: 12px;
-  box-shadow: 0 4px 12px rgba(234, 75, 113, 0.4);
+  padding: 5px 0;
+  margin-bottom: 6px;
   text-decoration: none;
+}
+.logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 .nav {
   display: flex;
@@ -87,6 +90,7 @@ textarea {
   align-items: center;
 }
 .nav a {
+  position: relative;
   width: 56px;
   height: 52px;
   border: 0;
@@ -108,22 +112,43 @@ textarea {
   height: 20px;
 }
 .nav a:hover {
-  background: #363749;
+  background: rgba(255, 255, 255, 0.06);
   color: #e6e7ef;
 }
 .nav a.active {
-  background: #363749;
+  background: rgba(255, 255, 255, 0.09);
   color: #fff;
+  font-weight: 600;
+}
+.nav a.active::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 24px;
+  border-radius: 0 3px 3px 0;
+  background: var(--brand);
 }
 .nav a.active svg {
   color: var(--brand);
+}
+.rail-sep {
+  width: 40px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 4px 0 8px;
+  flex-shrink: 0;
 }
 .rail .spacer {
   flex: 1;
 }
 .avatar {
+  position: relative;
   width: 38px;
   height: 38px;
+  border: 0;
   border-radius: 50%;
   background: linear-gradient(135deg, #6b4efc, #3b82f6);
   color: #fff;
@@ -132,6 +157,18 @@ textarea {
   justify-content: center;
   font-weight: 700;
   font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(107, 78, 252, 0.35);
+}
+.avatar .status-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #22c55e;
+  border: 2px solid var(--rail);
 }
 
 /* ---------- main ---------- */
@@ -2415,6 +2452,18 @@ body.resizing-col .config-resizer::after {
   min-width: 0;
   min-height: 0;
   display: flex;
+}
+/* 흐릿한 로고 워터마크 — SQL 편집기 영역(.sql-editor-cm) 기준으로만 중앙 배치.
+   (결과 그리드는 제외하므로 데이터가 떠도 편집기 가운데에 머문다) */
+/* 편집기가 비어 있을 때만 표시 — 글자를 입력하면 사라진다 */
+.editor-pane.is-empty .sql-editor-cm::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('/logo.png') center center / min(340px, 55%) no-repeat;
+  opacity: 0.05;
+  pointer-events: none;
+  z-index: 3;
 }
 .sql-session-empty {
   flex: 1;
@@ -5994,6 +6043,13 @@ tbody tr:hover {
   color: var(--ink);
   font-size: 15px;
 }
+.empty-logo {
+  display: block;
+  width: 220px;
+  max-width: 55%;
+  height: auto;
+  margin: 0 auto 20px;
+}
 .banner {
   border-radius: 11px;
   padding: 11px 14px;
@@ -6072,18 +6128,17 @@ tbody tr:hover {
   text-align: center;
 }
 .login-logo {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, var(--brand), var(--brand2));
-  color: #fff;
-  font-weight: 800;
-  font-size: 19px;
+  width: 72px;
+  height: 72px;
   display: flex;
   align-items: center;
   justify-content: center;
   margin: 0 auto 14px;
-  box-shadow: 0 6px 18px rgba(234, 75, 113, 0.36);
+}
+.login-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 .login-card h1 {
   font-size: 19px;
@@ -7352,12 +7407,25 @@ tbody tr:hover {
   color: var(--ink);
 }
 .nb {
+  position: relative;
+  isolation: isolate; /* 워터마크(z-index:-1)를 .nb 안에 가둔다 */
   flex: 1;
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   background: #fbfbfe;
+}
+/* 노트북 버전 워터마크 — 상시 표시(내용 유무 무관)하되 셀 '뒤'에 깔린다.
+   셀 블록이 있는 자리는 셀 배경이 덮어 가리고, 빈 배경에만 흐릿하게 보인다. */
+.nb::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('/logo.png') center center / min(340px, 40%) no-repeat;
+  opacity: 0.05;
+  pointer-events: none;
+  z-index: -1;
 }
 .nb-toolbar {
   flex-shrink: 0;

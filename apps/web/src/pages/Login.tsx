@@ -30,8 +30,10 @@ export function Login() {
   return (
     <div className="login-page">
       <form className="login-card" onSubmit={submit}>
-        <div className="login-logo">EAI</div>
-        <h1>EAI 플랫폼</h1>
+        <div className="login-logo">
+          <img src="/logo.png" alt="ditter" />
+        </div>
+        <h1>ditter</h1>
         <p className="login-sub">계속하려면 로그인하세요</p>
 
         {error && <Banner kind="error">{error}</Banner>}
