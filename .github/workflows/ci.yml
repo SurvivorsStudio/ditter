@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    env:
+      # 단위 테스트용 더미 값 — conftest 가 EAI_AUTH_ENABLED=false 를 기본으로 켜지만,
+      # Settings() 가 32바이트 미만 JWT 시크릿을 거부하므로 유효 길이의 더미를 준다.
+      EAI_JWT_SECRET: ci-dummy-jwt-secret-0123456789-abcdef
+      EAI_AUTH_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Python 앱 (uv · pytest) ────────────────────────────────────────
+      - name: Install ODBC headers (pyodbc 빌드 의존성)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends unixodbc-dev
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Test connectors
+        run: cd apps/connectors && uv run pytest -q
+
+      - name: Test sap-connector
+        run: cd apps/sap-connector && uv run pytest -q
+
+      - name: Test api
+        run: cd apps/api && uv run pytest -q
+
+      - name: Test worker
+        run: cd apps/worker && uv run pytest -q
+
+      # ── Web (npm · vitest) ─────────────────────────────────────────────
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Test web
+        run: cd apps/web && npm ci && npm test
