@@ -1,0 +1,12 @@
+# web 이미지는 빌드 컨텍스트가 apps/web 이라 루트 .dockerignore 가 적용되지 않는다.
+#
+# 특히 node_modules 가 중요하다. Dockerfile 이 `COPY . .` 로 소스를 통째로 넣는데,
+# 호스트의 node_modules(수백 MB, 플랫폼별 바이너리 포함)까지 딸려 들어가면
+# 전송이 느릴 뿐 아니라 컨테이너 안에서 설치한 것을 덮어써 빌드가 깨질 수 있다.
+node_modules
+dist
+.vite
+.env
+.env.*
+!.env.example
+**/.DS_Store

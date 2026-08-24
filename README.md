@@ -1,191 +1,248 @@
 # ditter
 
-운영 중인 PostgreSQL에 붙어서, 위험한 쿼리를 **실행하기 전에** 잡아내고 AI와 함께 고칠 수 있게
-해주는 **읽기 전용 웹 SQL 콘솔**.
+이기종 저장소(RDB, NoSQL, SAP)의 데이터를 표준화된 방식으로 수집해 목적 저장소(DB, Amazon S3)로
+적재하는 자체 EAI 플랫폼. 웹에서 드래그앤드롭(n8n 스타일)으로 파이프라인을 구성하고 **배치·실시간(CDC)**
+으로 실행한다.
 
-> **안전하게 조회하고, 느리면 AI와 같이 고친다.**
+상세 설계는 [docs/EAI_아키텍처_설계문서.pdf](docs/EAI_아키텍처_설계문서.pdf),
+구현 가이드는 [CLAUDE.md](CLAUDE.md)를 참고.
 
-## 왜 필요한가
+---
 
-개발자는 프로덕션 데이터를 봐야 할 때가 있다. 그런데 무거운 쿼리 하나가 서비스를 느리게 만들 수
-있어서 무섭다. ChatGPT에 물어봐도, ChatGPT는 우리 DB에 데이터가 얼마나 있는지, 인덱스가 어떻게
-걸려 있는지 모른 채 "그럴듯한 SQL"만 준다.
+## 현재 구현 범위
 
-ditter는 **실제 DB를 읽는다.** 스키마, 데이터 규모, 인덱스, EXPLAIN 실행 계획을 읽어서 AI에게
-넘긴다. 그래서 AI가 추측이 아니라 근거를 갖고 답하고, 쿼리를 실행하기 전에 "이건 위험합니다"라고
-붙잡는다.
-
-**절대 안 하는 것**: 사람이 쓴 SQL로 데이터를 수정하지 않는다. 콘솔은 읽기만 한다. 이건 기능
-제약이 아니라 위험 자체를 없애는 설계 결정이다 — 도입하는 회사 입장에서 "이 콘솔에는 **읽는
-권한만** 주면 된다"가 된다. 운영 관찰(F5)까지 쓰려면 통계 조회 롤(`pg_read_all_stats`)이 하나 더
-붙는데, 그것도 읽기 권한이다. 데이터를 바꿀 수 있는 권한은 어느 경우에도 필요 없다.
-파이프라인(F7)의 타깃 적재는 자유형 SQL이 닿지 않는 별도 경로이며, 그 경계는
-[아래](#파이프라인이-쓰는데도-읽기-전용인-이유)에 정리했다.
-
-## 핵심 기능
-
-| # | 기능 | 한 줄 설명 |
+| Phase | 내용 | 상태 |
 |---|---|---|
-| F1 | 웹 SQL 콘솔 (읽기 전용) | 브라우저에서 쿼리 작성·실행, 결과 표시 (+ 이기종 쿼리엔진으로 PostgreSQL·MySQL 조인) |
-| F2 | AI 쿼리 작성 보조 | 자연어 → SQL, 또는 작성 중인 SQL 개선 |
-| F3 | 실행 전 위험 예측 | 실행하기 전에 "이 쿼리 위험합니다" 경고 — **킬러 기능** |
-| F4 | EXPLAIN 해석 + 튜닝 제안 | 왜 느린지 설명하고 어떻게 고칠지 제안 |
-| F5 | 운영 관찰 | 느린 쿼리 목록, 실행 중인 세션 보기 |
-| F6 | 감사 로그 | 누가 언제 무슨 쿼리를 실행했는지 기록 |
-| F7 | 데이터 파이프라인 | 드래그앤드롭으로 구성하는 배치 수집·적재 (증분 · 스케줄) |
+| 0 | 모노레포·docker-compose·메타DB 모델·마이그레이션 | ✅ 완료 |
+| 1 | MVP — MySQL/PostgreSQL 커넥터, S3 타깃, 스케줄러, Canvas 저작, 실행/이력 | ✅ 완료 |
+| 2 | MSSQL/MongoDB 커넥터, RBAC 로그인, Monitor 고도화, 팬아웃 스풀링 | ✅ 완료 |
+| 3 | SAP RFC 전용 사이드카 (BAPI · RFC_READ_TABLE) | ✅ 완료 |
+| 4 | CDC (Debezium) — MySQL/PostgreSQL/MSSQL 실시간 수집, Sink Worker | ✅ 완료 |
+| 5 | 운영 고도화 (오토스케일·HA/DR·감사) | ⬜ 예정 |
 
-대상 DB는 PostgreSQL과 MySQL 둘이며(파이프라인의 소스·타깃은 여전히 PostgreSQL 하나), DB 접근
-코드는 어댑터 인터페이스로 감싸 멀티 DB 확장을 실제로 검증하고 있다.
+> 그 밖에 **변환 노드**를 확장했다 — Python 전처리 노드(격리 서브프로세스·pandas·행/배치 모드),
+> 스위치(조건 분기) 노드. 아래 참조.
 
-## 데이터 파이프라인 (F7)
+**변환 노드 확장 (최근)**
 
-한 번 조회하고 끝나는 대신, **그 안전한 쿼리를 그대로 반복 적재로 만든다.** 브라우저 캔버스에서
-소스 → 변환 → 타깃을 드래그앤드롭으로 잇고, cron으로 돌리고, 증분(watermark)으로 새 데이터만
-가져온다.
+- **Python 전처리 노드** — 사용자 Python 코드로 레코드를 변환. 임의 코드라 **격리 자식 프로세스**에서
+  실행(시크릿·메타DB·네트워크 차단, rlimit·타임아웃). `pandas` 기본 제공. 두 모드: `transform(row)`
+  행 단위 스트리밍 / `transform_batch(df)` 전체 행을 DataFrame 으로 한 번에.
+- **스위치(조건 분기) 노드** — 각 행을 처음 맞는 case 의 출력으로, 아무 것도 안 맞으면 '그 외' 출력으로
+  라우팅. 출력이 여러 개인 다중 출력 노드(엣지가 `source_handle` 로 어느 case 인지 가리킨다).
+- 코드 편집기는 CodeMirror(문법 하이라이트·크게 편집 팝업).
 
-F7은 별도 제품이 아니라 F1~F6이 만든 안전 장치(접속 풀, 읽기 전용 강제, 자격증명 암호화, 감사
-로그)를 그대로 재사용하는 **실행 모드**다. 설계 전체는 [docs/pipeline](docs/pipeline/README.md)에
-있다.
+**Phase 4 에서 추가된 것**
 
-## 안전 설계
+- **Debezium 기반 CDC** — MySQL · PostgreSQL · MSSQL 소스를 실시간 수집. Kafka 토픽을 구독하는
+  **Sink Worker**(`cdc_sink`)가 타깃에 적재한다. 무상태라 수평 확장된다.
+- CDC 소스 노드(파랑, 실시간 그룹)·CDC 스트림 트리거·스냅샷 모드(initial/never/when_needed)·삭제 처리.
+- Kafka·Debezium·Sink 는 `docker compose --profile cdc up -d` 로만 기동한다(배치 파이프라인과 분리).
 
-읽기 전용은 두 겹으로 강제한다 — **DB 계정 권한(주방어)** + **AST 기반 문장 검증(보조)**. `WITH t
-AS (DELETE FROM users RETURNING *) SELECT * FROM t` 같은 CTE 우회도 문자열 검사가 아니라 구문
-트리 파싱으로 잡아낸다. 자세한 내용은 [docs/policy](docs/policy/README.md) 참고.
+**Phase 3 에서 추가된 것**
 
-### 파이프라인이 쓰는데도 "읽기 전용"인 이유
+- SAP RFC 전용 사이드카 — NW RFC SDK 와 SAP 자격증명을 그 컨테이너 안에만 가둔다
+- BAPI 호출 (권장) · RFC_READ_TABLE (512자 행폭 자동 분할, 72자 WHERE 분할)
+- 목 백엔드 — SDK 없이 개발·CI. **512자 제약을 실제와 동일하게 강제**한다
+- SAP 노드(핑크), 필드 선택 시 512자 초과 여부를 미리 표시
 
-F7은 목적 저장소에 쓴다. 그래도 위 주장은 그대로다 — **사람에게 열어주는 SQL 실행 경로는 여전히
-읽기 전용 하나뿐이기 때문이다.**
+**Phase 2 에서 추가된 것**
 
-- 커넥션은 `source`(읽기 전용 계정) / `target`(쓰기 계정)으로 나뉘고 **겸할 수 없다.**
-- 타깃 커넥션은 **콘솔에서 도달할 수 없다.** 쿼리 실행 API가 거부하고, 접속 목록에도 안 나온다.
-- 타깃에 나가는 문장은 커넥터가 만드는 **세 가지(append · upsert · overwrite)뿐**이다. 사용자도
-  AI도 자유형 SQL을 넣을 수 없다.
-- 타깃 계정에는 지정 스키마의 지정 테이블 권한만 준다. `DROP`도 DDL도 주지 않는다.
-- 모든 쓰기는 감사 로그에 남는다.
+- MSSQL(pyodbc·MERGE upsert) · MongoDB(JSON 필터·문서 정규화) 커넥터
+- 로그인 화면 + JWT + 역할별 UI 제어 (viewer / operator / editor / admin)
+- 사용자 관리 API와 CLI (`python -m eai_api.cli create-admin`)
+- 실행 상세 화면 — 노드별 분해, 재실행, 로그 레벨·노드 필터
+- 팬아웃 스풀링 — 분기가 있어도 소스를 **한 번만** 읽는다
 
-경계의 전문은 [pipeline-write-boundary.md](docs/policy/pipeline-write-boundary.md) 참고. 콘솔
-계정에는 **여전히 읽는 권한만 주면 된다** (F5를 쓸 때 붙는 `pg_read_all_stats`까지 포함해서).
+**Phase 1 에서 동작하는 것**
 
-## 기술 스택
+- 연결 등록·테스트·스키마 탐색 (MySQL / PostgreSQL / S3)
+- 시크릿 분리 저장 (Fernet 또는 AWS KMS) — 원문은 메타DB에 남지 않음
+- 드래그앤드롭 파이프라인 편집기 (React Flow), 버전 스냅샷
+- DAG 실행: 위상 정렬 → Extract → Transform(필터·필드매핑·Python·스위치) → Load
+- 증분 적재(watermark) + 체크포인트, `full_refresh` 전체 재적재
+- 멱등 적재: DB는 upsert/overwrite, S3는 실행 단위 경로 분리
+- Cron 스케줄러 (중복 실행 방지), 수동 실행, 실행 취소
+- WebSocket 실시간 진행률·로그, 실행 이력·대시보드 통계
+- MCP 도구 12종 — UI와 동일한 서비스 계층을 LLM/에이전트가 재사용
 
-React + Vite(프런트엔드, TypeScript) + FastAPI(백엔드, Python), 대상 DB는 PostgreSQL(+ 이기종
-쿼리엔진에서 MySQL), 로컬 저장은 SQLite다. 파이프라인이 붙으면 여기에 Redis + Celery(큐·워커)와
-React Flow(캔버스)가 더해진다. 자세한 구조는 [docs/conventions](docs/conventions/README.md) 참고.
+---
 
-> ⚠️ **스택 결정 변경**: 백엔드는 원래 TypeScript/Fastify로 시작했으나 Python/FastAPI로
-> 바꾸기로 했다. 아래 구조·명령어는 **목표 설계**이며, [진행 상황](#진행-상황)에 실제 구현이
-> 어디까지 재작업됐는지 남긴다.
+## 빠른 시작
 
-```
-backend/                  FastAPI 백엔드 (:4000, Python)
-frontend/                 React + Vite 웹 콘솔 + 파이프라인 캔버스 (:5173, TypeScript)
-worker/                   Celery 워커 — 파이프라인 실행 (STEP 9~, Python)
-packages/dag-spec/        백엔드·워커가 공유하는 DAG 스펙 (Pydantic v2)
-packages/pipeline-connectors/  커넥터 라이브러리 (백엔드·워커 공유, Python)
-docs/                     계획·정책·컨벤션·스키마·파이프라인 설계
-```
-
-프런트엔드는 백엔드의 OpenAPI 스펙에서 타입을 생성해 쓴다 — 손으로 다시 선언하지 않는다
-([project-structure.md](docs/conventions/project-structure.md#프런트엔드-백엔드-타입-공유)).
-
-## 시작하기
-
-**앱은 Docker로 돌린다.** PostgreSQL까지 컨테이너 안에 있어서, 호스트에 Node나 PostgreSQL을
-따로 깔지 않아도 된다. 처음 합류했다면 [onboarding.md](onboarding.md)에 세팅부터 개발 흐름까지
-정리돼 있다.
+### 1. 환경 변수
 
 ```bash
-docker compose up
-```
-
-이거 하나면 세 개가 함께 뜬다.
-
-| 주소 | 무엇 |
-|---|---|
-| http://127.0.0.1:5173 | 웹 콘솔 (React + Vite) |
-| http://127.0.0.1:4000 | 백엔드 API (**현재 구현은 Fastify** — FastAPI로 재작업 예정, 아래 [진행 상황](#진행-상황) 참고) |
-| `127.0.0.1:5432` | PostgreSQL — psql·GUI 클라이언트로 붙을 때 쓴다 |
-
-**소스는 bind mount라 고치면 바로 반영된다.** 프런트는 HMR로, 백엔드는 프로세스 재시작으로
-붙는다. 이미지를 다시 빌드해야 하는 건 **의존성이 바뀔 때뿐**이다 — 그때는
-`docker compose up --build`.
-
-Claude Code에서는 [`/dev`](.claude/commands/dev.md) 커맨드가 위 과정(런타임 확인 → 기동 →
-health 확인)을 한 번에 처리한다.
-
-```bash
-docker compose logs -f backend   # 로그 보기
-docker compose down              # 내리기 (DB 데이터는 남는다)
-docker compose down -v           # DB 데이터까지 지우고 처음부터
-```
-
-`.env`는 없어도 위 명령이 그대로 돈다 — [docker-compose.yml](docker-compose.yml)에 로컬 기본값이
-들어 있다. 포트나 DB 이름을 바꾸고 싶을 때만 `cp .env.example .env` 하면 된다.
-
-**공개 범위**: 컨테이너 포트는 전부 `127.0.0.1`에만 묶여 있어 같은 네트워크의 다른 기기에서
-닿지 않는다. compose에 적힌 DB 비밀번호가 저장소에 그대로 있는 고정값이고 인증은 STEP 8에야
-붙기 때문이다. 이 구성은 **로컬 개발 전용이며 배포용이 아니다.**
-
-### 호스트에서 직접 돌리기 (선택)
-
-Docker 없이 돌려야 하면 이 경로도 남아 있다. 단 **위 `docker compose up`과 동시에 쓰지 않는다**
-— 같은 포트를 두고 다툰다.
-
-```bash
-npm ci --ignore-scripts   # 설치 스크립트 차단이 기본이다 (docs/policy/supply-chain-security.md S5)
 cp .env.example .env
-docker compose up -d db   # DB만 컨테이너로
-npm run dev               # 백엔드 :4000 + 프런트 :5173
 ```
 
-이 경우에도 개발 서버는 기본적으로 내 컴퓨터에서만 접속을 받는다. 같은 네트워크의 다른 기기에서
-붙어야 하면 `.env`의 `HOST`(백엔드)와 `VITE_DEV_HOST`(프런트)를 둘 다 열어야 한다 — 프런트만
-열어도 `/api` 프록시를 타고 백엔드에 닿기 때문이다. 인증은 STEP 8에야 붙으니 열어둔 채 두지 않는다.
+`.env`의 빈 값을 채운다.
 
-### 그 밖의 명령
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
 
-아래는 컨테이너 밖에서 도는 검사·빌드다 (CI가 쓰는 것과 같다). `npm ci --ignore-scripts`가 먼저 필요하다.
+```bash
+openssl rand -hex 32
+```
 
-| 명령 | 하는 일 |
-|---|---|
-| `npm run lint` / `npm run format` | ESLint / Prettier |
-| `npm run typecheck` | 전 워크스페이스 타입 검사 |
-| `npm test` | 전 워크스페이스 테스트 (Vitest) |
-| `npm run build` | 공유 타입 + 프런트엔드 빌드 |
+앞의 값을 `EAI_LOCAL_SECRET_KEY`, 뒤의 값을 `EAI_JWT_SECRET`에 넣는다.
 
-백엔드는 **빌드하지 않는다.** Node가 타입 표기를 지우며 `.ts`를 그대로 실행한다(Node 24+). 트랜스
-파일러 의존성을 하나 줄이려는 선택이며, 그 대가로 백엔드 코드에서는 상대 경로 import에 `.ts`
-확장자를 붙인다.
+### 2. 전체 기동 (Docker)
 
-## 진행 상황
+```bash
+docker compose up -d --build
+```
 
-**STEP 0(개발 환경)을 TypeScript/Fastify 백엔드로 완료했었다** — 모노레포·CI 보안 게이트가 서
-있고, `docker compose up`으로 세 컨테이너가 뜨는 것과 `npm run dev` 양쪽 경로를 실제로 확인했다.
-제품 기능은 아직 없었다.
+- 웹 http://localhost:5173
+- API 문서 http://localhost:8000/docs
+- MCP 엔드포인트 http://localhost:8000/mcp-server/mcp
 
-> ⚠️ **그 뒤 백엔드 스택을 Python(FastAPI)으로 바꾸기로 했다** ([docs/todo/step-00-dev-environment.md](docs/todo/step-00-dev-environment.md)
-> 상단 참고). `backend/` 워크스페이스와 관련 CI 단계는 재작업이 필요하다 — 아직 라우트 하나
-> (헬스체크) 수준이라 재작업 비용은 크지 않다. 프런트엔드·컨테이너 구성 원칙·보안 게이트는 그대로
-> 유효하며, 이 README의 실행 명령은 **아직 이전 스택 기준**이다.
+### 3. 로컬 개발 (인프라만 컨테이너로)
 
-다음은 [STEP 1 DB 안전 접속](docs/todo/step-01-db-connection.md)이며 모든 것의 병목이다. 다만
-STEP 1을 기다리지 않고 **동시에 시작할 수 있는 작업이 넷 더 있다** — 읽기 전용 AST 검증기,
-감사 로그 + 인증, 커넥터 패키지, [이기종 쿼리엔진(STEP 2A)](docs/todo/step-02a-federated-query-engine.md)
-착수 준비는 순수 로직·설계 확정이라 DB도 백엔드도 필요 없다
-([지금 당장 착수할 것](docs/todo/README.md#지금-당장-착수할-것)).
+```bash
+docker compose up -d postgres redis
+```
 
-진행 단계와 완료 조건은 [docs/todo](docs/todo/README.md)에서 추적한다.
+```bash
+uv venv --python 3.12 && uv pip install -e apps/connectors -e apps/api -e apps/worker
+```
 
-## 문서
+```bash
+cd apps/api && alembic upgrade head && uvicorn eai_api.main:app --reload
+```
 
-- [docs/todo](docs/todo/README.md) — 개발 단계(STEP 0~13)와 완료 조건
-- [docs/policy](docs/policy/README.md) — 보안·데이터 취급 정책
-- [docs/conventions](docs/conventions/README.md) — 개발 언어·코드 컨벤션
-- [docs/schema](docs/schema/README.md) — DITTER 로컬 SQLite 테이블 스키마
-- [docs/pipeline](docs/pipeline/README.md) — 데이터 파이프라인(F7) 설계
+```bash
+celery -A eai_worker.celery_app:app worker -l info -Q eai.default
+```
 
-## 라이선스
+```bash
+python -m eai_worker.scheduler
+```
 
-[MIT](LICENSE)
+```bash
+cd apps/web && npm install && npm run dev
+```
+
+### 4. 첫 관리자 계정
+
+인증이 켜져 있으면 로그인해야 하므로, 서버에서 먼저 관리자를 만든다.
+
+```bash
+cd apps/api && python -m eai_api.cli create-admin admin@company.com
+```
+
+비밀번호는 대화형으로 입력받는다 — 인자로 주면 셸 히스토리에 남는다.
+로컬 개발 중 인증을 끄려면 `EAI_AUTH_ENABLED=false`.
+
+---
+
+## 테스트 · 품질
+
+```bash
+cd apps/connectors && pytest && ruff check . && mypy .
+```
+
+```bash
+cd apps/api && pytest && ruff check . && mypy .
+```
+
+```bash
+cd apps/worker && pytest && ruff check . && mypy .
+```
+
+```bash
+cd apps/sap-connector && pytest && ruff check . && mypy .
+```
+
+```bash
+cd apps/web && npm test && npm run lint && npm run build
+```
+
+현재: Python 435개 · 프론트 98개 테스트 통과. ruff · mypy(strict) · eslint · tsc 모두 클린.
+
+---
+
+## 구조
+
+```
+apps/
+  connectors/   BaseConnector 계약 + MySQL·PostgreSQL·MSSQL·MongoDB·SAP·S3·로컬파일 (지연 로딩)
+  api/          FastAPI(REST/WS) + FastMCP, 모델·Alembic, 인증(JWT/RBAC), 서비스 계층, 운영 CLI
+  worker/       Celery 워커 — DAG 엔진, 노드 실행기(Python 격리 샌드박스 포함), 팬아웃 스풀,
+                Cron 스케줄러, CDC Sink Worker
+  sap-connector/ SAP RFC 전용 사이드카 — NW RFC SDK 격리, 목 백엔드 포함
+  web/          React + React Flow — Login / Home / Canvas / Monitor / Connections
+cdc/debezium/   Debezium(Kafka Connect) 커넥터 설정 — MySQL·PostgreSQL·MSSQL 예시
+infra/          ECS task def, Terraform (예정)
+docs/           설계 문서, UI 목업, 아키텍처 다이어그램
+```
+
+의존 방향: `web → api → worker`는 없다. API와 Worker는 **Redis 큐로만** 통신하고
+(`send_task` 이름 호출), 모델·DAG 스펙·커넥터만 코드로 공유한다.
+
+---
+
+## 알아둘 설계 결정
+
+- **큐 모드는 PostgreSQL + Redis 필수.** SQLite는 설정 단계에서 거부한다.
+- **워터마크는 적재가 끝난 뒤에만 전진한다.** 적재 전에 올리면 실패 구간이 영구 유실된다.
+- **한 노드가 여러 소비자를 가지면 스풀을 거친다.** 첫 소비 때 JSONL 로 디스크에 적고 나머지는
+  되읽어, 분기가 있어도 소스는 정확히 한 번만 읽힌다. 그래서 **타깃은 순차 실행해야 한다** —
+  병렬로 돌리면 스풀이 완성되기 전에 두 번째 소비자가 붙는다.
+- **여러 상류가 한 노드로 모이면 순차 concat(UNION ALL).** 조인은 별도 노드로 다룰 일이다.
+- **S3는 upsert 불가.** 실행 단위 경로(`run_id=<id>/`) 분리로 멱등성을 얻는다.
+- **FastMCP 버전은 핀 고정.** 2.10.x는 pydantic 2.13과 호환되지 않는다 — 올릴 때 반드시 확인.
+- **SAP 은 사이드카로 격리한다.** NW RFC SDK 는 라이선스 바이너리라 저장소에 없다.
+  워커는 SDK 없이 HTTP 로만 이야기하고, SAP 자격증명은 사이드카 컨테이너 안에만 있다.
+- **RFC_READ_TABLE 은 행폭 512자·OPTIONS 줄 72자 제약이 있다.** 사이드카가 컬럼 분할과
+  WHERE 분할을 처리하지만, 분할 병합은 "같은 조건이면 같은 순서"를 전제한다 — 넓은 테이블은 BAPI 를 쓰는 편이 안전하다.
+- **BAPI 는 실패해도 예외를 던지지 않는다.** `RETURN` 테이블의 E/A 메시지를 확인해야 한다.
+- **커넥터별 옵션은 `ReadSpec.params` 로만 전달된다.** 새 커넥터를 만들 때 여기서 읽어야 한다.
+- **연결은 시스템을, 노드는 테이블을 가리킨다.** 연결에 테이블을 박으면 테이블마다 연결을
+  만들어야 한다. 스키마는 `GET /connections/{id}/schema?table=...` 로 그때그때 조회한다.
+- **임포트는 싸야 한다.** 커넥터 드라이버는 지연 로딩하고, Argon2 더미 해시도 첫 사용 때 만든다.
+  모듈 최상위에서 네이티브 초기화를 하면 Celery prefork 워커가 fork 할 때 터진다.
+- **역할 계층이 두 곳에 있다.** 백엔드 `auth/rbac.py` 의 `_IMPLIES` 와 프론트 `api/auth.ts` 의
+  `IMPLIES` 는 항상 같아야 한다.
+- **Python 노드는 격리 자식 프로세스에서 돈다.** 임의 사용자 코드라 워커 프로세스와 분리한다 —
+  시크릿 없는 스크럽 환경, 파일쓰기·네트워크 차단, CPU·메모리·시간 제한. `pandas`·`numpy` 만
+  기본 제공하고 나머지 import 는 화이트리스트로 막는다. 값은 JSON 경계라 datetime→ISO·Decimal→숫자로
+  정규화된다.
+- **스위치는 실행기가 아니라 엔진이 분배한다.** 실행기(`_switch`)는 각 행에 어느 출력으로 갈지
+  라우팅 태그만 붙여 단일 스트림을 낸다. 엔진(`_build_stream`)이 소비 엣지의 `source_handle` 로
+  걸러내고 태그를 지운다 — 덕분에 스풀·실행기 계약(단일 출력)을 그대로 둔 채 다중 출력을 얻는다.
+
+---
+
+## SAP 사이드카
+
+기본은 **목 백엔드**로 뜬다 — NW RFC SDK 없이 파이프라인 저작과 512자 분할 검증이 가능하다.
+
+```bash
+docker compose up -d sap-connector
+```
+
+실제 SAP 에 붙이려면 [apps/sap-connector/vendor/README.md](apps/sap-connector/vendor/README.md)
+대로 SDK 를 넣고 다시 빌드한다.
+
+```bash
+docker compose build --build-arg WITH_NWRFC=1 sap-connector
+```
+
+그리고 `.env` 에 `EAI_SAP_BACKEND=nwrfc` 와 접속 정보를 넣는다.
+목으로 만든 파이프라인은 그대로 돌아간다 — 백엔드만 바뀐다.
+
+---
+
+## macOS 로컬 개발 참고
+
+Celery prefork 풀은 macOS 에서 fork 안전성 문제에 민감하다. 위 지연 로딩으로 해결했지만,
+서드파티 패키지를 추가한 뒤 워커가 `SIGABRT` 로 죽는다면 그 패키지가 임포트 시점에 무거운
+네이티브 초기화를 하고 있을 가능성이 높다. 임시 회피는 다음과 같다.
+
+```bash
+OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES celery -A eai_worker.celery_app:app worker -l info
+```
+
+배포 대상인 Linux 컨테이너에서는 이 증상이 나타나지 않는다.

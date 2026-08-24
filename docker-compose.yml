@@ -1,158 +1,219 @@
-# 로컬 개발 환경 전체를 컨테이너로 띄운다 — `docker compose up`, 이거 하나면 된다.
-# PostgreSQL·백엔드·프런트가 함께 뜨고, 소스는 bind mount 라 호스트에서 고치면 그대로 반영된다.
-#
-# 이 파일은 **로컬 개발 전용**이다. 배포용 구성이 아니다 — 이미지는 dev 서버를 그대로 띄우고,
-# 아래 비밀번호도 저장소에 적힌 고정값이다. 공개 포트를 전부 `127.0.0.1` 에 묶는 이유가 이것이다.
+name: ditter
+
+x-api-env: &api-env
+  EAI_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-eai}:${POSTGRES_PASSWORD:-eai}@postgres:5432/${POSTGRES_DB:-eai}
+  EAI_REDIS_URL: redis://redis:6379/0
+  EAI_SECRET_BACKEND: ${EAI_SECRET_BACKEND:-local}
+  EAI_LOCAL_SECRET_KEY: ${EAI_LOCAL_SECRET_KEY:?set EAI_LOCAL_SECRET_KEY in .env}
+  EAI_JWT_SECRET: ${EAI_JWT_SECRET:?set EAI_JWT_SECRET in .env}
+  EAI_AUTH_ENABLED: ${EAI_AUTH_ENABLED:-true}
+  # SAP 연결이 사이드카 주소를 비워두면 쓰는 기본값. 사이드카가 하나면 이걸로 충분하다.
+  EAI_SAP_DEFAULT_SIDECAR_URL: ${EAI_SAP_DEFAULT_SIDECAR_URL:-http://sap-connector:8100}
+  # SymmetricDS 사이드카. 설정은 원본 DB 의 SYM_* 에 API 가 직접 넣으므로 이 주소는
+  # "방금 넣은 설정을 지금 반영하라"에만 쓴다 — 닿지 않아도 다음 주기에 반영된다.
+  # 엔진 이름은 sync/symmetricds/engines/*.properties 의 engine.name 과 반드시 같아야 한다.
+  EAI_SYMMETRIC_URL: ${EAI_SYMMETRIC_URL:-http://symmetricds:31415}
+  EAI_SYMMETRIC_SOURCE_ENGINE: ${EAI_SYMMETRIC_SOURCE_ENGINE:-eai-source}
+  EAI_SYMMETRIC_TARGET_ENGINE: ${EAI_SYMMETRIC_TARGET_ENGINE:-eai-target}
+  EAI_SYMMETRIC_TABLE_PREFIX: ${EAI_SYMMETRIC_TABLE_PREFIX:-SYM}
+  # 로컬 파일 타깃의 격리 루트. 모든 파일은 이 아래에만 생성된다. exportsdata 볼륨으로
+  # api·worker 가 공유하고, 호스트에서 보려면 이 경로를 bind mount 로 바꾸면 된다.
+  EAI_LOCAL_FILE_ROOT: ${EAI_LOCAL_FILE_ROOT:-/data/exports}
+  # DuckDB 연합 조회(이기종 조인)는 api 프로세스 안에서 돈다 — 조인이 커지면 그 메모리를
+  # api 가 그대로 쓰므로 상한을 둔다. 확장(postgres·mysql)은 이미지에 구워져 있고
+  # 경로는 Dockerfile 의 EAI_DUCKDB_EXTENSION_DIR 가 정한다.
+  EAI_DUCKDB_MEMORY_LIMIT: ${EAI_DUCKDB_MEMORY_LIMIT:-1GB}
+  AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+  AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-}
 
 services:
-  db:
-    image: postgres:17-alpine
+  postgres:
+    image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-ditter_dev}
-      POSTGRES_USER: ${POSTGRES_USER:-ditter}
-      # 로컬 개발 전용 값이다. 실제 대상 DB 자격증명은 저장소에 두지 않는다.
-      # (docs/policy/credential-management.md)
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ditter_local_dev_only}
-    # 포트는 호스트 루프백에만 공개한다. 인터페이스를 지정하지 않으면 Docker 가 모든
-    # 인터페이스에 바인딩하고 리눅스에서는 호스트 방화벽도 우회한다 — 위 비밀번호가
-    # 저장소에 적힌 값이라 신뢰할 수 없는 네트워크에서 그대로 노출된다.
-    #
-    # 이 포트 공개는 앱을 위한 게 아니다(앱은 아래 `db` 서비스 이름으로 붙는다). psql·GUI
-    # 클라이언트로 호스트에서 들여다보려고 열어 둔다.
-    ports:
-      - '127.0.0.1:5432:5432'
+      POSTGRES_USER: ${POSTGRES_USER:-eai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-eai}
+      POSTGRES_DB: ${POSTGRES_DB:-eai}
     volumes:
-      - db-data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-ditter} -d ${POSTGRES_DB:-ditter_dev}']
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-eai}"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 20
 
-  backend:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
     build:
       context: .
-      dockerfile: backend/Dockerfile
-    # 이미지 안의 `node` 계정은 uid:gid 1000:1000 으로 고정돼 있다(Dockerfile 의
-    # `USER node`). macOS 는 bind mount 를 다루는 파일시스템 계층(virtiofs 등)이 uid 를
-    # 투명하게 중재해 주는 경우가 많아 드러나지 않지만, **리눅스 네이티브 bind mount 는
-    # 커널이 실제 uid 로 권한을 그대로 검사한다.** 저장소 소유자가 1000이 아니면(우분투
-    # 등에서 흔함) 컨테이너가 bind mount 된 `./backend`·`./frontend`·`./packages` 에 쓰기
-    # 권한이 없어, Vite 가 설정 임시 파일을 못 써 프런트가 기동조차 못 할 수 있다.
-    #
-    # `DEV_UID`·`DEV_GID` 를 호스트 uid/gid(`id -u`·`id -g`)로 맞추면 해결된다 — 예:
-    # `DEV_UID=$(id -u) DEV_GID=$(id -g) docker compose up`. 안 맞을 일이 훨씬 많은
-    # 리눅스에서만 신경 쓰면 되고, macOS·Windows 는 기본값(1000:1000)을 그대로 써도
-    # 대개 문제가 없다. 값을 안 주면 이미지 빌드 시점의 uid 와 같아 기존 동작과 동일하다.
-    #
-    # 여기서 `user:` 를 직접 쓰지 않는다 — 그러면 컨테이너가 그 uid 로 곧장 시작돼,
-    # 이전에 다른 uid 로 뜬 적이 있는 익명 볼륨(node_modules·dist) 안의 파일을 그 uid
-    # 자신이 소유자가 아니라 chmod 조차 못 하게 된다(실측 확인: `DEV_UID` 를 바꿔 재기동하면
-    # EACCES 로 죽는다). 그래서 컨테이너는 항상 root 로 시작하고, 진입점 스크립트가 그
-    # 볼륨들의 소유권을 목표 uid 로 정리한 뒤 su-exec 로 권한을 낮춘다 — 이유는
-    # backend/docker-entrypoint-dev.sh 의 주석 참고.
-    #
-    # 기동할 때마다 공유 타입을 먼저 빌드한다. `dist` 는 커밋 대상이 아니고 아래 익명 볼륨에
-    # 담기므로, 이 단계가 없으면 타입 패키지를 고친 뒤 컨테이너가 옛 산출물을 그대로 쓴다.
-    #
-    # `dev` 가 아니라 `dev:poll` 인 이유: `node --watch` 는 inotify 이벤트에 의존하는데 그 이벤트가
-    # bind mount 를 넘어오지 않아, 저장해도 서버가 조용히 옛 코드를 계속 돌린다
-    # (backend/scripts/dev-watch.mjs 의 주석 참고).
-    #
-    # 마지막 명령 앞의 `exec` 는 sh 를 그 프로세스로 치환한다. 없으면 sh 가 컨테이너의 1번
-    # 프로세스로 남아 SIGTERM 을 자식(dev-watch.mjs)에 넘기지 않고, `docker compose down`·
-    # `restart` 가 매번 정지 유예 시간을 다 쓰고 SIGKILL 로 끝난다.
-    command: sh -c "npm run build --workspace=packages/shared-types && exec npm run dev:poll --workspace=backend"
-    environment:
-      # 컨테이너 안에서는 0.0.0.0 으로 바인딩해야 아래 포트 매핑이 닿는다. 공개 범위를 정하는
-      # 것은 이 값이 아니라 `ports` 의 `127.0.0.1` 이다.
-      HOST: 0.0.0.0
-      PORT: 4000
-      POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: ${POSTGRES_DB:-ditter_dev}
-      POSTGRES_USER: ${POSTGRES_USER:-ditter}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ditter_local_dev_only}
-      # 진입점 스크립트(docker-entrypoint-dev.sh)가 이 값을 읽어 su-exec 로 권한을
-      # 낮춘다. 위 `user:` 관련 주석 참고.
-      DEV_UID: ${DEV_UID:-1000}
-      DEV_GID: ${DEV_GID:-1000}
-    ports:
-      - '127.0.0.1:4000:4000'
-    # 첫 기동에는 위 command 의 공유 타입 빌드가 끝나야 서버가 뜬다. healthcheck 가 없으면
-    # `docker compose up --wait` 는 컨테이너가 running 이 된 시점(빌드 중)에 바로 통과해 버려,
-    # 뒤이은 확인 요청이 아직 응답하지 않는 서버에 닿아 실패로 보인다.
-    healthcheck:
-      test:
-        [
-          'CMD-SHELL',
-          'node -e "fetch(\"http://127.0.0.1:4000/api/health\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
-        ]
-      interval: 5s
-      timeout: 3s
-      retries: 30
-      start_period: 30s
-    volumes:
-      # 소스는 호스트에서 가져온다 — 고치면 `node --watch` 가 다시 띄운다. 이미지 재빌드는
-      # 의존성(package.json·lockfile)이 바뀔 때만 필요하다.
-      - ./backend:/app/backend
-      - ./packages:/app/packages
-      # 아래 익명 볼륨들은 bind mount 가 컨테이너 안의 것을 덮지 않게 막는다. 빼면 안 된다:
-      #   node_modules — 호스트 것은 macOS 바이너리라 리눅스 컨테이너에서 못 쓴다
-      #   dist         — 호스트에 없거나 낡은 산출물이 컨테이너 빌드 결과를 가린다
-      - /app/backend/node_modules
-      - /app/packages/shared-types/node_modules
-      - /app/packages/shared-types/dist
+      dockerfile: apps/api/Dockerfile
+    environment: *api-env
     depends_on:
-      db:
-        condition: service_healthy
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - exportsdata:/data/exports  # 로컬 파일 타깃 (연결 테스트 시 쓰기 확인)
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn eai_api.main:app --host 0.0.0.0 --port 8000"
 
-  frontend:
+  worker:
     build:
       context: .
-      dockerfile: frontend/Dockerfile
-    # 리눅스에서 bind mount 소유자 uid 가 안 맞으면 쓰기가 막힌다 — backend 서비스의
-    # `DEV_UID` 주석 참고. 이 서비스가 특히 취약하다: Vite dev 서버가 기동할 때마다
-    # `vite.config.ts` 옆에 설정 임시 파일을 쓰는데 그 디렉터리가 바로 이 bind mount 다.
-    # `user:` 를 안 쓰고 진입점 스크립트로 su-exec 하는 이유도 backend 와 동일하다.
-    #
-    # 마지막 명령 앞의 `exec` 는 sh 를 그 프로세스로 치환해, 종료 신호가 sh 를 거치지 않고
-    # Vite dev 서버까지 곧바로 닿게 한다 (backend 서비스와 동일한 이유).
-    command: sh -c "npm run build --workspace=packages/shared-types && exec npm run dev --workspace=frontend"
-    environment:
-      VITE_API_PROXY_TARGET: http://backend:4000
-      # 컨테이너 안에서는 0.0.0.0 으로 바인딩해야 위 포트 매핑이 닿는다. 호스트에서 직접
-      # 돌릴 때(`npm run dev`)는 지정하지 않아 vite.config.ts 의 루프백 기본값이 쓰인다.
-      VITE_DEV_HOST: 0.0.0.0
-      # bind mount 를 통한 파일 변경은 호스트(macOS·Windows)에서 컨테이너 안으로 inotify
-      # 이벤트가 전달되지 않는다. 폴링이 없으면 저장해도 화면이 갱신되지 않는다.
-      VITE_DEV_POLL: 'true'
-      # 진입점 스크립트(docker-entrypoint-dev.sh)가 이 값을 읽어 su-exec 로 권한을
-      # 낮춘다. backend 서비스의 같은 이름 환경변수 주석 참고.
-      DEV_UID: ${DEV_UID:-1000}
-      DEV_GID: ${DEV_GID:-1000}
-    ports:
-      - '127.0.0.1:5173:5173'
-    # 첫 기동에는 위 command 의 공유 타입 빌드가 끝나야 dev 서버가 뜬다. backend 서비스와
-    # 같은 이유로 healthcheck 없이는 `--wait` 가 준비 전에 통과해 버린다.
-    healthcheck:
-      test:
-        [
-          'CMD-SHELL',
-          'node -e "fetch(\"http://127.0.0.1:5173\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
-        ]
-      interval: 5s
-      timeout: 3s
-      retries: 30
-      start_period: 30s
-    volumes:
-      - ./frontend:/app/frontend
-      - ./packages:/app/packages
-      - /app/frontend/node_modules
-      - /app/packages/shared-types/node_modules
-      - /app/packages/shared-types/dist
+      dockerfile: apps/worker/Dockerfile
+    environment: *api-env
     depends_on:
-      - backend
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    volumes:
+      - exportsdata:/data/exports  # 로컬 파일 타깃 산출물 (api 와 공유)
+    command: ["celery", "-A", "eai_worker.celery_app:app", "worker", "-l", "info", "-Q", "eai.default"]
+    deploy:
+      replicas: ${WORKER_REPLICAS:-1}
+
+  beat:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    environment: *api-env
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    command: ["python", "-m", "eai_worker.scheduler"]
+
+  web:
+    build:
+      context: apps/web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-http://localhost:8000}
+        VITE_AUTH_ENABLED: ${EAI_AUTH_ENABLED:-true}
+    depends_on: [api]
+    ports:
+      - "${WEB_PORT:-5173}:80"
+
+  # --- Phase 3 (SAP RFC 전용 사이드카) ---
+  # 기본은 목 백엔드로 뜬다. 실제 SAP 에 붙이려면 vendor/nwrfcsdk 를 채우고
+  # WITH_NWRFC=1 로 빌드한 뒤 EAI_SAP_BACKEND=nwrfc 와 접속 정보를 준다.
+  sap-connector:
+    build:
+      context: .
+      dockerfile: apps/sap-connector/Dockerfile
+      args:
+        WITH_NWRFC: ${SAP_WITH_NWRFC:-0}
+    environment:
+      EAI_SAP_BACKEND: ${EAI_SAP_BACKEND:-mock}
+      EAI_SAP_MOCK_FIXTURE: /app/fixtures/sap_mock.json
+      EAI_SAP_API_TOKEN: ${EAI_SAP_API_TOKEN:-}
+      # SAP 접속 정보는 이제 연결 설정(UI)에 저장되어 요청 body 로 전달된다.
+      # 아래 EAI_SAP_* 는 요청에 접속 정보가 전혀 없을 때의 폴백으로만 쓰인다 — 보통 비워둔다.
+      EAI_SAP_ASHOST: ${EAI_SAP_ASHOST:-}
+      EAI_SAP_CLIENT: ${EAI_SAP_CLIENT:-}
+      EAI_SAP_USER: ${EAI_SAP_USER:-}
+      EAI_SAP_PASSWD: ${EAI_SAP_PASSWD:-}
+    ports:
+      - "${SAP_PORT:-8100}:8100"
+
+  # --- Phase 4 (CDC). `docker compose --profile cdc up -d` 로만 기동 ---
+  # CDC Sink Worker — Kafka 토픽을 구독해 타깃에 적재하는 상주 프로세스 (worker 이미지 재사용).
+  # scheduler(beat)와 같은 계열이라 무상태이며, 상태는 Kafka 오프셋·메타DB 에만 있다.
+  cdc-sink:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    profiles: ["cdc"]
+    environment: *api-env
+    depends_on:
+      postgres: {condition: service_healthy}
+      kafka: {condition: service_started}
+      # api 가 alembic 마이그레이션을 끝낸(=healthy) 뒤에 뜬다 — cdc_streams 테이블이
+      # 아직 없을 때 조회하다 죽는 경쟁 조건을 막는다.
+      api: {condition: service_healthy}
+    command: ["python", "-m", "eai_worker.cdc_sink"]
+
+  kafka:
+    # Bitnami 가 2025-08 부터 docker.io/bitnami 의 옛 버전 태그를 내리고 bitnamilegacy 로 옮겼다.
+    # KAFKA_CFG_* 환경변수와 /bitnami/kafka 볼륨 경로는 그대로라 이미지 이름만 바꾸면 된다.
+    image: bitnamilegacy/kafka:3.7
+    profiles: ["cdc"]
+    environment:
+      KAFKA_CFG_NODE_ID: "1"
+      KAFKA_CFG_PROCESS_ROLES: broker,controller
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+    volumes:
+      - kafkadata:/bitnami/kafka
+
+  debezium:
+    # Debezium 공식 이미지는 quay.io 에 게시된다 (Docker Hub 미러엔 이 태그가 없다).
+    image: quay.io/debezium/connect:2.7
+    profiles: ["cdc"]
+    depends_on: [kafka]
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: eai-connect
+      CONFIG_STORAGE_TOPIC: _eai_connect_configs
+      OFFSET_STORAGE_TOPIC: _eai_connect_offsets
+      STATUS_STORAGE_TOPIC: _eai_connect_status
+    ports:
+      - "8083:8083"
+
+  # --- 실시간 DB 동기화 (SymmetricDS). `docker compose --profile sync up -d` 로만 기동 ---
+  #
+  # CDC 와 달리 Kafka 가 필요 없다 — 노드 A(소스)와 노드 B(타깃)가 HTTP 로 직접 주고받는다.
+  # 여기서는 엔진 둘을 **한 컨테이너**에서 돌린다(개발·단일노드). 운영에서는 노드 A 를 원본
+  # 가까이, 노드 B 를 타깃 가까이 두는 편이 지연이 작다 — 그때는 이 서비스를 둘로 나눈다.
+  #
+  # 동기화 대상(트리거·라우터·채널)은 여기에 적지 않는다. 그것은 캔버스에서 정하고 API 가
+  # 원본 DB 의 SYM_* 테이블에 넣는다. 이 파일이 정하는 것은 "어느 DB 에 어떤 이름으로 붙나"뿐이다.
+  symmetricds:
+    # 공식 이미지에 JDBC 드라이버가 없어(h2 뿐) 얇게 한 겹 얹는다 — sync/symmetricds/Dockerfile.
+    build:
+      context: .
+      dockerfile: sync/symmetricds/Dockerfile
+      args:
+        SYMMETRIC_VERSION: ${SYMMETRIC_VERSION:-3.15}
+    profiles: ["sync"]
+    # 이미지 기본 명령은 `sym_service start && tail -F ...` 라 **데몬으로 띄우고 로그만 본다.**
+    # PID 1 이 tail 이라, 래퍼가 스스로를 "abandoned" 로 판단하면 컨테이너가 통째로 죽는다
+    # (실제로 겪었다 — 로그에 "Stopping abandoned wrapper" 가 반복되고 exit 129).
+    # `sym --server` 는 포그라운드로 돈다. PID 1 이 곧 SymmetricDS 라 죽으면 도커가 안다.
+    command: ["/opt/symmetric-ds/bin/sym", "--server", "--port", "31415"]
+    restart: unless-stopped
+    volumes:
+      # 설치 경로는 **/opt/symmetric-ds** 다 (symmetric-server 가 아니다 — 3.15.22 로 확인).
+      # 여기가 어긋나면 컨테이너는 멀쩡히 뜨는데 "No engine *.properties files found" 로
+      # 엔진이 하나도 없고, 동기화를 켜도 아무 일이 일어나지 않는다.
+      #
+      # 엔진 접속 정보. engines/*.properties.example 를 .properties 로 복사해 채운다.
+      - ./sync/symmetricds/engines:/opt/symmetric-ds/engines
+      - symlogs:/opt/symmetric-ds/logs
+    ports:
+      - "${SYMMETRIC_PORT:-31415}:31415"
 
 volumes:
-  db-data:
+  pgdata:
+  redisdata:
+  kafkadata:
+  symlogs:      # SymmetricDS 노드 로그 (전송 실패 원인이 여기 남는다)
+  exportsdata:  # 로컬 파일 타깃 산출물 (api·worker 공유)

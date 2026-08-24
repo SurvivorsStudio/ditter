@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EAI 플랫폼 — 연결 관리 (상세)</title>
+<style>
+  :root{
+    --bg:#f4f4f8;--panel:#fff;--rail:#2b2c3b;--ink:#2b2d3a;--muted:#8a8f9c;
+    --line:#e7e8ef;--line2:#eef0f5;--brand:#ff6d5a;--purple:#6b4efc;--blue:#3b82f6;
+    --green:#12b886;--amber:#f59e0b;--red:#ef4444;
+    --shadow:0 1px 2px rgba(20,23,40,.06),0 6px 20px rgba(20,23,40,.07);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:"Pretendard","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;
+    background:var(--bg);color:var(--ink);font-size:14px;-webkit-font-smoothing:antialiased}
+  .app{display:flex;height:100vh;overflow:hidden}
+  /* rail */
+  .rail{width:76px;background:var(--rail);display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:6px;flex-shrink:0}
+  .logo{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,#ff6d5a,#ea4b71);
+    display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:16px;margin-bottom:12px}
+  .nav button{width:56px;height:52px;border:0;background:transparent;color:#a7abbd;border-radius:12px;display:flex;
+    flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;font-size:10px;font-family:inherit}
+  .nav button svg{width:20px;height:20px}
+  .nav button:hover{background:#363749;color:#e6e7ef}
+  .nav button.active{background:#363749;color:#fff}
+  .nav button.active svg{color:var(--brand)}
+  .rail .spacer{flex:1}
+  .avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#6b4efc,#3b82f6);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+  /* main */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .topbar{height:60px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 22px;gap:14px;flex-shrink:0}
+  .topbar h1{font-size:17px;margin:0;font-weight:700}
+  .crumb{color:var(--muted);font-size:13px}
+  .search{flex:1;max-width:320px;margin-left:6px;position:relative}
+  .search input{width:100%;height:36px;border:1px solid var(--line);border-radius:9px;padding:0 12px 0 34px;background:#f7f8fb;font:inherit;font-size:13px;outline:none}
+  .search input:focus{border-color:var(--purple);background:#fff}
+  .search svg{position:absolute;left:10px;top:9px;width:17px;height:17px;color:var(--muted)}
+  .top-actions{margin-left:auto;display:flex;gap:9px;align-items:center}
+  .btn{height:37px;padding:0 15px;border-radius:9px;border:1px solid var(--line);background:#fff;cursor:pointer;font:inherit;
+    font-size:13px;font-weight:600;color:var(--ink);display:inline-flex;align-items:center;gap:7px;transition:.15s}
+  .btn:hover{border-color:#c9ccd8;background:#fafbfc}
+  .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff;box-shadow:0 2px 8px rgba(255,109,90,.35)}
+  .btn.primary:hover{background:#f9553f}
+  .btn.ghost{border-color:transparent;background:transparent}
+  .btn.sm{height:31px;padding:0 11px;font-size:12.5px}
+  .btn svg{width:16px;height:16px}
+  .content{flex:1;overflow:auto;padding:22px 26px}
+
+  /* summary */
+  .summ{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+  .scard{background:#fff;border:1px solid var(--line);border-radius:13px;padding:14px 16px;box-shadow:var(--shadow)}
+  .scard .l{color:var(--muted);font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:7px}
+  .scard .d{width:9px;height:9px;border-radius:50%}
+  .scard .n{font-size:24px;font-weight:800;margin-top:6px}
+
+  /* filter tabs */
+  .tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+  .tab{height:33px;padding:0 14px;border:1px solid var(--line);border-radius:20px;background:#fff;font-size:12.5px;
+    font-weight:600;cursor:pointer;color:#5b6070;display:inline-flex;align-items:center;gap:7px}
+  .tab.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .tab .cnt{background:rgba(0,0,0,.08);border-radius:10px;padding:1px 7px;font-size:11px}
+  .tab.on .cnt{background:rgba(255,255,255,.2)}
+
+  /* connection table */
+  .table{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  thead th{text-align:left;padding:11px 16px;color:var(--muted);font-weight:700;font-size:12px;border-bottom:1px solid var(--line);background:#fafbfd}
+  tbody td{padding:12px 16px;border-bottom:1px solid var(--line2);vertical-align:middle}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr{cursor:pointer;transition:.12s}
+  tbody tr:hover{background:#f8f9fc}
+  .cn{display:flex;align-items:center;gap:11px}
+  .db{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:11px;flex-shrink:0}
+  .cn .nm{font-weight:700}
+  .cn .host{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;margin-top:1px}
+  .typebadge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#eef0f5;color:#5b6070}
+  .health{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700}
+  .health.ok{color:var(--green)} .health.warn{color:var(--amber)} .health.err{color:var(--red)}
+  .health .hd{width:8px;height:8px;border-radius:50%;background:currentColor;box-shadow:0 0 0 3px rgba(18,184,134,.16)}
+  .pool{font-size:12px;color:#5b6070;font-variant-numeric:tabular-nums}
+  .poolbar{height:5px;width:78px;background:#eef0f5;border-radius:5px;margin-top:4px;overflow:hidden}
+  .poolbar>i{display:block;height:100%;background:var(--blue);border-radius:5px}
+  .usedby{font-size:12px;color:#5b6070}
+  .cdc-chip{font-size:10.5px;font-weight:700;color:#0c8f6b;background:#e7f8f1;padding:2px 8px;border-radius:6px;margin-left:6px}
+  .rowacts{display:flex;gap:6px;justify-content:flex-end;opacity:.4;transition:.12s}
+  tbody tr:hover .rowacts{opacity:1}
+  .iact{width:30px;height:30px;border:1px solid var(--line);border-radius:8px;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#5b6070}
+  .iact:hover{border-color:#c9ccd8;background:#fafbfc}
+  .iact svg{width:15px;height:15px}
+  .iact.danger:hover{color:var(--red);border-color:#f3c0c0;background:#fdf2f2}
+
+  /* ---------- drawer ---------- */
+  .scrim{position:fixed;inset:0;background:rgba(24,26,42,.42);opacity:0;pointer-events:none;transition:.2s;z-index:40}
+  .scrim.open{opacity:1;pointer-events:auto}
+  .drawer{position:fixed;top:0;right:0;height:100%;width:460px;background:#fff;box-shadow:-8px 0 30px rgba(20,23,40,.16);
+    transform:translateX(100%);transition:transform .24s cubic-bezier(.4,0,.2,1);z-index:50;display:flex;flex-direction:column}
+  .drawer.open{transform:translateX(0)}
+  .dhd{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+  .dhd .dic{width:40px;height:40px;border-radius:10px;background:#f1eefe;color:var(--purple);display:flex;align-items:center;justify-content:center}
+  .dhd .dic svg{width:20px;height:20px}
+  .dhd .tt{font-size:16px;font-weight:800}
+  .dhd .ss{font-size:12px;color:var(--muted);margin-top:1px}
+  .dhd .x{margin-left:auto;width:34px;height:34px;border:0;background:#f5f6fa;border-radius:9px;cursor:pointer;color:#5b6070;font-size:18px}
+  .dbody{flex:1;overflow:auto;padding:20px 22px}
+  .sec-t{font-size:12px;font-weight:800;color:#71778a;letter-spacing:.4px;text-transform:uppercase;margin:20px 0 10px}
+  .sec-t:first-child{margin-top:0}
+  /* type picker */
+  .typegrid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+  .typecard{border:1.5px solid var(--line);border-radius:11px;padding:11px 8px;text-align:center;cursor:pointer;transition:.12s;background:#fff}
+  .typecard:hover{border-color:#c9ccd8;background:#fafbfc}
+  .typecard.on{border-color:var(--purple);background:#f6f4ff;box-shadow:0 0 0 3px rgba(107,78,252,.14)}
+  .typecard .ti{width:34px;height:34px;border-radius:9px;margin:0 auto 7px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:11px}
+  .typecard .tn{font-size:12px;font-weight:700}
+  .typecard .td{font-size:10.5px;color:var(--muted);margin-top:1px}
+  /* fields */
+  .field{margin-bottom:13px}
+  .field.half{display:inline-block;width:calc(50% - 5px)}
+  .field.half + .field.half{margin-left:8px}
+  .field label{font-size:12px;font-weight:700;color:#5b6070;display:block;margin-bottom:6px}
+  .field label .req{color:var(--red)}
+  .field input,.field select{width:100%;height:38px;border:1px solid var(--line);border-radius:9px;padding:0 11px;font:inherit;font-size:13px;background:#f7f8fb;outline:none}
+  .field input:focus,.field select:focus{border-color:var(--purple);background:#fff}
+  .field .hint{font-size:11px;color:var(--muted);margin-top:5px}
+  .pw{position:relative}
+  .pw .eye{position:absolute;right:10px;top:10px;width:18px;height:18px;color:var(--muted);cursor:pointer}
+  .toggle-row{display:flex;align-items:center;gap:11px;padding:12px 13px;border:1px solid var(--line);border-radius:11px;background:#fafbfe;margin-bottom:11px}
+  .toggle-row .tl{flex:1}
+  .toggle-row .tl b{font-size:13px} .toggle-row .tl div{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .sw{width:40px;height:23px;border-radius:20px;background:#d3d7e2;position:relative;cursor:pointer;transition:.15s;flex-shrink:0}
+  .sw::after{content:"";position:absolute;width:18px;height:18px;border-radius:50%;background:#fff;top:2.5px;left:2.5px;transition:.15s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+  .sw.on{background:var(--green)} .sw.on::after{left:19.5px}
+  /* test result */
+  .testbox{margin-top:6px;border:1px solid var(--line);border-radius:11px;padding:13px 14px;font-size:12.5px;display:none;align-items:flex-start;gap:10px}
+  .testbox.show{display:flex}
+  .testbox.ok{background:#eefaf4;border-color:#bfeeda;color:#0c7a5b}
+  .testbox.err{background:#fdf2f2;border-color:#f3c9c9;color:#c0392b}
+  .testbox.load{background:#f5f7fb;border-color:var(--line);color:#5b6070}
+  .testbox .ic{margin-top:1px}
+  .testbox b{display:block;margin-bottom:2px}
+  .spin{width:15px;height:15px;border:2px solid #c9ccd8;border-top-color:var(--purple);border-radius:50%;animation:sp .7s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .dfoot{padding:15px 22px;border-top:1px solid var(--line);display:flex;gap:10px;align-items:center}
+  .dfoot .btn{height:40px}
+  .dfoot .grow{flex:1}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="rail">
+    <div class="logo">EAI</div>
+    <div class="nav">
+      <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>홈</button>
+      <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M9 6h6a3 3 0 0 1 3 3v6"/></svg>파이프라인</button>
+      <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>모니터링</button>
+      <button class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>연결</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="avatar">DK</div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <h1>연결 관리</h1><span class="crumb">연결 (Connections)</span>
+      <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><input placeholder="이름, 호스트 검색…"></div>
+      <div class="top-actions">
+        <button class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>전체 테스트</button>
+        <button class="btn primary" onclick="openDrawer()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>새 연결</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="summ">
+        <div class="scard"><div class="l"><span class="d" style="background:var(--purple)"></span>전체 연결</div><div class="n">6</div></div>
+        <div class="scard"><div class="l"><span class="d" style="background:var(--green)"></span>정상</div><div class="n">4</div></div>
+        <div class="scard"><div class="l"><span class="d" style="background:var(--amber)"></span>주의</div><div class="n">1</div></div>
+        <div class="scard"><div class="l"><span class="d" style="background:var(--red)"></span>오류</div><div class="n">1</div></div>
+      </div>
+
+      <div class="tabs">
+        <span class="tab on">전체 <span class="cnt">6</span></span>
+        <span class="tab">RDB <span class="cnt">3</span></span>
+        <span class="tab">NoSQL <span class="cnt">1</span></span>
+        <span class="tab">SAP <span class="cnt">1</span></span>
+        <span class="tab">Object <span class="cnt">1</span></span>
+      </div>
+
+      <div class="table">
+        <table>
+          <thead><tr>
+            <th>연결</th><th>유형</th><th>상태</th><th>커넥션 풀</th><th>사용 파이프라인</th><th>마지막 테스트</th><th></th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- drawer -->
+<div class="scrim" id="scrim" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="dhd">
+    <div class="dic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></div>
+    <div><div class="tt" id="dtt">새 연결 추가</div><div class="ss" id="dss">소스/타깃 저장소 연결 정보를 등록합니다</div></div>
+    <button class="x" onclick="closeDrawer()">×</button>
+  </div>
+  <div class="dbody">
+    <div class="sec-t">1. 저장소 유형</div>
+    <div class="typegrid" id="typegrid"></div>
+
+    <div id="formArea">
+      <div class="sec-t">2. 연결 정보</div>
+      <div class="field"><label>연결 이름 <span class="req">*</span></label><input id="f_name" placeholder="예: 운영 MySQL"></div>
+      <div id="dynFields"></div>
+
+      <div class="sec-t">3. 고급 설정</div>
+      <div class="field half"><label>커넥션 풀</label><input value="20"></div>
+      <div class="field half"><label>타임아웃(s)</label><input value="30"></div>
+      <div class="toggle-row"><div class="tl"><b>SSL/TLS 사용</b><div>암호화된 연결로 접속</div></div><div class="sw on" onclick="this.classList.toggle('on')"></div></div>
+
+      <div id="cdcSection">
+        <div class="sec-t">4. CDC (실시간 변경 수집)</div>
+        <div class="toggle-row"><div class="tl"><b>CDC 활성화 (Debezium)</b><div id="cdcHint">binlog 기반 변경 이벤트 스트리밍</div></div><div class="sw" id="cdcSw" onclick="this.classList.toggle('on')"></div></div>
+      </div>
+
+      <div class="sec-t">연결 테스트</div>
+      <button class="btn" style="width:100%;justify-content:center;height:40px" onclick="runTest()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>연결 테스트 실행</button>
+      <div class="testbox" id="testbox"></div>
+    </div>
+  </div>
+  <div class="dfoot">
+    <button class="btn ghost" onclick="closeDrawer()">취소</button>
+    <span class="grow"></span>
+    <button class="btn primary" onclick="closeDrawer()">저장</button>
+  </div>
+</div>
+
+<script>
+/* ------- data ------- */
+const conns=[
+  {ab:'My',c:'#00758f',nm:'운영 MySQL',type:'MySQL',cat:'RDB',host:'prod-mysql.internal:3306 · shop',h:'ok',ht:'정상',pool:'14 / 20',pp:70,used:'8개 파이프라인',cdc:true,test:'2분 전'},
+  {ab:'PG',c:'#336791',nm:'분석 PostgreSQL',type:'PostgreSQL',cat:'RDB',host:'analytics-pg.internal:5432 · dw',h:'ok',ht:'정상',pool:'6 / 15',pp:40,used:'5개 파이프라인',cdc:true,test:'5분 전'},
+  {ab:'MS',c:'#a91d22',nm:'ERP MSSQL',type:'MSSQL',cat:'RDB',host:'erp-mssql.internal:1433 · erp',h:'warn',ht:'응답 지연',pool:'9 / 10',pp:90,used:'3개 파이프라인',cdc:true,test:'11분 전'},
+  {ab:'MG',c:'#12924a',nm:'이벤트 MongoDB',type:'MongoDB',cat:'NoSQL',host:'events-mongo.internal:27017',h:'ok',ht:'정상',pool:'4 / 12',pp:33,used:'2개 파이프라인',cdc:false,test:'1분 전'},
+  {ab:'SAP',c:'#ea4b71',nm:'SAP S/4HANA',type:'SAP RFC',cat:'SAP',host:'sap-prd · sysnr 00 · client 100',h:'ok',ht:'정상',pool:'5 / 8',pp:63,used:'4개 파이프라인',cdc:false,test:'8분 전'},
+  {ab:'S3',c:'#f59e0b',nm:'데이터레이크 S3',type:'Amazon S3',cat:'Object',host:'s3://eai-datalake-prod · ap-northeast-2',h:'err',ht:'인증 필요',pool:'—',pp:0,used:'9개 파이프라인',cdc:false,test:'실패'},
+];
+const eye='<svg class="eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+document.getElementById('rows').innerHTML=conns.map((c,i)=>`
+  <tr onclick="openDrawer(${i})">
+    <td><div class="cn"><div class="db" style="background:${c.c}">${c.ab}</div>
+      <div><div class="nm">${c.nm}</div><div class="host">${c.host}</div></div></div></td>
+    <td><span class="typebadge">${c.type}</span>${c.cdc?'<span class="cdc-chip">CDC</span>':''}</td>
+    <td><span class="health ${c.h}"><span class="hd"></span>${c.ht}</span></td>
+    <td>${c.pool==='—'?'<span class="pool">—</span>':`<div class="pool">${c.pool}</div><div class="poolbar"><i style="width:${c.pp}%;background:${c.pp>85?'var(--red)':'var(--blue)'}"></i></div>`}</td>
+    <td><span class="usedby">${c.used}</span></td>
+    <td><span class="pool">${c.test}</span></td>
+    <td onclick="event.stopPropagation()"><div class="rowacts">
+      <div class="iact" title="테스트" onclick="openDrawer(${i})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+      <div class="iact" title="편집" onclick="openDrawer(${i})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></div>
+      <div class="iact danger" title="삭제"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></div>
+    </div></td>
+  </tr>`).join('');
+
+/* ------- drawer + dynamic form ------- */
+const types=[
+  {k:'MySQL',ab:'My',c:'#00758f',d:'RDB · 배치+CDC'},
+  {k:'PostgreSQL',ab:'PG',c:'#336791',d:'RDB · 배치+CDC'},
+  {k:'MSSQL',ab:'MS',c:'#a91d22',d:'RDB · 배치+CDC'},
+  {k:'MongoDB',ab:'MG',c:'#12924a',d:'NoSQL · 배치+CDC'},
+  {k:'SAP RFC',ab:'SAP',c:'#ea4b71',d:'ERP · RFC/BAPI'},
+  {k:'Amazon S3',ab:'S3',c:'#f59e0b',d:'Object · 타깃'},
+];
+let curType='MySQL';
+document.getElementById('typegrid').innerHTML=types.map(t=>`
+  <div class="typecard" data-k="${t.k}" onclick="pickType('${t.k}')">
+    <div class="ti" style="background:${t.c}">${t.ab}</div><div class="tn">${t.k}</div><div class="td">${t.d}</div></div>`).join('');
+
+function fieldsFor(t){
+  const P=(l,ph,req,val='',half=false)=>`<div class="field${half?' half':''}"><label>${l}${req?' <span class="req">*</span>':''}</label><input placeholder="${ph}" value="${val}"></div>`;
+  const PW=`<div class="field"><label>비밀번호 <span class="req">*</span></label><div class="pw"><input type="password" value="············">${eye}</div><div class="hint">🔒 KMS로 암호화되어 저장됩니다</div></div>`;
+  if(t==='SAP RFC') return P('App Server (ashost)','sap-prd.internal',true)+P('System No (sysnr)','00',true,'',true)+P('Client (mandt)','100',true,'',true)+P('사용자','RFC_USER',true)+PW+`<div class="field"><label>보안</label><select><option>SNC (권장)</option><option>기본 (평문)</option></select></div>`;
+  if(t==='Amazon S3') return `<div class="field"><label>리전</label><select><option>ap-northeast-2 (서울)</option><option>us-east-1</option></select></div>`+P('버킷','eai-datalake-prod',true)+P('기본 경로(Prefix)','raw/','',)+`<div class="field"><label>인증</label><select><option>IAM Role (권장)</option><option>Access Key</option></select></div>`;
+  if(t==='MongoDB') return P('호스트','events-mongo.internal',true,'',true)+P('포트','27017',true,'27017',true)+P('데이터베이스','events',true)+P('사용자','app_user',true)+PW+P('Replica Set','rs0','');
+  // RDB default
+  const defPort=t==='PostgreSQL'?'5432':t==='MSSQL'?'1433':'3306';
+  return P('호스트','db.internal',true,'',true)+P('포트',defPort,true,defPort,true)+P('데이터베이스','shop',true)+P('사용자','app_user',true)+PW;
+}
+function pickType(k){
+  curType=k;
+  document.querySelectorAll('.typecard').forEach(c=>c.classList.toggle('on',c.dataset.k===k));
+  document.getElementById('dynFields').innerHTML=fieldsFor(k);
+  const cdcOn=['MySQL','PostgreSQL','MSSQL','MongoDB'].includes(k);
+  document.getElementById('cdcSection').classList.toggle('hidden',!cdcOn);
+  const hints={MySQL:'binlog 기반 변경 이벤트 스트리밍',PostgreSQL:'WAL(logical decoding) 기반',MSSQL:'CDC 테이블 기반',MongoDB:'oplog / change stream 기반'};
+  if(cdcOn) document.getElementById('cdcHint').textContent=hints[k];
+  resetTest();
+}
+function openDrawer(i){
+  if(typeof i==='number'){const c=conns[i];document.getElementById('dtt').textContent=c.nm+' 편집';
+    document.getElementById('dss').textContent=c.type+' 연결 · '+c.used;pickType(c.type);document.getElementById('f_name').value=c.nm;}
+  else{document.getElementById('dtt').textContent='새 연결 추가';document.getElementById('dss').textContent='소스/타깃 저장소 연결 정보를 등록합니다';pickType('MySQL');document.getElementById('f_name').value='';}
+  document.getElementById('scrim').classList.add('open');document.getElementById('drawer').classList.add('open');
+}
+function closeDrawer(){document.getElementById('scrim').classList.remove('open');document.getElementById('drawer').classList.remove('open');resetTest();}
+function resetTest(){const b=document.getElementById('testbox');b.className='testbox';b.innerHTML='';}
+function runTest(){
+  const b=document.getElementById('testbox');
+  b.className='testbox load show';b.innerHTML='<span class="ic"><span class="spin"></span></span><div><b>연결 확인 중…</b>호스트 도달성 · 인증 · 권한 검사</div>';
+  setTimeout(()=>{
+    if(curType==='Amazon S3'){b.className='testbox err show';
+      b.innerHTML='<span class="ic"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg></span><div><b>인증 실패 (403 AccessDenied)</b>IAM 권한을 확인하세요. s3:PutObject 필요</div>';
+    }else{b.className='testbox ok show';
+      const lat=(18+Math.floor(Math.random()*40));
+      b.innerHTML=`<span class="ic"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg></span><div><b>연결 성공 · ${lat}ms</b>인증 OK · 스키마 조회 권한 OK${['MySQL','PostgreSQL','MSSQL','MongoDB'].includes(curType)?' · CDC 로그 접근 OK':''}</div>`;
+    }
+  },1100);
+}
+</script>
+</body>
+</html>

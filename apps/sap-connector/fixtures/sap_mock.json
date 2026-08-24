@@ -1,0 +1,955 @@
+{
+  "system": {
+    "system_id": "PRD",
+    "client": "100",
+    "user": "EAI_RFC",
+    "host": "sap-prd.internal",
+    "release": "755"
+  },
+  "tables": {
+    "MARA": {
+      "text": "일반 자재 데이터",
+      "fields": [
+        {
+          "name": "MATNR",
+          "type": "CHAR",
+          "length": 18,
+          "text": "자재번호",
+          "key": true
+        },
+        {
+          "name": "ERSDA",
+          "type": "DATS",
+          "length": 8,
+          "text": "생성일"
+        },
+        {
+          "name": "ERNAM",
+          "type": "CHAR",
+          "length": 12,
+          "text": "생성자"
+        },
+        {
+          "name": "LAEDA",
+          "type": "DATS",
+          "length": 8,
+          "text": "최종변경일"
+        },
+        {
+          "name": "AENAM",
+          "type": "CHAR",
+          "length": 12,
+          "text": "변경자"
+        },
+        {
+          "name": "MTART",
+          "type": "CHAR",
+          "length": 4,
+          "text": "자재유형"
+        },
+        {
+          "name": "MBRSH",
+          "type": "CHAR",
+          "length": 1,
+          "text": "산업분야"
+        },
+        {
+          "name": "MATKL",
+          "type": "CHAR",
+          "length": 9,
+          "text": "자재그룹"
+        },
+        {
+          "name": "MEINS",
+          "type": "UNIT",
+          "length": 3,
+          "text": "기본단위"
+        },
+        {
+          "name": "BSTME",
+          "type": "UNIT",
+          "length": 3,
+          "text": "구매단위"
+        },
+        {
+          "name": "BRGEW",
+          "type": "QUAN",
+          "length": 13,
+          "text": "총중량"
+        },
+        {
+          "name": "NTGEW",
+          "type": "QUAN",
+          "length": 13,
+          "text": "순중량"
+        },
+        {
+          "name": "GEWEI",
+          "type": "UNIT",
+          "length": 3,
+          "text": "중량단위"
+        },
+        {
+          "name": "VOLUM",
+          "type": "QUAN",
+          "length": 13,
+          "text": "부피"
+        },
+        {
+          "name": "VOLEH",
+          "type": "UNIT",
+          "length": 3,
+          "text": "부피단위"
+        },
+        {
+          "name": "GROES",
+          "type": "CHAR",
+          "length": 32,
+          "text": "크기/치수"
+        },
+        {
+          "name": "NORMT",
+          "type": "CHAR",
+          "length": 18,
+          "text": "산업표준"
+        },
+        {
+          "name": "LABOR",
+          "type": "CHAR",
+          "length": 3,
+          "text": "실험실"
+        },
+        {
+          "name": "EKWSL",
+          "type": "CHAR",
+          "length": 4,
+          "text": "구매값키"
+        },
+        {
+          "name": "SPART",
+          "type": "CHAR",
+          "length": 2,
+          "text": "제품군"
+        },
+        {
+          "name": "PRDHA",
+          "type": "CHAR",
+          "length": 18,
+          "text": "제품계층"
+        },
+        {
+          "name": "MSTAE",
+          "type": "CHAR",
+          "length": 2,
+          "text": "전사자재상태"
+        },
+        {
+          "name": "BEGRU",
+          "type": "CHAR",
+          "length": 4,
+          "text": "권한그룹"
+        },
+        {
+          "name": "ZEINR",
+          "type": "CHAR",
+          "length": 22,
+          "text": "도면번호"
+        },
+        {
+          "name": "MFRPN",
+          "type": "CHAR",
+          "length": 40,
+          "text": "제조사부품번호"
+        },
+        {
+          "name": "MFRNR",
+          "type": "CHAR",
+          "length": 10,
+          "text": "제조사"
+        },
+        {
+          "name": "WRKST",
+          "type": "CHAR",
+          "length": 48,
+          "text": "기초자재"
+        },
+        {
+          "name": "BEHVO",
+          "type": "CHAR",
+          "length": 2,
+          "text": "용기요건"
+        },
+        {
+          "name": "RAUBE",
+          "type": "CHAR",
+          "length": 2,
+          "text": "보관조건"
+        },
+        {
+          "name": "TEMPB",
+          "type": "CHAR",
+          "length": 2,
+          "text": "온도조건"
+        },
+        {
+          "name": "DISST",
+          "type": "CHAR",
+          "length": 3,
+          "text": "저low레벨"
+        },
+        {
+          "name": "MAGRV",
+          "type": "CHAR",
+          "length": 4,
+          "text": "포장자재그룹"
+        },
+        {
+          "name": "XCHPF",
+          "type": "CHAR",
+          "length": 1,
+          "text": "배치관리"
+        },
+        {
+          "name": "VPSTA",
+          "type": "CHAR",
+          "length": 15,
+          "text": "유지보수상태"
+        },
+        {
+          "name": "PSTAT",
+          "type": "CHAR",
+          "length": 15,
+          "text": "유지관리상태"
+        },
+        {
+          "name": "LVORM",
+          "type": "CHAR",
+          "length": 1,
+          "text": "삭제지시자"
+        },
+        {
+          "name": "BISMT",
+          "type": "CHAR",
+          "length": 18,
+          "text": "구자재번호"
+        },
+        {
+          "name": "EXTWG",
+          "type": "CHAR",
+          "length": 18,
+          "text": "외부자재그룹"
+        },
+        {
+          "name": "SATNR",
+          "type": "CHAR",
+          "length": 18,
+          "text": "상위자재"
+        },
+        {
+          "name": "ATTYP",
+          "type": "CHAR",
+          "length": 2,
+          "text": "자재범주"
+        },
+        {
+          "name": "KZKFG",
+          "type": "CHAR",
+          "length": 1,
+          "text": "구성가능"
+        },
+        {
+          "name": "MSTDE",
+          "type": "DATS",
+          "length": 8,
+          "text": "상태유효일"
+        },
+        {
+          "name": "LAENG",
+          "type": "QUAN",
+          "length": 13,
+          "text": "길이"
+        },
+        {
+          "name": "BREIT",
+          "type": "QUAN",
+          "length": 13,
+          "text": "너비"
+        },
+        {
+          "name": "HOEHE",
+          "type": "QUAN",
+          "length": 13,
+          "text": "높이"
+        },
+        {
+          "name": "MEABM",
+          "type": "UNIT",
+          "length": 3,
+          "text": "치수단위"
+        },
+        {
+          "name": "STOFF",
+          "type": "CHAR",
+          "length": 40,
+          "text": "위험물번호"
+        },
+        {
+          "name": "FERTH",
+          "type": "CHAR",
+          "length": 18,
+          "text": "생산검사메모"
+        },
+        {
+          "name": "WESCH",
+          "type": "QUAN",
+          "length": 13,
+          "text": "입고처리시간"
+        },
+        {
+          "name": "ERGEW",
+          "type": "QUAN",
+          "length": 13,
+          "text": "포장중량"
+        },
+        {
+          "name": "ERGEI",
+          "type": "UNIT",
+          "length": 3,
+          "text": "포장중량단위"
+        },
+        {
+          "name": "ERVOL",
+          "type": "QUAN",
+          "length": 13,
+          "text": "포장부피"
+        },
+        {
+          "name": "ERVOE",
+          "type": "UNIT",
+          "length": 3,
+          "text": "포장부피단위"
+        },
+        {
+          "name": "CUOBF",
+          "type": "CHAR",
+          "length": 18,
+          "text": "내부구성번호"
+        }
+      ],
+      "rows": [
+        {
+          "MATNR": "MAT-0000000001",
+          "ERSDA": "20240115",
+          "ERNAM": "DWKANG",
+          "LAEDA": "20260701",
+          "AENAM": "DWKANG",
+          "MTART": "FERT",
+          "MBRSH": "M",
+          "MATKL": "PAPER-001",
+          "MEINS": "EA",
+          "BSTME": "EA",
+          "BRGEW": "1.500",
+          "NTGEW": "1.200",
+          "GEWEI": "KG",
+          "VOLUM": "0.800",
+          "VOLEH": "M3",
+          "GROES": "1200x800x25 mm",
+          "NORMT": "",
+          "LABOR": "001",
+          "EKWSL": "",
+          "SPART": "01",
+          "PRDHA": "HIER001",
+          "MSTAE": "",
+          "BEGRU": "",
+          "ZEINR": "DRW-00001",
+          "MFRPN": "MFR-PN-0001",
+          "MFRNR": "V1000",
+          "WRKST": "펄프 100%",
+          "BEHVO": "",
+          "RAUBE": "",
+          "TEMPB": "",
+          "DISST": "001",
+          "MAGRV": "0001",
+          "XCHPF": "",
+          "VPSTA": "KVEDPBL",
+          "PSTAT": "KVEDPBL",
+          "LVORM": "",
+          "BISMT": "OLD-000001",
+          "EXTWG": "EXT01",
+          "SATNR": "",
+          "ATTYP": "01",
+          "KZKFG": "",
+          "MSTDE": "20240115",
+          "LAENG": "1201.000",
+          "BREIT": "801.000",
+          "HOEHE": "26.000",
+          "MEABM": "MM",
+          "STOFF": "",
+          "FERTH": "INSP-0001",
+          "WESCH": "1.000",
+          "ERGEW": "1.600",
+          "ERGEI": "KG",
+          "ERVOL": "0.900",
+          "ERVOE": "M3",
+          "CUOBF": ""
+        },
+        {
+          "MATNR": "MAT-0000000002",
+          "ERSDA": "20240115",
+          "ERNAM": "DWKANG",
+          "LAEDA": "20260705",
+          "AENAM": "DWKANG",
+          "MTART": "FERT",
+          "MBRSH": "M",
+          "MATKL": "PAPER-001",
+          "MEINS": "EA",
+          "BSTME": "EA",
+          "BRGEW": "3.000",
+          "NTGEW": "2.400",
+          "GEWEI": "KG",
+          "VOLUM": "1.600",
+          "VOLEH": "M3",
+          "GROES": "1200x800x18 mm",
+          "NORMT": "",
+          "LABOR": "001",
+          "EKWSL": "",
+          "SPART": "01",
+          "PRDHA": "HIER002",
+          "MSTAE": "",
+          "BEGRU": "",
+          "ZEINR": "DRW-00002",
+          "MFRPN": "MFR-PN-0002",
+          "MFRNR": "V1000",
+          "WRKST": "펄프 90% 재생 10%",
+          "BEHVO": "",
+          "RAUBE": "",
+          "TEMPB": "",
+          "DISST": "001",
+          "MAGRV": "0001",
+          "XCHPF": "X",
+          "VPSTA": "KVEDPBL",
+          "PSTAT": "KVEDPBL",
+          "LVORM": "",
+          "BISMT": "OLD-000002",
+          "EXTWG": "EXT01",
+          "SATNR": "",
+          "ATTYP": "01",
+          "KZKFG": "",
+          "MSTDE": "20240115",
+          "LAENG": "1202.000",
+          "BREIT": "802.000",
+          "HOEHE": "27.000",
+          "MEABM": "MM",
+          "STOFF": "",
+          "FERTH": "INSP-0002",
+          "WESCH": "2.000",
+          "ERGEW": "3.200",
+          "ERGEI": "KG",
+          "ERVOL": "1.800",
+          "ERVOE": "M3",
+          "CUOBF": ""
+        },
+        {
+          "MATNR": "MAT-0000000003",
+          "ERSDA": "20240115",
+          "ERNAM": "DWKANG",
+          "LAEDA": "20260710",
+          "AENAM": "DWKANG",
+          "MTART": "HALB",
+          "MBRSH": "M",
+          "MATKL": "BOARD-002",
+          "MEINS": "EA",
+          "BSTME": "EA",
+          "BRGEW": "4.500",
+          "NTGEW": "3.600",
+          "GEWEI": "KG",
+          "VOLUM": "2.400",
+          "VOLEH": "M3",
+          "GROES": "2400x1200x15 mm",
+          "NORMT": "",
+          "LABOR": "001",
+          "EKWSL": "",
+          "SPART": "01",
+          "PRDHA": "HIER003",
+          "MSTAE": "",
+          "BEGRU": "",
+          "ZEINR": "DRW-00003",
+          "MFRPN": "MFR-PN-0003",
+          "MFRNR": "V1000",
+          "WRKST": "MDF",
+          "BEHVO": "",
+          "RAUBE": "",
+          "TEMPB": "",
+          "DISST": "001",
+          "MAGRV": "0001",
+          "XCHPF": "",
+          "VPSTA": "KVEDPBL",
+          "PSTAT": "KVEDPBL",
+          "LVORM": "",
+          "BISMT": "OLD-000003",
+          "EXTWG": "EXT01",
+          "SATNR": "",
+          "ATTYP": "01",
+          "KZKFG": "",
+          "MSTDE": "20240115",
+          "LAENG": "1203.000",
+          "BREIT": "803.000",
+          "HOEHE": "28.000",
+          "MEABM": "MM",
+          "STOFF": "",
+          "FERTH": "INSP-0003",
+          "WESCH": "3.000",
+          "ERGEW": "4.800",
+          "ERGEI": "KG",
+          "ERVOL": "2.700",
+          "ERVOE": "M3",
+          "CUOBF": ""
+        },
+        {
+          "MATNR": "MAT-0000000004",
+          "ERSDA": "20240115",
+          "ERNAM": "DWKANG",
+          "LAEDA": "20260715",
+          "AENAM": "DWKANG",
+          "MTART": "ROH",
+          "MBRSH": "M",
+          "MATKL": "CHEM-003",
+          "MEINS": "KG",
+          "BSTME": "KG",
+          "BRGEW": "6.000",
+          "NTGEW": "4.800",
+          "GEWEI": "KG",
+          "VOLUM": "3.200",
+          "VOLEH": "M3",
+          "GROES": "-",
+          "NORMT": "",
+          "LABOR": "001",
+          "EKWSL": "",
+          "SPART": "01",
+          "PRDHA": "HIER004",
+          "MSTAE": "",
+          "BEGRU": "",
+          "ZEINR": "DRW-00004",
+          "MFRPN": "MFR-PN-0004",
+          "MFRNR": "V1000",
+          "WRKST": "요소수지",
+          "BEHVO": "",
+          "RAUBE": "",
+          "TEMPB": "",
+          "DISST": "001",
+          "MAGRV": "0001",
+          "XCHPF": "X",
+          "VPSTA": "KVEDPBL",
+          "PSTAT": "KVEDPBL",
+          "LVORM": "",
+          "BISMT": "OLD-000004",
+          "EXTWG": "EXT01",
+          "SATNR": "",
+          "ATTYP": "01",
+          "KZKFG": "",
+          "MSTDE": "20240115",
+          "LAENG": "1204.000",
+          "BREIT": "804.000",
+          "HOEHE": "29.000",
+          "MEABM": "MM",
+          "STOFF": "",
+          "FERTH": "INSP-0004",
+          "WESCH": "4.000",
+          "ERGEW": "6.400",
+          "ERGEI": "KG",
+          "ERVOL": "3.600",
+          "ERVOE": "M3",
+          "CUOBF": ""
+        },
+        {
+          "MATNR": "MAT-0000000005",
+          "ERSDA": "20240115",
+          "ERNAM": "DWKANG",
+          "LAEDA": "20260720",
+          "AENAM": "DWKANG",
+          "MTART": "FERT",
+          "MBRSH": "M",
+          "MATKL": "PAPER-001",
+          "MEINS": "EA",
+          "BSTME": "EA",
+          "BRGEW": "7.500",
+          "NTGEW": "6.000",
+          "GEWEI": "KG",
+          "VOLUM": "4.000",
+          "VOLEH": "M3",
+          "GROES": "900x600x25 mm",
+          "NORMT": "",
+          "LABOR": "001",
+          "EKWSL": "",
+          "SPART": "01",
+          "PRDHA": "HIER005",
+          "MSTAE": "",
+          "BEGRU": "",
+          "ZEINR": "DRW-00005",
+          "MFRPN": "MFR-PN-0005",
+          "MFRNR": "V1000",
+          "WRKST": "펄프 100%",
+          "BEHVO": "",
+          "RAUBE": "",
+          "TEMPB": "",
+          "DISST": "001",
+          "MAGRV": "0001",
+          "XCHPF": "",
+          "VPSTA": "KVEDPBL",
+          "PSTAT": "KVEDPBL",
+          "LVORM": "",
+          "BISMT": "OLD-000005",
+          "EXTWG": "EXT01",
+          "SATNR": "",
+          "ATTYP": "01",
+          "KZKFG": "",
+          "MSTDE": "20240115",
+          "LAENG": "1205.000",
+          "BREIT": "805.000",
+          "HOEHE": "30.000",
+          "MEABM": "MM",
+          "STOFF": "",
+          "FERTH": "INSP-0005",
+          "WESCH": "5.000",
+          "ERGEW": "8.000",
+          "ERGEI": "KG",
+          "ERVOL": "4.500",
+          "ERVOE": "M3",
+          "CUOBF": ""
+        },
+        {
+          "MATNR": "MAT-0000000006",
+          "ERSDA": "20240115",
+          "ERNAM": "DWKANG",
+          "LAEDA": "20260722",
+          "AENAM": "DWKANG",
+          "MTART": "HALB",
+          "MBRSH": "M",
+          "MATKL": "BOARD-002",
+          "MEINS": "EA",
+          "BSTME": "EA",
+          "BRGEW": "9.000",
+          "NTGEW": "7.200",
+          "GEWEI": "KG",
+          "VOLUM": "4.800",
+          "VOLEH": "M3",
+          "GROES": "1800x900x12 mm",
+          "NORMT": "",
+          "LABOR": "001",
+          "EKWSL": "",
+          "SPART": "01",
+          "PRDHA": "HIER006",
+          "MSTAE": "",
+          "BEGRU": "",
+          "ZEINR": "DRW-00006",
+          "MFRPN": "MFR-PN-0006",
+          "MFRNR": "V1000",
+          "WRKST": "MDF",
+          "BEHVO": "",
+          "RAUBE": "",
+          "TEMPB": "",
+          "DISST": "001",
+          "MAGRV": "0001",
+          "XCHPF": "X",
+          "VPSTA": "KVEDPBL",
+          "PSTAT": "KVEDPBL",
+          "LVORM": "",
+          "BISMT": "OLD-000006",
+          "EXTWG": "EXT01",
+          "SATNR": "",
+          "ATTYP": "01",
+          "KZKFG": "",
+          "MSTDE": "20240115",
+          "LAENG": "1206.000",
+          "BREIT": "806.000",
+          "HOEHE": "31.000",
+          "MEABM": "MM",
+          "STOFF": "",
+          "FERTH": "INSP-0006",
+          "WESCH": "6.000",
+          "ERGEW": "9.600",
+          "ERGEI": "KG",
+          "ERVOL": "5.400",
+          "ERVOE": "M3",
+          "CUOBF": ""
+        },
+        {
+          "MATNR": "MAT-0000000007",
+          "ERSDA": "20240115",
+          "ERNAM": "DWKANG",
+          "LAEDA": "20260723",
+          "AENAM": "DWKANG",
+          "MTART": "ROH",
+          "MBRSH": "M",
+          "MATKL": "CHEM-003",
+          "MEINS": "KG",
+          "BSTME": "KG",
+          "BRGEW": "10.500",
+          "NTGEW": "8.400",
+          "GEWEI": "KG",
+          "VOLUM": "5.600",
+          "VOLEH": "M3",
+          "GROES": "-",
+          "NORMT": "",
+          "LABOR": "001",
+          "EKWSL": "",
+          "SPART": "01",
+          "PRDHA": "HIER007",
+          "MSTAE": "",
+          "BEGRU": "",
+          "ZEINR": "DRW-00007",
+          "MFRPN": "MFR-PN-0007",
+          "MFRNR": "V1000",
+          "WRKST": "멜라민수지",
+          "BEHVO": "",
+          "RAUBE": "",
+          "TEMPB": "",
+          "DISST": "001",
+          "MAGRV": "0001",
+          "XCHPF": "",
+          "VPSTA": "KVEDPBL",
+          "PSTAT": "KVEDPBL",
+          "LVORM": "",
+          "BISMT": "OLD-000007",
+          "EXTWG": "EXT01",
+          "SATNR": "",
+          "ATTYP": "01",
+          "KZKFG": "",
+          "MSTDE": "20240115",
+          "LAENG": "1207.000",
+          "BREIT": "807.000",
+          "HOEHE": "32.000",
+          "MEABM": "MM",
+          "STOFF": "",
+          "FERTH": "INSP-0007",
+          "WESCH": "7.000",
+          "ERGEW": "11.200",
+          "ERGEI": "KG",
+          "ERVOL": "6.300",
+          "ERVOE": "M3",
+          "CUOBF": ""
+        }
+      ]
+    },
+    "CSKT": {
+      "text": "코스트센터 텍스트",
+      "fields": [
+        {
+          "name": "MANDT",
+          "type": "CLNT",
+          "length": 3,
+          "text": "클라이언트",
+          "key": true
+        },
+        {
+          "name": "SPRAS",
+          "type": "LANG",
+          "length": 1,
+          "text": "언어키",
+          "key": true
+        },
+        {
+          "name": "KOKRS",
+          "type": "CHAR",
+          "length": 4,
+          "text": "관리회계영역",
+          "key": true
+        },
+        {
+          "name": "KOSTL",
+          "type": "CHAR",
+          "length": 10,
+          "text": "코스트센터",
+          "key": true
+        },
+        {
+          "name": "DATBI",
+          "type": "DATS",
+          "length": 8,
+          "text": "유효종료일",
+          "key": true
+        },
+        {
+          "name": "KTEXT",
+          "type": "CHAR",
+          "length": 20,
+          "text": "일반명칭"
+        },
+        {
+          "name": "LTEXT",
+          "type": "CHAR",
+          "length": 40,
+          "text": "설명"
+        },
+        {
+          "name": "MCTXT",
+          "type": "CHAR",
+          "length": 20,
+          "text": "검색어"
+        }
+      ],
+      "rows": [
+        {
+          "MANDT": "100",
+          "SPRAS": "3",
+          "KOKRS": "1000",
+          "KOSTL": "0000010100",
+          "DATBI": "99991231",
+          "KTEXT": "생산1팀",
+          "LTEXT": "대전공장 생산1팀 코스트센터",
+          "MCTXT": "생산1팀"
+        },
+        {
+          "MANDT": "100",
+          "SPRAS": "3",
+          "KOKRS": "1000",
+          "KOSTL": "0000010200",
+          "DATBI": "99991231",
+          "KTEXT": "생산2팀",
+          "LTEXT": "대전공장 생산2팀 코스트센터",
+          "MCTXT": "생산2팀"
+        },
+        {
+          "MANDT": "100",
+          "SPRAS": "3",
+          "KOKRS": "1000",
+          "KOSTL": "0000020100",
+          "DATBI": "99991231",
+          "KTEXT": "품질보증",
+          "LTEXT": "품질보증팀 코스트센터",
+          "MCTXT": "품질보증"
+        },
+        {
+          "MANDT": "100",
+          "SPRAS": "3",
+          "KOKRS": "1000",
+          "KOSTL": "0000030100",
+          "DATBI": "99991231",
+          "KTEXT": "영업관리",
+          "LTEXT": "영업관리팀 코스트센터",
+          "MCTXT": "영업관리"
+        },
+        {
+          "MANDT": "100",
+          "SPRAS": "3",
+          "KOKRS": "1000",
+          "KOSTL": "0000040100",
+          "DATBI": "99991231",
+          "KTEXT": "연구개발",
+          "LTEXT": "R&D 센터 코스트센터",
+          "MCTXT": "연구개발"
+        },
+        {
+          "MANDT": "100",
+          "SPRAS": "E",
+          "KOKRS": "1000",
+          "KOSTL": "0000010100",
+          "DATBI": "99991231",
+          "KTEXT": "Production 1",
+          "LTEXT": "Production Team 1",
+          "MCTXT": "PRODUCTION 1"
+        },
+        {
+          "MANDT": "100",
+          "SPRAS": "E",
+          "KOKRS": "1000",
+          "KOSTL": "0000020100",
+          "DATBI": "99991231",
+          "KTEXT": "Quality Assurance",
+          "LTEXT": "QA Team",
+          "MCTXT": "QUALITY ASSURANCE"
+        }
+      ]
+    }
+  },
+  "bapis": {
+    "BAPI_MATERIAL_GETLIST": {
+      "interface": [
+        {
+          "PARAMETER": "MATNRSELECTION",
+          "PARAMCLASS": "T"
+        },
+        {
+          "PARAMETER": "MATNRLIST",
+          "PARAMCLASS": "T"
+        },
+        {
+          "PARAMETER": "RETURN",
+          "PARAMCLASS": "T"
+        }
+      ],
+      "result": {
+        "MATNRLIST": [
+          {
+            "MATERIAL": "MAT-0000000001",
+            "MATL_DESC": "자재 MAT-0000000001",
+            "MATL_TYPE": "FERT",
+            "MATL_GROUP": "PAPER-001",
+            "BASE_UOM": "EA"
+          },
+          {
+            "MATERIAL": "MAT-0000000002",
+            "MATL_DESC": "자재 MAT-0000000002",
+            "MATL_TYPE": "FERT",
+            "MATL_GROUP": "PAPER-001",
+            "BASE_UOM": "EA"
+          },
+          {
+            "MATERIAL": "MAT-0000000003",
+            "MATL_DESC": "자재 MAT-0000000003",
+            "MATL_TYPE": "HALB",
+            "MATL_GROUP": "BOARD-002",
+            "BASE_UOM": "EA"
+          },
+          {
+            "MATERIAL": "MAT-0000000004",
+            "MATL_DESC": "자재 MAT-0000000004",
+            "MATL_TYPE": "ROH",
+            "MATL_GROUP": "CHEM-003",
+            "BASE_UOM": "KG"
+          },
+          {
+            "MATERIAL": "MAT-0000000005",
+            "MATL_DESC": "자재 MAT-0000000005",
+            "MATL_TYPE": "FERT",
+            "MATL_GROUP": "PAPER-001",
+            "BASE_UOM": "EA"
+          },
+          {
+            "MATERIAL": "MAT-0000000006",
+            "MATL_DESC": "자재 MAT-0000000006",
+            "MATL_TYPE": "HALB",
+            "MATL_GROUP": "BOARD-002",
+            "BASE_UOM": "EA"
+          },
+          {
+            "MATERIAL": "MAT-0000000007",
+            "MATL_DESC": "자재 MAT-0000000007",
+            "MATL_TYPE": "ROH",
+            "MATL_GROUP": "CHEM-003",
+            "BASE_UOM": "KG"
+          }
+        ],
+        "RETURN": []
+      },
+      "responses": [
+        {
+          "when": {
+            "MAXROWS": "0"
+          },
+          "result": {
+            "MATNRLIST": [],
+            "RETURN": [
+              {
+                "TYPE": "E",
+                "ID": "M3",
+                "NUMBER": "305",
+                "MESSAGE": "선택 조건에 맞는 자재가 없습니다"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

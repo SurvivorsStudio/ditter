@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EAI 플랫폼 — UI 목업</title>
+<style>
+  :root{
+    --bg:#f4f4f8; --panel:#ffffff; --rail:#2b2c3b; --rail2:#23242f;
+    --ink:#2b2d3a; --muted:#8a8f9c; --line:#e7e8ef; --line2:#eef0f5;
+    --brand:#ff6d5a; --brand2:#ea4b71; --purple:#6b4efc; --blue:#3b82f6;
+    --green:#12b886; --amber:#f59e0b; --red:#ef4444;
+    --src:#3b82f6; --tr:#8b5cf6; --tg:#12b886; --trig:#ff6d5a;
+    --shadow:0 1px 2px rgba(20,23,40,.06),0 6px 20px rgba(20,23,40,.06);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:"Pretendard","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;
+    background:var(--bg);color:var(--ink);font-size:14px;-webkit-font-smoothing:antialiased}
+  .app{display:flex;height:100vh;overflow:hidden}
+
+  /* ---------- left rail ---------- */
+  .rail{width:76px;background:var(--rail);display:flex;flex-direction:column;align-items:center;
+    padding:14px 0;gap:6px;flex-shrink:0}
+  .logo{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,var(--brand),var(--brand2));
+    display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:17px;margin-bottom:12px;
+    box-shadow:0 4px 12px rgba(234,75,113,.4)}
+  .nav{display:flex;flex-direction:column;gap:4px;width:100%;align-items:center}
+  .nav button{width:56px;height:52px;border:0;background:transparent;color:#a7abbd;border-radius:12px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;font-size:10px;
+    transition:.15s;font-family:inherit}
+  .nav button svg{width:20px;height:20px}
+  .nav button:hover{background:#363749;color:#e6e7ef}
+  .nav button.active{background:#363749;color:#fff}
+  .nav button.active svg{color:var(--brand)}
+  .rail .spacer{flex:1}
+  .avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#6b4efc,#3b82f6);
+    color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+
+  /* ---------- main ---------- */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .topbar{height:60px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:center;
+    padding:0 22px;gap:16px;flex-shrink:0}
+  .topbar h1{font-size:17px;margin:0;font-weight:700}
+  .crumb{color:var(--muted);font-size:13px}
+  .search{flex:1;max-width:360px;margin-left:8px;position:relative}
+  .search input{width:100%;height:36px;border:1px solid var(--line);border-radius:9px;padding:0 12px 0 34px;
+    background:#f7f8fb;font-family:inherit;font-size:13px;outline:none}
+  .search input:focus{border-color:var(--purple);background:#fff}
+  .search svg{position:absolute;left:10px;top:9px;width:17px;height:17px;color:var(--muted)}
+  .top-actions{margin-left:auto;display:flex;gap:9px;align-items:center}
+  .btn{height:37px;padding:0 15px;border-radius:9px;border:1px solid var(--line);background:#fff;cursor:pointer;
+    font-family:inherit;font-size:13px;font-weight:600;color:var(--ink);display:inline-flex;align-items:center;gap:7px;transition:.15s}
+  .btn:hover{border-color:#c9ccd8;background:#fafbfc}
+  .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff;box-shadow:0 2px 8px rgba(255,109,90,.35)}
+  .btn.primary:hover{background:#f9553f;border-color:#f9553f}
+  .btn svg{width:16px;height:16px}
+
+  .view{flex:1;overflow:auto;display:none}
+  .view.active{display:block}
+  .pad{padding:24px 26px}
+
+  /* ---------- cards / stats ---------- */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow)}
+  .stat .lab{color:var(--muted);font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:7px}
+  .stat .dot{width:9px;height:9px;border-radius:50%}
+  .stat .num{font-size:27px;font-weight:800;margin-top:8px;letter-spacing:-.5px}
+  .stat .sub{font-size:12px;margin-top:3px}
+  .up{color:var(--green)} .down{color:var(--red)}
+
+  .section-h{display:flex;align-items:center;margin:6px 0 14px}
+  .section-h h2{font-size:15px;margin:0;font-weight:700}
+  .section-h .more{margin-left:auto;color:var(--purple);font-size:13px;font-weight:600;cursor:pointer}
+
+  /* pipeline list */
+  .plist{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
+  .prow{display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid var(--line2);cursor:pointer;transition:.12s}
+  .prow:last-child{border-bottom:0}
+  .prow:hover{background:#f8f9fc}
+  .picon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff}
+  .picon svg{width:19px;height:19px}
+  .pmeta{min-width:0;flex:1}
+  .pmeta .nm{font-weight:700;font-size:14px}
+  .pmeta .ds{color:var(--muted);font-size:12.5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tag{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap}
+  .tag.ok{background:#e7f8f1;color:#0c8f6b} .tag.run{background:#e8f0fe;color:#2b6fe0}
+  .tag.fail{background:#fdeaea;color:#d63a3a} .tag.idle{background:#eef0f5;color:#8a8f9c}
+  .schedule{color:var(--muted);font-size:12.5px;min-width:120px}
+  .miniflow{display:flex;align-items:center;gap:4px;min-width:150px}
+  .chip{font-size:10.5px;font-weight:700;color:#fff;padding:3px 8px;border-radius:7px;white-space:nowrap}
+  .chip.a{background:var(--src)} .chip.b{background:var(--tr)} .chip.c{background:var(--tg)}
+  .arw{color:#c3c7d4;font-size:11px}
+
+  /* ---------- pipeline canvas ---------- */
+  .editor{display:flex;height:100%}
+  .palette{width:230px;background:var(--panel);border-right:1px solid var(--line);overflow:auto;flex-shrink:0}
+  .palette .ph{padding:14px 16px 8px;font-size:12px;font-weight:800;color:var(--muted);letter-spacing:.4px;text-transform:uppercase}
+  .pcat{padding:2px 12px 10px}
+  .pcat .ct{font-size:11.5px;font-weight:700;color:#9aa0af;padding:8px 6px 5px}
+  .node-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;cursor:grab;transition:.12s;border:1px solid transparent}
+  .node-item:hover{background:#f6f7fb;border-color:var(--line)}
+  .ni-ic{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0}
+  .ni-ic svg{width:16px;height:16px}
+  .node-item .nt{font-size:13px;font-weight:600}
+  .node-item .nd{font-size:11px;color:var(--muted)}
+
+  .canvas-wrap{flex:1;position:relative;overflow:hidden;
+    background-color:#f0f1f6;
+    background-image:radial-gradient(#d3d6e2 1.3px,transparent 1.3px);
+    background-size:22px 22px}
+  .canvas-toolbar{position:absolute;top:14px;left:14px;z-index:5;display:flex;gap:8px}
+  .ctool{background:#fff;border:1px solid var(--line);border-radius:9px;height:34px;padding:0 12px;display:flex;
+    align-items:center;gap:7px;font-size:12.5px;font-weight:600;box-shadow:var(--shadow)}
+  .canvas-run{position:absolute;top:14px;right:14px;z-index:5;display:flex;gap:8px}
+  #svgEdges{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  .node{position:absolute;width:172px;background:#fff;border:2px solid var(--line);border-radius:14px;box-shadow:var(--shadow);
+    cursor:grab;user-select:none;transition:box-shadow .12s,border-color .12s}
+  .node:hover{box-shadow:0 4px 16px rgba(20,23,40,.14)}
+  .node.sel{border-color:var(--purple);box-shadow:0 0 0 3px rgba(107,78,252,.18)}
+  .node .nhd{display:flex;align-items:center;gap:9px;padding:11px 12px}
+  .node .nic{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0}
+  .node .nic svg{width:17px;height:17px}
+  .node .ntt{font-weight:700;font-size:12.5px;line-height:1.15}
+  .node .nsub{font-size:11px;color:var(--muted);margin-top:1px}
+  .node .nfoot{border-top:1px solid var(--line2);padding:6px 12px;font-size:10.5px;color:var(--muted);
+    display:flex;align-items:center;gap:6px}
+  .node .st{width:7px;height:7px;border-radius:50%}
+  .port{position:absolute;width:13px;height:13px;border-radius:50%;background:#fff;border:2px solid #b9bece;top:50%;
+    transform:translateY(-50%)}
+  .port.in{left:-8px} .port.out{right:-8px}
+  .node.sel .port{border-color:var(--purple)}
+
+  .config{width:290px;background:var(--panel);border-left:1px solid var(--line);flex-shrink:0;overflow:auto}
+  .config .ch{padding:15px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:11px}
+  .config .ch .cic{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff}
+  .config .ch .cic svg{width:18px;height:18px}
+  .config .ct{font-weight:800;font-size:14px}
+  .config .csub{font-size:11.5px;color:var(--muted)}
+  .field{padding:12px 18px 4px}
+  .field label{font-size:11.5px;font-weight:700;color:#71778a;display:block;margin-bottom:6px}
+  .field input,.field select{width:100%;height:36px;border:1px solid var(--line);border-radius:9px;padding:0 11px;
+    font-family:inherit;font-size:13px;background:#f7f8fb;outline:none}
+  .field input:focus,.field select:focus{border-color:var(--purple);background:#fff}
+  .field .hint{font-size:11px;color:var(--muted);margin-top:5px}
+  .map-row{display:flex;gap:7px;align-items:center;margin-bottom:6px}
+  .map-row .mi{flex:1;height:32px;border:1px solid var(--line);border-radius:8px;background:#f7f8fb;display:flex;
+    align-items:center;padding:0 9px;font-size:12px;color:#555}
+  .map-row .ar{color:#c3c7d4}
+  .cfoot{padding:16px 18px}
+
+  /* ---------- monitoring ---------- */
+  .table{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  thead th{text-align:left;padding:12px 16px;color:var(--muted);font-weight:700;font-size:12px;
+    border-bottom:1px solid var(--line);background:#fafbfd}
+  tbody td{padding:12px 16px;border-bottom:1px solid var(--line2)}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:#f8f9fc}
+  .mono{font-variant-numeric:tabular-nums}
+  .bar{height:6px;background:#eef0f5;border-radius:6px;overflow:hidden;width:90px;display:inline-block;vertical-align:middle}
+  .bar > i{display:block;height:100%;border-radius:6px;background:var(--green)}
+  .filter-row{display:flex;gap:9px;margin-bottom:16px;flex-wrap:wrap}
+  .pill{height:34px;padding:0 14px;border:1px solid var(--line);border-radius:20px;background:#fff;font-size:12.5px;
+    font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+  .pill.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+  /* ---------- connections ---------- */
+  .conn-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .conn{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow)}
+  .conn .top{display:flex;align-items:center;gap:12px}
+  .conn .db{width:44px;height:44px;border-radius:11px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:12px;flex-shrink:0}
+  .conn .nm{font-weight:700;font-size:14px}
+  .conn .host{font-size:12px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+  .conn .meta{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+  .kv{font-size:11.5px;color:#6b7180;background:#f5f6fa;border-radius:7px;padding:4px 9px}
+  .conn .foot{display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:13px;border-top:1px solid var(--line2)}
+  .health{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700}
+  .health.ok{color:var(--green)} .health.warn{color:var(--amber)} .health.err{color:var(--red)}
+  .health .hd{width:8px;height:8px;border-radius:50%;background:currentColor;box-shadow:0 0 0 3px rgba(18,184,134,.18)}
+  .link{margin-left:auto;color:var(--purple);font-weight:700;font-size:12.5px;cursor:pointer}
+  .add-conn{border:2px dashed #cfd3e0;background:#fafbfe;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:8px;color:var(--muted);cursor:pointer;min-height:150px;border-radius:14px;font-weight:600}
+  .add-conn svg{width:26px;height:26px}
+  .badge-note{display:inline-flex;align-items:center;gap:6px;background:#fff5f3;color:var(--brand);border:1px solid #ffd9d2;
+    padding:5px 11px;border-radius:20px;font-size:12px;font-weight:600;margin-bottom:16px}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- RAIL -->
+  <div class="rail">
+    <div class="logo">EAI</div>
+    <div class="nav" id="nav">
+      <button data-v="home" class="active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>홈</button>
+      <button data-v="canvas">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M9 6h6a3 3 0 0 1 3 3v6"/></svg>파이프라인</button>
+      <button data-v="monitor">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>모니터링</button>
+      <button data-v="conn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>연결</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="avatar">DK</div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <h1 id="vtitle">대시보드</h1>
+      <span class="crumb" id="vcrumb">홈</span>
+      <div class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+        <input placeholder="파이프라인, 연결 검색…">
+      </div>
+      <div class="top-actions" id="topActions">
+        <button class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>새로고침</button>
+        <button class="btn primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>새 파이프라인</button>
+      </div>
+    </div>
+
+    <!-- ============ HOME ============ -->
+    <div class="view active" id="v-home">
+      <div class="pad">
+        <div class="stats">
+          <div class="stat"><div class="lab"><span class="dot" style="background:var(--purple)"></span>전체 파이프라인</div><div class="num">24</div><div class="sub muted" style="color:var(--muted)">활성 18 · 비활성 6</div></div>
+          <div class="stat"><div class="lab"><span class="dot" style="background:var(--green)"></span>오늘 성공</div><div class="num">312</div><div class="sub up">▲ 4.2% vs 어제</div></div>
+          <div class="stat"><div class="lab"><span class="dot" style="background:var(--red)"></span>실패</div><div class="num">3</div><div class="sub down">▲ 2건 · 확인 필요</div></div>
+          <div class="stat"><div class="lab"><span class="dot" style="background:var(--blue)"></span>처리 레코드</div><div class="num">8.4M</div><div class="sub up">▲ 지난 24시간</div></div>
+        </div>
+
+        <div class="section-h"><h2>파이프라인</h2><span class="more">전체 보기 →</span></div>
+        <div class="plist" id="homeList"></div>
+      </div>
+    </div>
+
+    <!-- ============ CANVAS ============ -->
+    <div class="view" id="v-canvas">
+      <div class="editor">
+        <!-- palette -->
+        <div class="palette">
+          <div class="ph">노드</div>
+          <div class="pcat">
+            <div class="ct">트리거</div>
+            <div class="node-item"><div class="ni-ic" style="background:var(--trig)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div><div class="nt">스케줄 (Cron)</div><div class="nd">주기 실행</div></div></div>
+            <div class="node-item"><div class="ni-ic" style="background:var(--trig)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg></div><div><div class="nt">수동 실행</div><div class="nd">버튼 트리거</div></div></div>
+          </div>
+          <div class="pcat">
+            <div class="ct">소스</div>
+            <div class="node-item"><div class="ni-ic" style="background:var(--src)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/></svg></div><div><div class="nt">MySQL</div><div class="nd">테이블 조회</div></div></div>
+            <div class="node-item"><div class="ni-ic" style="background:var(--src)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/></svg></div><div><div class="nt">PostgreSQL</div><div class="nd">테이블/쿼리</div></div></div>
+            <div class="node-item"><div class="ni-ic" style="background:var(--brand2)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg></div><div><div class="nt">SAP (RFC)</div><div class="nd">BAPI/RFC_READ</div></div></div>
+            <div class="node-item"><div class="ni-ic" style="background:var(--src)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M2 12h20"/></svg></div><div><div class="nt">MongoDB</div><div class="nd">컬렉션</div></div></div>
+          </div>
+          <div class="pcat">
+            <div class="ct">변환</div>
+            <div class="node-item"><div class="ni-ic" style="background:var(--tr)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M7 12h10M10 17h4"/></svg></div><div><div class="nt">필터</div><div class="nd">조건 필터링</div></div></div>
+            <div class="node-item"><div class="ni-ic" style="background:var(--tr)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h5l3-7 4 14 3-7h3"/></svg></div><div><div class="nt">필드 매핑</div><div class="nd">컬럼 변환</div></div></div>
+          </div>
+          <div class="pcat">
+            <div class="ct">타깃</div>
+            <div class="node-item"><div class="ni-ic" style="background:var(--tg)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/></svg></div><div><div class="nt">Target DB</div><div class="nd">Upsert 적재</div></div></div>
+            <div class="node-item"><div class="ni-ic" style="background:var(--amber)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/></svg></div><div><div class="nt">Amazon S3</div><div class="nd">Parquet 적재</div></div></div>
+          </div>
+        </div>
+
+        <!-- canvas -->
+        <div class="canvas-wrap" id="canvasWrap">
+          <div class="canvas-toolbar">
+            <div class="ctool"><b>고객 마스터 → S3 (일배치)</b></div>
+            <div class="ctool">자동 저장됨 · 방금</div>
+          </div>
+          <div class="canvas-run">
+            <button class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18"/></svg>변수</button>
+            <button class="btn primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 5v14l11-7z"/></svg>실행</button>
+          </div>
+          <svg id="svgEdges"></svg>
+          <!-- nodes injected by JS -->
+        </div>
+
+        <!-- config -->
+        <div class="config" id="configPanel"></div>
+      </div>
+    </div>
+
+    <!-- ============ MONITOR ============ -->
+    <div class="view" id="v-monitor">
+      <div class="pad">
+        <div class="stats">
+          <div class="stat"><div class="lab"><span class="dot" style="background:var(--green)"></span>성공률 (24h)</div><div class="num">98.1%</div><div class="sub up">▲ 0.6%p</div></div>
+          <div class="stat"><div class="lab"><span class="dot" style="background:var(--blue)"></span>평균 처리시간</div><div class="num">1m 42s</div><div class="sub" style="color:var(--muted)">중앙값 1m 10s</div></div>
+          <div class="stat"><div class="lab"><span class="dot" style="background:var(--purple)"></span>실행 (24h)</div><div class="num">318</div><div class="sub" style="color:var(--muted)">스케줄 291 · 수동 27</div></div>
+          <div class="stat"><div class="lab"><span class="dot" style="background:var(--red)"></span>실패</div><div class="num">6</div><div class="sub down">재시도 대기 2</div></div>
+        </div>
+        <div class="filter-row">
+          <span class="pill on">전체</span>
+          <span class="pill">✔ 성공</span>
+          <span class="pill">● 실행중</span>
+          <span class="pill">✕ 실패</span>
+          <span class="pill" style="margin-left:auto">최근 24시간 ▾</span>
+        </div>
+        <div class="table">
+          <table>
+            <thead><tr>
+              <th style="width:40px">#</th><th>파이프라인</th><th>상태</th><th>수집 방식</th>
+              <th>처리 건수</th><th>진행률</th><th>소요</th><th>시작 시각</th>
+            </tr></thead>
+            <tbody id="runRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ CONNECTIONS ============ -->
+    <div class="view" id="v-conn">
+      <div class="pad">
+        <div class="badge-note">🔒 연결 시크릿은 KMS로 암호화되어 저장됩니다</div>
+        <div class="section-h"><h2>연결 (Connections)</h2></div>
+        <div class="conn-grid" id="connGrid"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ---------------- view switching ---------------- */
+const titles = {home:['대시보드','홈'],canvas:['파이프라인 편집기','파이프라인 › 고객 마스터 → S3'],
+  monitor:['모니터링','실행 이력'],conn:['연결 관리','연결']};
+document.getElementById('nav').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  const v=b.dataset.v;
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  document.getElementById('v-'+v).classList.add('active');
+  document.getElementById('vtitle').textContent=titles[v][0];
+  document.getElementById('vcrumb').textContent=titles[v][1];
+  if(v==='canvas') requestAnimationFrame(drawEdges);
+});
+
+/* ---------------- HOME list ---------------- */
+const svgs={
+  db:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/></svg>',
+  cdc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>',
+  sap:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>'
+};
+const pipelines=[
+  {ic:'db',c:'#3b82f6',nm:'고객 마스터 → S3 (일배치)',ds:'MySDB.customers · 증분(updated_at)',flow:['MySQL','매핑','S3'],tag:'run',tl:'실행중',sc:'매일 02:00'},
+  {ic:'sap',c:'#ea4b71',nm:'SAP 자재마스터 수집',ds:'RFC · BAPI_MATERIAL_GETLIST',flow:['SAP','필터','PostgreSQL'],tag:'ok',tl:'성공',sc:'매일 04:30'},
+  {ic:'cdc',c:'#12b886',nm:'주문 CDC → DW',ds:'Debezium · orders(binlog) 실시간',flow:['MySQL','Kafka','DW'],tag:'ok',tl:'스트리밍',sc:'상시(CDC)'},
+  {ic:'db',c:'#8b5cf6',nm:'재고 스냅샷 → S3',ds:'MSSQL.inventory · 전체 적재',flow:['MSSQL','매핑','S3'],tag:'fail',tl:'실패',sc:'매시 정각'},
+  {ic:'db',c:'#3b82f6',nm:'회원 이벤트 로그 적재',ds:'MongoDB.events · change stream',flow:['MongoDB','필터','S3'],tag:'ok',tl:'성공',sc:'10분마다'},
+  {ic:'db',c:'#f59e0b',nm:'정산 데이터 → PostgreSQL',ds:'PostgreSQL→PostgreSQL · upsert',flow:['PG','매핑','PG'],tag:'idle',tl:'비활성',sc:'수동'}
+];
+document.getElementById('homeList').innerHTML=pipelines.map(p=>`
+  <div class="prow">
+    <div class="picon" style="background:${p.c}">${svgs[p.ic]}</div>
+    <div class="pmeta"><div class="nm">${p.nm}</div><div class="ds">${p.ds}</div></div>
+    <div class="miniflow">${p.flow.map((f,i)=>`<span class="chip ${'abc'[i]}">${f}</span>`+(i<p.flow.length-1?'<span class="arw">▶</span>':'')).join('')}</div>
+    <div class="schedule">🕑 ${p.sc}</div>
+    <span class="tag ${p.tag}">${p.tl}</span>
+  </div>`).join('');
+
+/* ---------------- MONITOR rows ---------------- */
+const runs=[
+  ['#8842','고객 마스터 → S3','run','실행중','배치','128,400',72,'—','13:04:11'],
+  ['#8841','주문 CDC → DW','ok','성공','CDC','실시간',100,'—','13:00:02'],
+  ['#8840','SAP 자재마스터 수집','ok','성공','SAP RFC','42,118',100,'2m 08s','04:30:00'],
+  ['#8839','재고 스냅샷 → S3','fail','실패','배치','0',18,'0m 12s','13:00:00'],
+  ['#8838','회원 이벤트 로그 적재','ok','성공','CDC','9,022',100,'0m 44s','12:50:00'],
+  ['#8837','정산 데이터 → PostgreSQL','ok','성공','배치','311,905',100,'3m 27s','12:00:00'],
+  ['#8836','고객 마스터 → S3','ok','성공','배치','126,880',100,'1m 39s','02:00:00'],
+];
+const barc={ok:'var(--green)',run:'var(--blue)',fail:'var(--red)'};
+document.getElementById('runRows').innerHTML=runs.map(r=>`
+  <tr>
+    <td class="mono" style="color:var(--muted)">${r[0]}</td>
+    <td style="font-weight:600">${r[1]}</td>
+    <td><span class="tag ${r[2]}">${r[3]}</span></td>
+    <td style="color:#5b6070">${r[4]}</td>
+    <td class="mono">${r[5]}</td>
+    <td><span class="bar"><i style="width:${r[6]}%;background:${barc[r[2]]}"></i></span> <span class="mono" style="font-size:11px;color:var(--muted)">${r[6]}%</span></td>
+    <td class="mono" style="color:#5b6070">${r[7]}</td>
+    <td class="mono" style="color:var(--muted)">${r[8]}</td>
+  </tr>`).join('');
+
+/* ---------------- CONNECTIONS ---------------- */
+const conns=[
+  {ab:'My',c:'#00758f',nm:'운영 MySQL',host:'prod-mysql.internal:3306',kv:['MySQL 8.0','DB: shop','풀 20'],h:'ok',ht:'정상'},
+  {ab:'PG',c:'#336791',nm:'분석 PostgreSQL',host:'analytics-pg.internal:5432',kv:['PostgreSQL 16','WAL 활성','풀 15'],h:'ok',ht:'정상'},
+  {ab:'MS',c:'#a91d22',nm:'ERP MSSQL',host:'erp-mssql.internal:1433',kv:['SQL Server 2019','CDC on','풀 10'],h:'warn',ht:'지연'},
+  {ab:'MG',c:'#12924a',nm:'이벤트 MongoDB',host:'events-mongo.internal:27017',kv:['MongoDB 7','replica set','oplog'],h:'ok',ht:'정상'},
+  {ab:'SAP',c:'#ea4b71',nm:'SAP S/4HANA',host:'sap-prd · sysnr 00 · client 100',kv:['RFC','NW RFC SDK','SNC'],h:'ok',ht:'정상'},
+  {ab:'S3',c:'#f59e0b',nm:'데이터레이크 S3',host:'s3://eai-datalake-prod',kv:['ap-northeast-2','Parquet','KMS'],h:'err',ht:'인증 필요'},
+];
+document.getElementById('connGrid').innerHTML=conns.map(c=>`
+  <div class="conn">
+    <div class="top"><div class="db" style="background:${c.c}">${c.ab}</div>
+      <div><div class="nm">${c.nm}</div><div class="host">${c.host}</div></div></div>
+    <div class="meta">${c.kv.map(k=>`<span class="kv">${k}</span>`).join('')}</div>
+    <div class="foot"><span class="health ${c.h}"><span class="hd"></span>${c.ht}</span>
+      <span class="link">테스트 · 편집</span></div>
+  </div>`).join('')+`
+  <div class="add-conn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+    새 연결 추가</div>`;
+
+/* ---------------- CANVAS: nodes + edges + drag ---------------- */
+const wrap=document.getElementById('canvasWrap');
+const svg=document.getElementById('svgEdges');
+const cfg=document.getElementById('configPanel');
+const nodeData=[
+  {id:'trg',x:60,y:150,c:'var(--trig)',t:'스케줄 트리거',s:'매일 02:00 (KST)',foot:'Cron',stc:'var(--muted)',
+   cic:svgs.cdc.replace('stroke-width="2"','stroke-width="2"'),
+   fields:`<div class="field"><label>실행 주기 (Cron)</label><input value="0 2 * * *"><div class="hint">매일 새벽 2시 KST</div></div>
+           <div class="field"><label>타임존</label><select><option>Asia/Seoul</option></select></div>`},
+  {id:'src',x:320,y:150,c:'var(--src)',t:'MySQL — customers',s:'운영 MySQL · 증분',foot:'준비',stc:'var(--muted)',
+   cic:svgs.db,
+   fields:`<div class="field"><label>연결</label><select><option>운영 MySQL (prod)</option></select></div>
+           <div class="field"><label>테이블</label><input value="customers"></div>
+           <div class="field"><label>적재 모드</label><select><option>증분 (Incremental)</option><option>전체 (Full)</option></select></div>
+           <div class="field"><label>증분 키</label><input value="updated_at"><div class="hint">워터마크 기준 컬럼</div></div>`},
+  {id:'map',x:560,y:150,c:'var(--tr)',t:'필드 매핑',s:'12개 컬럼 매핑',foot:'준비',stc:'var(--muted)',
+   cic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h5l3-7 4 14 3-7h3"/></svg>',
+   fields:`<div class="field"><label>컬럼 매핑</label>
+     <div class="map-row"><span class="mi">cust_id</span><span class="ar">→</span><span class="mi">customer_id</span></div>
+     <div class="map-row"><span class="mi">cust_nm</span><span class="ar">→</span><span class="mi">name</span></div>
+     <div class="map-row"><span class="mi">reg_dt</span><span class="ar">→</span><span class="mi">registered_at</span></div>
+     <div class="hint">+ 9개 더</div></div>`},
+  {id:'tgt',x:800,y:150,c:'var(--amber)',t:'Amazon S3',s:'Parquet · 일자 파티션',foot:'준비',stc:'var(--muted)',
+   cic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/></svg>',
+   fields:`<div class="field"><label>연결</label><select><option>데이터레이크 S3</option></select></div>
+           <div class="field"><label>버킷 경로</label><input value="s3://eai-datalake-prod/customers"></div>
+           <div class="field"><label>포맷</label><select><option>Parquet</option><option>CSV</option><option>JSON</option></select></div>
+           <div class="field"><label>파티션</label><input value="dt=YYYY-MM-DD"></div>`}
+];
+const edges=[['trg','src'],['src','map'],['map','tgt']];
+let selected='src';
+
+function renderNodes(){
+  nodeData.forEach(n=>{
+    const el=document.createElement('div');
+    el.className='node'+(n.id===selected?' sel':'');
+    el.id='node-'+n.id;
+    el.style.left=n.x+'px'; el.style.top=n.y+'px';
+    el.innerHTML=`
+      <span class="port in"></span><span class="port out"></span>
+      <div class="nhd"><div class="nic" style="background:${n.c}">${n.cic}</div>
+        <div><div class="ntt">${n.t}</div><div class="nsub">${n.s}</div></div></div>
+      <div class="nfoot"><span class="st" style="background:${n.stc}"></span>${n.foot}</div>`;
+    wrap.appendChild(el);
+    makeDraggable(el,n);
+    el.addEventListener('click',ev=>{ if(el.dataset.moved==='1'){el.dataset.moved='0';return;}
+      selected=n.id; document.querySelectorAll('.node').forEach(x=>x.classList.remove('sel'));
+      el.classList.add('sel'); renderConfig(); });
+  });
+  drawEdges();
+}
+function nodeCenter(id){const n=nodeData.find(x=>x.id===id);return {x:n.x,y:n.y};}
+function drawEdges(){
+  const W=172,H=78;
+  svg.innerHTML=edges.map(([a,b])=>{
+    const na=nodeData.find(x=>x.id===a),nb=nodeData.find(x=>x.id===b);
+    const x1=na.x+W,y1=na.y+H/2, x2=nb.x,y2=nb.y+H/2;
+    const dx=Math.max(40,Math.abs(x2-x1)*0.5);
+    return `<path d="M${x1},${y1} C${x1+dx},${y1} ${x2-dx},${y2} ${x2},${y2}" fill="none" stroke="#b9bece" stroke-width="2.5"/>
+            <circle cx="${(x1+x2)/2}" cy="${(y1+y2)/2}" r="10" fill="#fff" stroke="#d7dae4"/>
+            <path d="M${(x1+x2)/2-3},${(y1+y2)/2-4} l5,4 -5,4" fill="none" stroke="#9aa0af" stroke-width="1.6"/>`;
+  }).join('');
+}
+function makeDraggable(el,n){
+  let sx,sy,ox,oy,drag=false;
+  el.addEventListener('mousedown',e=>{
+    if(e.target.classList.contains('port'))return;
+    drag=true; sx=e.clientX; sy=e.clientY; ox=n.x; oy=n.y; el.style.cursor='grabbing'; el.dataset.moved='0';
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove',e=>{
+    if(!drag)return;
+    const nx=ox+(e.clientX-sx), ny=oy+(e.clientY-sy);
+    if(Math.abs(e.clientX-sx)+Math.abs(e.clientY-sy)>3) el.dataset.moved='1';
+    n.x=Math.max(0,nx); n.y=Math.max(0,ny);
+    el.style.left=n.x+'px'; el.style.top=n.y+'px'; drawEdges();
+  });
+  window.addEventListener('mouseup',()=>{ if(drag){drag=false; el.style.cursor='grab';} });
+}
+function renderConfig(){
+  const n=nodeData.find(x=>x.id===selected);
+  cfg.innerHTML=`
+    <div class="ch"><div class="cic" style="background:${n.c}">${n.cic}</div>
+      <div><div class="ct">${n.t}</div><div class="csub">노드 설정</div></div></div>
+    ${n.fields}
+    <div class="cfoot"><button class="btn primary" style="width:100%;justify-content:center">저장</button></div>`;
+}
+renderNodes(); renderConfig();
+</script>
+</body>
+</html>

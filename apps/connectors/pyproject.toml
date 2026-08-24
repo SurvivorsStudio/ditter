@@ -1,0 +1,60 @@
+[project]
+name = "eai-connectors"
+version = "0.1.0"
+description = "EAI 플랫폼 공통 커넥터 라이브러리"
+requires-python = ">=3.12"
+dependencies = [
+    # FastMCP 와 마찬가지로 상위 호환 파손을 막기 위해 상한을 고정한다 (설계 문서 §2 주의사항)
+    "sqlalchemy>=2.0.36,<2.1",
+    "pymysql>=1.1.1,<1.2",
+    "psycopg[binary]>=3.2.3,<3.3",
+    "pyodbc>=5.2.0,<6",
+    "pymongo>=4.10.1,<5",
+    "urllib3>=2.2.3,<3",
+    "boto3>=1.35.60,<1.36",
+    "pyarrow>=18.0.0,<19",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.3",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+    "boto3-stubs[s3]>=1.35.60",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+artifacts = ["**/py.typed"]
+packages = ["src/eai_connectors"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# N818: ReadFailed / WriteFailed 처럼 동작의 실패를 나타내는 이름이 호출부에서 더 잘 읽힌다.
+# 뿌리 클래스인 ConnectorError 가 Error 접미사 규칙을 지키므로 계층은 명확하다.
+"src/eai_connectors/errors.py" = ["N818"]
+
+[tool.mypy]
+python_version = "3.12"
+# 소스 루트를 알려줘야 패키지 내부 상대 import 를 해석한다
+mypy_path = "src"
+packages = ["eai_connectors"]
+strict = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ["pyarrow.*", "pymysql.*", "pyodbc.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

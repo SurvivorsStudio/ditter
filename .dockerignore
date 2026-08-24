@@ -1,23 +1,36 @@
+# 빌드 컨텍스트에서 뺄 것들.
+#
+# 이게 없으면 docker 가 매 빌드마다 저장소 전체(.venv 수백 MB, node_modules, .git)를
+# 데몬으로 전송한다. COPY 하지 않는 파일이어도 전송은 일어나므로, 한 줄 고치고 빌드해도
+# 컨텍스트 전송에서 시간이 다 간다.
+
+# 가상환경·의존성 — 이미지 안에서 새로 설치한다
+**/.venv
+**/venv
 **/node_modules
+
+# 파이썬 캐시
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+
+# 프론트 빌드 산출물 (web 이미지는 자체 컨텍스트에서 새로 빌드한다)
 **/dist
-**/build
-**/coverage
+**/.vite
+
+# 버전 관리·에디터
 .git
-.github
+.gitignore
 .claude
-.done
-.requirements
+**/.DS_Store
+
+# 문서·목업 — 이미지에 들어갈 일이 없다
 docs
-*.log
-# 컨테이너가 죽으면서 bind mount 된 소스 디렉토리에 떨군 코어 덤프. 슬래시 없는 패턴은 모든
-# 깊이에 매칭돼 `backend/src/core/` 같은 소스 디렉토리까지 이미지 빌드 컨텍스트에서 빠질 수
-# 있으므로, 덤프가 실제로 떨어지는 위치만 정확히 짚는다 (.gitignore 와 동일한 이유).
-/backend/core
-/backend/core.*
-/frontend/core
-/frontend/core.*
-/packages/*/core
-/packages/*/core.*
+참고용
+
+# 시크릿이 들어갈 수 있는 것 — 이미지에 굽지 않는다
 .env
 .env.*
 !.env.example

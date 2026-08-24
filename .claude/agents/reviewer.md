@@ -99,10 +99,8 @@ commit 한다. 이게 리뷰어 자신이 만든 수정이 새로운 사고를 �
 .env*                       # 단, .env.example 은 제외 — 아래 「예외」 참고
 *.key
 *.pem
-**/migrations/**            # DB 마이그레이션 파일 (경로 컨벤션은 STEP 0/1 스캐폴딩 후 확정)
+apps/*/migrations/**        # DB 마이그레이션 파일 (Alembic)
 .claude/**
-docs/policy/**
-docs/schema/**
 docs/conventions/commit-convention.md
 ```
 
@@ -129,18 +127,17 @@ diff 대상 파일이 아니다).
 평소보다 근거를 더 꼼꼼히 확인하고, confidence 를 낮추기보다 `NEEDS_USER`로 올리는 쪽을 우선한다.
 
 ```
-packages/**                          # 공유 타입 계약 — 깨지면 frontend/backend 양쪽에 영향
-읽기 전용 강제 로직 (AST 검증기 · DB 어댑터의 read-only 게이트)   # STEP 1이 이미 2인 리뷰를 명시한 영역
-DB 마이그레이션 · 스키마 변경
-인증 · 감사 로직 (STEP 8)
+apps/connectors/**                   # 공유 커넥터 라이브러리 — 깨지면 api/worker 양쪽에 영향
+읽기 전용/트랜잭션 강제 로직 (SqlConnector · connection_service · DuckDB 어댑터)
+DB 마이그레이션 · 스키마 변경 (apps/*/migrations)
+인증 · 비밀값 로직 (apps/api/src/eai_api/auth, services/secrets.py)
 .github/**, docker-compose.yml       # 인프라 · CI
-docs/policy/**, docs/schema/**       # 정책 · 스키마 계약 SSOT
+docs/conventions/commit-convention.md  # 커밋·머지 정책 SSOT
 .claude/**                           # 메타 설정 자체
 ```
 
-> `backend/`·`frontend/`가 아직 스캐폴딩되지 않아(STEP 0 이전) 읽기 전용 강제·인증 로직의 구체
-> 경로는 비어 있다. STEP 0~1이 끝나 실제 디렉터리가 생기면 이 목록과 `.claude/hooks/pr-review-gate.sh`의
-> core-path 패턴을 함께 갱신한다.
+> 위 경로 목록과 `.claude/commands/review.md`의 `CORE_PATH_PATTERN`,
+> `.claude/hooks/pr-review-gate.sh`의 core-path 패턴은 함께 유지한다 — 하나를 바꾸면 나머지도 맞춘다.
 
 ## 절차
 

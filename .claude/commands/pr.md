@@ -32,26 +32,27 @@ main 은 팀이 공유하는 브랜치이므로 직접 push 하지 않는다. �
   `## 코드리뷰` 섹션만 갱신(6-C)한다.
 
 ### 2. 커밋 정리 — `docs/conventions/commit-convention.md` 준수
-- **1차 분할(필수)**: 한 커밋에는 `frontend/` · `backend/` · `packages/` · `docs/` **중 하나의
-  영역만**. 경로가 둘 이상 영역에 걸치면 커밋을 나눈다(예: 위험 판정 로직 구현은 `backend/` 커밋,
-  완료 조건·정책 문구 갱신은 `docs/` 커밋). `packages/`의 공유 타입 변경은 이를 쓰는
-  `frontend/`/`backend/` 변경보다 먼저 커밋한다. 네 영역 밖(루트 설정·`.claude/`·인프라 스크립트)은
-  그 목적 하나로 별도 커밋.
-- **2차 분할**: 같은 영역 안에서도 서로 다른 타입·모듈·주제·STEP 이면 나눈다. 리팩터/포맷과
+- **1차 분할(필수)**: 한 커밋에는 아래 영역 **중 하나만** — `apps/api/` · `apps/web/` ·
+  `apps/worker/` · `apps/connectors/` · `apps/sap-connector/` · `cdc/` · `sync/` · `docs/`(+ `README.md`·
+  `CLAUDE.md`). 경로가 둘 이상 영역에 걸치면 커밋을 나눈다. `apps/connectors/`(공유 라이브러리)
+  변경은 이를 쓰는 `apps/api/`·`apps/worker/` 변경보다 먼저 커밋한다. 위 영역 밖(루트 설정·
+  `.claude/`·`.github/`·`docker-compose.yml`·`참고용/`)은 그 목적 하나로 별도 커밋.
+- **2차 분할**: 같은 영역 안에서도 서로 다른 타입·모듈·주제면 나눈다. 리팩터/포맷과
   동작 변경을 한 커밋에 섞지 않는다.
 - **메시지**: `<타입>: <제목>` + 빈 줄 + `-` 글머리 본문.
   - 타입은 `fix` `feat` `docs` `build` `refactor` `test` `chore` 만. 제목 50자 이내, 현재형·명령문.
   - 관련 이슈·맥락이 있으면 본문에 명시.
 
 ### 3. 변경 영역 테스트 (push 전 게이트)
-바뀐 영역만 테스트한다. 각 워크스페이스에 정의된 `test` 스크립트를 쓴다.
+바뀐 영역만 테스트한다. Python 앱은 uv, 웹은 npm.
 
-- `backend/` 변경 포함 시: `npm test --workspace=backend`
-- `frontend/` 변경 포함 시: `npm test --workspace=frontend`
-- `packages/` 변경 포함 시: 이를 소비하는 `backend/`·`frontend/` 쪽 테스트도 함께 돌린다(공유
-  타입이 깨지면 양쪽에서 드러나야 하므로).
-- `docs/` 만 변경했거나, 아직 [STEP 0](../../docs/todo/step-00-dev-environment.md)이 끝나지 않아
-  해당 워크스페이스에 `test` 스크립트가 없으면 건너뛴다.
+- `apps/api/` 변경 포함 시: `cd apps/api && uv run --extra dev pytest`
+- `apps/worker/` 변경 포함 시: `cd apps/worker && uv run --extra dev pytest`
+- `apps/sap-connector/` 변경 포함 시: `cd apps/sap-connector && uv run --extra dev pytest`
+- `apps/connectors/` 변경 포함 시: `cd apps/connectors && uv run --extra dev pytest` — 공유 라이브러리이므로
+  이를 소비하는 `apps/api/`·`apps/worker/` 테스트도 함께 돌린다(계약이 깨지면 양쪽에서 드러나야 함).
+- `apps/web/` 변경 포함 시: `cd apps/web && npm ci && npm test`(vitest).
+- `cdc/`·`sync/`·`docs/` 만 변경했거나 해당 영역에 테스트가 없으면 건너뛴다.
 
 하나라도 실패하면 **멈추고** 실패 로그를 사용자에게 보고한다. 자의로 우회하지 않는다.
 

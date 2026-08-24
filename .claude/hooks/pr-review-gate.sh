@@ -213,15 +213,14 @@ if [ -r "$state_file" ]; then
 fi
 
 # 고위험(core paths) 변경이면 최소 2회 호출을 요구한다.
-# NOTE: backend/·frontend/ 가 아직 스캐폴딩되지 않아(STEP 0 이전) 이 목록은 현재 존재하는
-# 최상위 경로만 다룬다. STEP 0~1 이후 읽기 전용 강제·인증·마이그레이션 경로가 생기면
-# 아래 CORE_PATH_PATTERN 과 .claude/agents/reviewer.md 의 core paths 목록을 함께 갱신할 것.
+# NOTE: 이 CORE_PATH_PATTERN 은 .claude/commands/review.md 및 .claude/agents/reviewer.md 의
+# core paths 목록과 동일하게 유지한다 — 하나를 바꾸면 나머지도 함께 갱신할 것.
 required_calls=1
 merge_base="$(git merge-base HEAD origin/main 2>/dev/null)"
 if [ -n "$merge_base" ]; then
   changed_files="$(git diff --name-only "$merge_base" HEAD 2>/dev/null)"
   if [ -n "$changed_files" ]; then
-    CORE_PATH_PATTERN='^(packages/|docs/policy/|docs/schema/|\.claude/|\.github/|docker-compose\.yml$|docs/conventions/commit-convention\.md$)'
+    CORE_PATH_PATTERN='^(apps/connectors/|apps/[a-z-]+/migrations/|apps/api/alembic\.ini$|apps/api/src/eai_api/auth/|apps/api/src/eai_api/services/(connection_service|duck_service|secrets)\.py$|\.claude/|\.github/|docker-compose\.yml$|docs/conventions/commit-convention\.md$)'
     if printf '%s\n' "$changed_files" | grep -Eq "$CORE_PATH_PATTERN"; then
       required_calls=2
     fi
