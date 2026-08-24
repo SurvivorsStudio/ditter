@@ -33,8 +33,10 @@ dist/
 /cdc-test/
 
 # ── 로컬 도구 설정 (개인 환경) ───────────────────────────────────────────
-# Claude Code 의 로컬 설정·기동 구성. 사람마다 달라 공유하지 않는다.
-/.claude/
+# .claude 의 워크플로(commands·agents·hooks·settings.json)는 팀 공유 툴링이라 추적한다.
+# 사람마다 다른 로컬 파일만 무시한다.
+/.claude/settings.local.json
+/.claude/.review-state.json
 
 # ── OS / 에디터 ──────────────────────────────────────────────────────────
 .DS_Store
