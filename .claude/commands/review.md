@@ -27,13 +27,14 @@ in_scope_files=$(git diff --name-only "$merge_base" HEAD)
 ### 1. 고위험(core paths) 판정 — reviewer 호출 *전*에 확정
 
 ```bash
-CORE_PATH_PATTERN='^(packages/|docs/policy/|docs/schema/|\.claude/|\.github/|docker-compose\.yml$|docs/conventions/commit-convention\.md$)'
+CORE_PATH_PATTERN='^(apps/connectors/|apps/[a-z-]+/migrations/|apps/api/alembic\.ini$|apps/api/src/eai_api/auth/|apps/api/src/eai_api/services/(connection_service|duck_service|secrets)\.py$|\.claude/|\.github/|docker-compose\.yml$|docs/conventions/commit-convention\.md$)'
 ```
 
 - `in_scope_files` 중 하나라도 위 패턴에 걸리면 `high_risk = true` → **최소 2사이클**을 돈다.
-- 그 외에도 diff 내용상 DB 마이그레이션·스키마 변경, 인증·감사 로직, 읽기 전용 강제(AST 검증기·
-  DB 어댑터) 변경으로 보이면 (아직 `backend/`가 스캐폴딩되지 않아 경로로 못 거를 수 있음)
-  `high_risk = true`로 취급한다 — 판단이 애매하면 고위험 쪽으로 기운다.
+  (핵심: 공유 커넥터 라이브러리, DB 마이그레이션, 인증, 커넥션/트랜잭션·비밀값 서비스, 인프라·툴링.)
+- 그 외에도 diff 내용상 DB 마이그레이션·스키마 변경, 인증·감사 로직, 읽기 전용/트랜잭션 강제
+  (SqlConnector·connection_service·DuckDB 어댑터) 변경으로 보이면 `high_risk = true`로 취급한다 —
+  판단이 애매하면 고위험 쪽으로 기운다.
 - 이 판정은 **여기서 미리 확정**한다. reviewer 결과를 보고 나서 "그냥 1사이클로 끝내자"고 낮추지
   않는다 — 어떤 push 경로도 게이트를 우회하지 못하게 하기 위함이다.
 

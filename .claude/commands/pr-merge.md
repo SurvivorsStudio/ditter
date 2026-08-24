@@ -56,11 +56,14 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
     gh pr checks <n> --watch --fail-fast
     ```
     끝난 뒤 `gh pr view <n> --json statusCheckRollup` 으로 다시 확인한다.
-  - 이 명령이 요구하는 체크(`build-test`)가 **하나도 잡히지 않으면** — 단, **곧바로 종료하지
-    않는다.** PR 생성 직후에는 GitHub 이 체크런을 아직 붙이지 않아 `statusCheckRollup` 이 잠깐
-    비어 있다. 이 "아직 안 붙음"과 "워크플로가 트리거되지 않음"은 구분해야 한다. 10초 간격으로
-    최대 3회 `gh pr view <n> --json statusCheckRollup` 을 다시 읽고, 그래도 비어 있으면 종료한다.
-    통과 처리하면 CI 게이트가 그냥 없는 것과 같다.
+  - 이 명령이 요구하는 체크(`build-test`)가 **하나도 잡히지 않으면**:
+    - 저장소에 **CI 워크플로 자체가 없으면**(`.github/workflows/` 가 비어 있거나 없음) — 이
+      저장소는 아직 **CI 미구성** 상태다(이관 직후 기본값). CI 게이트를 **통과로 처리하되**, 보고에
+      "CI 미구성 — CI 게이트 없이 머지함, 후속으로 `.github/workflows` (pytest + vitest, job 이름
+      `build-test`) 추가 권장" 을 반드시 남긴다.
+    - 워크플로는 있는데 체크런이 아직 안 붙었으면 — PR 생성 직후 잠깐 비는 경우다. 10초 간격 최대
+      3회 `gh pr view <n> --json statusCheckRollup` 을 다시 읽고, 그래도 `build-test` 가 없으면
+      워크플로가 트리거되지 않은 것으로 보고 종료한다.
   - **통과는 `build-test` 의 결론이 `SUCCESS` 일 때뿐이다.** 위 세 갈래에 안 걸렸다고 통과시키지
     않는다 — 그러면 이 절이 거부한 "실패가 없으면 통과"로 되돌아간다. `CANCELLED`·`TIMED_OUT`·
     `ACTION_REQUIRED`·`STALE`·`SKIPPED` 는 실패로 기록되지 않지만 **초록불도 아니므로 종료**한다.
