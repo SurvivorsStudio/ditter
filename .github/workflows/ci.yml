@@ -30,16 +30,16 @@ jobs:
         run: pip install uv
 
       - name: Test connectors
-        run: cd apps/connectors && uv run pytest -q
+        run: cd apps/connectors && uv run --extra dev pytest -q
 
       - name: Test sap-connector
-        run: cd apps/sap-connector && uv run pytest -q
+        run: cd apps/sap-connector && uv run --extra dev pytest -q
 
       - name: Test api
-        run: cd apps/api && uv run pytest -q
+        run: cd apps/api && uv run --extra dev pytest -q
 
       - name: Test worker
-        run: cd apps/worker && uv run pytest -q
+        run: cd apps/worker && uv run --extra dev pytest -q
 
       # ── Web (npm · vitest) ─────────────────────────────────────────────
       - name: Set up Node
