@@ -96,7 +96,7 @@ export function Home() {
         {isLoading && !pipelines && <EmptyState title="불러오는 중…" />}
 
         {pipelines && pipelines.length === 0 && (
-          <EmptyState title="아직 파이프라인이 없습니다">
+          <EmptyState title="아직 파이프라인이 없습니다" image="/logo.png">
             상단의 [새 파이프라인] 버튼으로 첫 파이프라인을 만들어 보세요.
           </EmptyState>
         )}

@@ -58,9 +58,18 @@ export function Banner({ kind, children }: { kind: 'error' | 'warn' | 'ok'; chil
   return <div className={`banner ${kind}`}>{children}</div>
 }
 
-export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
+export function EmptyState({
+  title,
+  children,
+  image,
+}: {
+  title: string
+  children?: ReactNode
+  image?: string
+}) {
   return (
     <div className="empty-state">
+      {image && <img className="empty-logo" src={image} alt="" />}
       <h3>{title}</h3>
       {children}
     </div>

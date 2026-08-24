@@ -136,7 +136,7 @@ type Layout = { sessions: Session[]; columns: Column[]; focused: number }
 
 /** 손대지 않은 빈 편집기인가 — 연결을 바꿀 때 예시로 채워도 되는지 판단한다.
  *  쓰던 SQL 을 덮어쓰는 것이 더 나쁜 일이라, 기본값 그대로일 때만 바꾼다. */
-const BLANK_SQL = 'SELECT *\nFROM '
+const BLANK_SQL = ''
 const isUntouched = (sql: string) => !sql.trim() || sql.trim() === BLANK_SQL.trim()
 
 const blankSession = (id: number): Session => ({
@@ -455,8 +455,15 @@ function SessionEditor({
     </button>
   )
 
+  const editorEmpty = notebook
+    ? !(session.cells ?? []).some((c) => (c.src ?? '').trim())
+    : !(isMongo ? session.mongoCmd : session.sql)?.trim()
+
   return (
-    <div className="sql-tab-pane" style={{ display: hidden ? 'none' : 'flex' }}>
+    <div
+      className={`sql-tab-pane editor-pane ${editorEmpty ? 'is-empty' : ''}`}
+      style={{ display: hidden ? 'none' : 'flex' }}
+    >
       {notebook ? (
         <Notebook
           cells={session.cells ?? []}
