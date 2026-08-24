@@ -46,10 +46,10 @@ main 은 팀이 공유하는 브랜치이므로 직접 push 하지 않는다. �
 ### 3. 변경 영역 테스트 (push 전 게이트)
 바뀐 영역만 테스트한다. Python 앱은 uv, 웹은 npm.
 
-- `apps/api/` 변경 포함 시: `cd apps/api && uv run pytest`
-- `apps/worker/` 변경 포함 시: `cd apps/worker && uv run pytest`
-- `apps/sap-connector/` 변경 포함 시: `cd apps/sap-connector && uv run pytest`
-- `apps/connectors/` 변경 포함 시: `cd apps/connectors && uv run pytest` — 공유 라이브러리이므로
+- `apps/api/` 변경 포함 시: `cd apps/api && uv run --extra dev pytest`
+- `apps/worker/` 변경 포함 시: `cd apps/worker && uv run --extra dev pytest`
+- `apps/sap-connector/` 변경 포함 시: `cd apps/sap-connector && uv run --extra dev pytest`
+- `apps/connectors/` 변경 포함 시: `cd apps/connectors && uv run --extra dev pytest` — 공유 라이브러리이므로
   이를 소비하는 `apps/api/`·`apps/worker/` 테스트도 함께 돌린다(계약이 깨지면 양쪽에서 드러나야 함).
 - `apps/web/` 변경 포함 시: `cd apps/web && npm ci && npm test`(vitest).
 - `cdc/`·`sync/`·`docs/` 만 변경했거나 해당 영역에 테스트가 없으면 건너뛴다.
