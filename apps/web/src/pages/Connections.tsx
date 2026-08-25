@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   useConnectionTypes,
   useConnections,
@@ -10,7 +10,7 @@ import {
   useUpdateConnection,
   useTestConnection,
 } from '../api/hooks'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { auth } from '../api/auth'
 import type { FieldSpec } from '../api/connectorFields'
 import {
@@ -50,10 +50,23 @@ function hostLine(conn: Connection): string {
 export function Connections() {
   const { data: connections, isLoading, error } = useConnections()
   const [showForm, setShowForm] = useState(false)
+  const [addType, setAddType] = useState<string | null>(null)
   const [editing, setEditing] = useState<Connection | null>(null)
   const [viewing, setViewing] = useState<Connection | null>(null)
   const [deleting, setDeleting] = useState<Connection | null>(null)
   const [testResult, setTestResult] = useState<{ id: string; ok: boolean; text: string } | null>(null)
+
+  // AI 탭의 「AI 모델 등록하기」가 ?add=gemini 로 들어온다 — 생성 폼을 그 타입으로 바로 연다.
+  const [params, setParams] = useSearchParams()
+  useEffect(() => {
+    const add = params.get('add')
+    if (add && CONNECTOR_SPECS[add]) {
+      setAddType(add)
+      setShowForm(true)
+      params.delete('add')
+      setParams(params, { replace: true })
+    }
+  }, [params, setParams])
 
   const canEdit = auth.can('editor')
   const canOperate = auth.can('operator')
@@ -177,7 +190,15 @@ export function Connections() {
         </div>
       </div>
 
-      {showForm && <ConnectionForm onClose={() => setShowForm(false)} />}
+      {showForm && (
+        <ConnectionForm
+          initialType={addType}
+          onClose={() => {
+            setShowForm(false)
+            setAddType(null)
+          }}
+        />
+      )}
       {editing && (
         <ConnectionForm connection={editing} onClose={() => setEditing(null)} />
       )}
@@ -213,9 +234,12 @@ export function Connections() {
  */
 function ConnectionForm({
   connection,
+  initialType,
   onClose,
 }: {
   connection?: Connection
+  /** 생성 시 타입 선택을 건너뛰고 이 타입으로 바로 연다 (AI 탭 딥링크 ?add=gemini). */
+  initialType?: string | null
   onClose: () => void
 }) {
   const { data: types } = useConnectionTypes()
@@ -223,11 +247,11 @@ function ConnectionForm({
   const update = useUpdateConnection()
   const isEdit = connection !== undefined
 
-  const [type, setType] = useState<string | null>(connection?.type ?? null)
+  const [type, setType] = useState<string | null>(connection?.type ?? initialType ?? null)
   const [name, setName] = useState(connection?.name ?? '')
   const [error, setError] = useState<string | null>(null)
   const [values, setValues] = useState<Record<string, string | boolean>>(() =>
-    connection ? initialValues(connection) : {},
+    connection ? initialValues(connection) : initialType ? defaultsFor(initialType) : {},
   )
 
   const available = types ?? Object.keys(CONNECTOR_SPECS)

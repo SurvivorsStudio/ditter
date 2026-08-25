@@ -16,6 +16,7 @@ import {
   duckScriptSchema,
   objectDetailSchema,
   objectsOutSchema,
+  aiChatOutSchema,
   explainOutSchema,
   queryResultSchema,
   runLogSchema,
@@ -267,6 +268,21 @@ export function useExplain() {
         method: 'POST',
         body: { query, analyze },
       }),
+  })
+}
+
+/** AI 어시스턴트 — 자연어 SQL 생성·튜닝 (POST /ai/chat). */
+export function useAiChat() {
+  return useMutation({
+    mutationFn: (body: {
+      ai_connection_id: string
+      messages: { role: 'user' | 'assistant'; content: string }[]
+      intent: 'sql.generate' | 'sql.tune'
+      db_connection_id?: string | null
+      sql?: string | null
+      error?: string | null
+      include_samples?: boolean
+    }) => api.parsed(aiChatOutSchema, '/ai/chat', { method: 'POST', body }),
   })
 }
 

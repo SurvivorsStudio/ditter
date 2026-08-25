@@ -123,6 +123,8 @@ _S3_KEYS = frozenset(
 )
 #: ``root`` 는 UI 필드가 아니라 서버 설정에서 주입되는 격리 루트다 (resolve_config).
 _LOCAL_FILE_KEYS = frozenset({"root", "base_dir"})
+#: AI 모델 — 프론트 CONNECTOR_SPECS.gemini.fields 와 키가 같아야 한다 (한쪽만 늘리면 extra 로 버려짐).
+_GEMINI_KEYS = frozenset({"api_key", "model", "endpoint"})
 
 _ALLOWED_KEYS: dict[ConnectorType, frozenset[str]] = {
     ConnectorType.MYSQL: _SQL_KEYS,
@@ -132,6 +134,7 @@ _ALLOWED_KEYS: dict[ConnectorType, frozenset[str]] = {
     ConnectorType.SAP_RFC: _SAP_KEYS,
     ConnectorType.S3: _S3_KEYS,
     ConnectorType.LOCAL_FILE: _LOCAL_FILE_KEYS,
+    ConnectorType.GEMINI: _GEMINI_KEYS,
 }
 
 
@@ -177,6 +180,12 @@ def _load_local_file() -> Factory:
     return LocalFileConnector
 
 
+def _load_gemini() -> Factory:
+    from .gemini import GeminiConnector
+
+    return GeminiConnector
+
+
 register(ConnectorType.MYSQL, _load_mysql)
 register(ConnectorType.POSTGRES, _load_postgres)
 register(ConnectorType.MSSQL, _load_mssql)
@@ -184,3 +193,4 @@ register(ConnectorType.MONGO, _load_mongo)
 register(ConnectorType.SAP_RFC, _load_sap)
 register(ConnectorType.S3, _load_s3)
 register(ConnectorType.LOCAL_FILE, _load_local_file)
+register(ConnectorType.GEMINI, _load_gemini)

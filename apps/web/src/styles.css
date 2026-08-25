@@ -8276,3 +8276,372 @@ tbody tr:hover {
   color: var(--ink);
   font-weight: 600;
 }
+
+/* ============================ AI 챗 탭 ============================ */
+.ai-pane {
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg, #fff);
+}
+.ai-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line2);
+  flex-wrap: wrap;
+}
+.ai-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  background: #7c3aed;
+  border-radius: 6px;
+  padding: 3px 8px;
+}
+.ai-badge svg { width: 13px; height: 13px; }
+.ai-select { min-width: 150px; }
+.ai-intent { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.ai-intent-btn {
+  border: 0;
+  background: #fff;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--ink);
+}
+.ai-intent-btn.on { background: #7c3aed; color: #fff; font-weight: 700; }
+.ai-toolbar-sp { flex: 1; }
+
+.ai-messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ai-hint { color: #9aa0ad; font-size: 13px; text-align: center; margin: auto; }
+.ai-hint-dim { color: #b7bcc7; font-size: 12px; margin-top: 4px; }
+
+.ai-msg { display: flex; }
+.ai-msg.user { justify-content: flex-end; }
+.ai-msg.assistant { justify-content: flex-start; }
+.ai-bubble {
+  max-width: 82%;
+  padding: 10px 13px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ai-msg.user .ai-bubble { background: #7c3aed; color: #fff; border-bottom-right-radius: 4px; }
+.ai-msg.assistant .ai-bubble {
+  background: #f4f5f9;
+  color: var(--ink);
+  border: 1px solid var(--line2);
+  border-bottom-left-radius: 4px;
+}
+.ai-msg.assistant.error .ai-bubble { background: #fff3f0; border-color: #f6c6bd; color: #b3311c; }
+.ai-text { white-space: pre-wrap; }
+
+.ai-code {
+  margin: 8px 0 2px;
+  border: 1px solid #2b2f3a;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #1e222b;
+}
+.ai-code pre {
+  margin: 0;
+  padding: 10px 12px;
+  color: #e6e6e6;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  overflow-x: auto;
+  white-space: pre;
+}
+.ai-code-actions {
+  display: flex;
+  gap: 6px;
+  padding: 6px 8px;
+  background: #171a21;
+  border-top: 1px solid #2b2f3a;
+}
+.ai-note {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: #8a6d00;
+  background: #fff7e0;
+  border: 1px solid #f0e0a8;
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+
+.ai-typing { display: inline-flex; gap: 4px; align-items: center; }
+.ai-typing span {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #b7bcc7; animation: ai-blink 1.2s infinite ease-in-out;
+}
+.ai-typing span:nth-child(2) { animation-delay: 0.2s; }
+.ai-typing span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes ai-blink { 0%, 80%, 100% { opacity: 0.3; } 40% { opacity: 1; } }
+
+/* 하단 컴포저 — 입력 + 작은 컨트롤(모델·DB·의도·예시)을 한 상자에 (Claude Code 식) */
+.ai-composer {
+  margin: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ai-composer:focus-within {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.12);
+}
+.ai-input {
+  width: 100%;
+  /* 높이는 JS 가 내용에 맞춰 잡는다(auto-grow). 최대에서 멈추고 스크롤. */
+  resize: none;
+  min-height: 24px;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 0;
+  padding: 0;
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.5;
+  color: var(--ink);
+  background: transparent;
+}
+.ai-input:focus { outline: none; }
+
+.ai-composer-bar { display: flex; align-items: center; gap: 8px; }
+.ai-composer-left { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; }
+.ai-composer-right { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+
+/* 작은 텍스트 드롭다운 (모델·DB) — 큰 pill 이 아니라 은은한 텍스트+메뉴 */
+.ai-mini { position: relative; }
+.ai-mini-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 0;
+  background: transparent;
+  color: #6b7180;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  max-width: 150px;
+}
+.ai-mini-btn:hover { background: #f2f3f7; color: var(--ink); }
+.ai-mini-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-mini-btn svg { width: 12px; height: 12px; opacity: 0.6; flex-shrink: 0; }
+.ai-mini-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  min-width: 180px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+  padding: 5px;
+  z-index: 30;
+}
+.ai-mini.right .ai-mini-menu { left: auto; right: 0; }
+.ai-mini-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 7px 9px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.ai-mini-item:hover { background: #f4f0fe; }
+.ai-mini-item.on { color: #7c3aed; font-weight: 700; }
+.ai-mini-hint { color: #a2a7b5; font-size: 11px; }
+
+/* 작은 아이콘 버튼 (예시·비우기) */
+.ai-icon-btn {
+  border: 0;
+  background: transparent;
+  color: #8a90a0;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.ai-icon-btn:hover { background: #f2f3f7; color: var(--ink); }
+.ai-icon-btn.on { color: #7c3aed; background: #f4f0fe; }
+.ai-icon-btn svg { width: 15px; height: 15px; }
+
+/* 하단 바의 의도 토글은 작게 */
+.ai-composer-bar .ai-intent-btn { padding: 4px 9px; font-size: 11.5px; }
+
+/* 전송 (↵) */
+.ai-send-btn {
+  border: 0;
+  background: #7c3aed;
+  color: #fff;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  font-size: 15px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.ai-send-btn:hover:not(:disabled) { background: #6a30d0; }
+.ai-send-btn:disabled { background: #d8d5e8; cursor: default; }
+
+.ai-empty { margin: auto; text-align: center; max-width: 340px; padding: 24px; }
+.ai-empty-icon {
+  width: 52px; height: 52px; border-radius: 14px;
+  display: grid; place-items: center; margin: 0 auto 14px;
+  background: #f0eafe; color: #7c3aed;
+}
+.ai-empty-icon svg { width: 26px; height: 26px; }
+.ai-empty h3 { margin: 0 0 6px; font-size: 16px; color: var(--ink); }
+.ai-empty p { margin: 0 0 16px; color: #8a90a0; font-size: 13px; }
+
+/* AI 예시 데이터 토글 */
+.ai-samples-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 7px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #8a90a0;
+}
+.ai-samples-btn svg { width: 13px; height: 13px; }
+.ai-samples-btn.on { border-color: #7c3aed; color: #7c3aed; background: #f4f0fe; font-weight: 700; }
+
+/* AI 되묻기 빠른 답장 칩 */
+.ai-quick { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
+.ai-quick-chip {
+  border: 1px solid #c9b8f5;
+  background: #f4f0fe;
+  color: #6a30d0;
+  border-radius: 14px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.ai-quick-chip:hover { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+
+/* ============ AI 인라인 프롬프트 (/aiQuery — 쿼리탭 가운데) ============ */
+.ai-inline-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 22, 30, 0.30);
+  padding: 20px;
+}
+.ai-inline-box {
+  width: min(560px, 94%);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.30);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ai-inline-head { display: flex; align-items: center; gap: 8px; }
+.ai-inline-title { font-weight: 700; font-size: 14px; color: var(--ink); }
+.ai-inline-x {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  font-size: 20px;
+  color: #9aa0ad;
+  cursor: pointer;
+  line-height: 1;
+}
+.ai-inline-x:hover { color: var(--ink); }
+/* 프롬프트 입력 — 미니 CodeMirror (쿼리 편집기와 같은 테이블·컬럼 자동완성) */
+.ai-inline-cm {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+.ai-inline-cm:focus-within {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15);
+}
+.ai-inline-cm .cm-editor { background: transparent; font-size: 13px; }
+.ai-inline-cm .cm-editor.cm-focused { outline: none; }
+.ai-inline-cm .cm-scroller {
+  min-height: 54px;
+  max-height: 220px;
+  font-family: inherit;
+  line-height: 1.5;
+}
+.ai-inline-cm .cm-content { padding: 10px 12px; color: var(--ink); font-family: inherit; }
+.ai-inline-cm .cm-placeholder { color: #a2a7b5; }
+.ai-inline-bar { display: flex; align-items: center; gap: 8px; }
+.ai-inline-sp { flex: 1; }
+.ai-inline-go { white-space: nowrap; }
+.ai-inline-loading { font-size: 12px; color: #7c3aed; font-weight: 600; }
+.ai-inline-hint { font-size: 11.5px; color: #9aa0ad; }
+.ai-inline-note {
+  font-size: 12.5px;
+  color: var(--ink);
+  background: #f4f0fe;
+  border: 1px solid #e0d5fb;
+  border-radius: 8px;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.ai-inline-error {
+  font-size: 12.5px;
+  color: #b3311c;
+  background: #fff3f0;
+  border: 1px solid #f6c6bd;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.ai-inline-empty {
+  text-align: center;
+  padding: 14px;
+  color: #8a90a0;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}

@@ -27,6 +27,7 @@ import type { Favorite } from '../api/favoritesStore'
 import type { SqlStatement } from '../api/statements'
 import { mutedRunMessage } from '../api/statements'
 import { FavoritePickerModal } from '../components/Favorites'
+import { AiInlinePrompt } from './AiInlinePrompt'
 
 /** 자동완성에 쓰는 테이블 정보 — 트리용 TreeTable 에 컬럼을 얹은 것. */
 export type CompletionTable = TreeTable & {
@@ -71,9 +72,10 @@ function parseFromRefs(doc: string): FromRef[] {
 /** 편집기 슬래시 명령. 괄호를 쓰지 않는다(자동완성 괄호와 충돌하던 문제 회피).
  *  - loadQuery: `/loadQuery.` 를 넣고 인라인 즐겨찾기 드롭다운을 띄운다(이름으로 바로).
  *  - loadQueryList: 큰 모달 피커를 연다(전체 목록 + SQL 미리보기). */
-const SLASH_COMMANDS: { name: string; desc: string; kind: 'inline' | 'modal' }[] = [
+const SLASH_COMMANDS: { name: string; desc: string; kind: 'inline' | 'modal' | 'ai' }[] = [
   { name: 'loadQuery', desc: '즐겨찾기 바로 불러오기 (이름)', kind: 'inline' },
   { name: 'loadQueryList', desc: '즐겨찾기 목록 팝업', kind: 'modal' },
+  { name: 'aiQuery', desc: 'AI 로 SQL 생성', kind: 'ai' },
 ]
 
 /** 인라인 자동완성 — `/` 명령 목록과 `/loadQuery.이름` 직접 필터를 담당한다.
@@ -81,6 +83,8 @@ const SLASH_COMMANDS: { name: string; desc: string; kind: 'inline' | 'modal' }[]
 function makeLoadQueryCompletion(
   getFavs: () => Favorite[],
   openModal: (range: { from: number; to: number }) => void,
+  /** AI 명령 실행기(range → 프롬프트). 없으면(mongo·연합조회) `/aiQuery` 를 목록에서 숨긴다. */
+  getOpenAi: () => ((range: { from: number; to: number }) => void) | undefined,
 ): CompletionSource {
   return (ctx) => {
     // 즐겨찾기 직접 필터: '/loadQuery.<이름조각>' — 인라인 드롭다운으로 바로 고른다. (대소문자 무시)
@@ -93,19 +97,22 @@ function makeLoadQueryCompletion(
       const prev = cmd.from > 0 ? ctx.state.sliceDoc(cmd.from - 1, cmd.from) : ''
       if (prev && !/\s/.test(prev)) return null
       const frag = cmd.text.slice(1).toLowerCase()
-      const options = SLASH_COMMANDS.filter((c) => c.name.toLowerCase().startsWith(frag)).map((c) => ({
+      const options = SLASH_COMMANDS.filter(
+        (c) => (c.kind !== 'ai' || getOpenAi()) && c.name.toLowerCase().startsWith(frag),
+      ).map((c) => ({
         label: '/' + c.name,
         detail: '명령',
         type: 'keyword',
         info: c.desc,
         apply: (view: EditorView) => {
-          if (c.kind === 'modal') {
-            // 명령 텍스트는 지우고 그 자리에 즐겨찾기 SQL 을 넣을 지점으로 모달을 연다.
+          if (c.kind === 'modal' || c.kind === 'ai') {
+            // 명령 텍스트는 지우고 그 자리에 결과(즐겨찾기 SQL / AI 생성 SQL)를 넣을 지점을 넘긴다.
             view.dispatch({ changes: { from: cmd.from, to: ctx.pos, insert: '' }, selection: { anchor: cmd.from } })
             closeCompletion(view)
-            // 모달 열기를 다음 틱으로 미룬다 — 확정한 Enter 가 갓 열린 모달의 선택까지
+            // 열기를 다음 틱으로 미룬다 — 확정한 Enter 가 갓 열린 팝업의 선택까지
             // 이어져 첫 항목이 자동 선택되는 경쟁 상태를 막는다.
-            setTimeout(() => openModal({ from: cmd.from, to: cmd.from }), 0)
+            const open = c.kind === 'ai' ? getOpenAi() : openModal
+            if (open) setTimeout(() => open({ from: cmd.from, to: cmd.from }), 0)
           } else {
             // '/loadQuery.' 로 만들어 인라인 즐겨찾기 드롭다운을 잇는다.
             const insert = '/loadQuery.'
@@ -164,7 +171,7 @@ function mergeCompletions(
   return a.from >= b.from ? a : b
 }
 
-function makeTableCompletion(tables: CompletionTable[]): CompletionSource {
+export function makeTableCompletion(tables: CompletionTable[]): CompletionSource {
   const tableOptions = tables.map((t) => {
     const qualified = t.namespace ? `${t.namespace}.${t.name}` : t.name
     return { label: t.name, detail: t.namespace ?? '테이블', type: 'class', apply: qualified }
@@ -477,6 +484,7 @@ export function SqlEditor({
   duckCompletion,
   favorites,
   onOpenLoadModal,
+  onAiCommand,
   onRun,
   language = 'sql',
   placeholder = 'SELECT * FROM schema.table WHERE ...',
@@ -496,6 +504,8 @@ export function SqlEditor({
   favorites?: Favorite[]
   /** `/loadQuery()` (빈 괄호)를 감지하면 큰 모달 피커를 연다. 넘긴 범위를 선택 SQL 로 교체한다. */
   onOpenLoadModal?: (range: { from: number; to: number }) => void
+  /** `/aiQuery` 를 감지하면 AI 인라인 프롬프트를 연다. 넘긴 범위에 생성 SQL 이 들어간다. */
+  onAiCommand?: (range: { from: number; to: number }) => void
   language?: 'sql' | 'json' | 'javascript'
   placeholder?: string
 }) {
@@ -504,6 +514,8 @@ export function SqlEditor({
   favRef.current = favorites ?? []
   const openModalRef = useRef(onOpenLoadModal)
   openModalRef.current = onOpenLoadModal
+  const onAiRef = useRef(onAiCommand)
+  onAiRef.current = onAiCommand
   const onRunRef = useRef(onRun)
   onRunRef.current = onRun
   const extensions = useMemo(() => {
@@ -556,16 +568,37 @@ export function SqlEditor({
         }, 0)
       }
     })
+    // `/aiQuery` 를 다 치면 AI 인라인 프롬프트를 연다 (같은 방식). 명령을 지우고 그 자리를 넘긴다.
+    const AI_CMD = '/aiQuery'
+    const openAi = (range: { from: number; to: number }) => onAiRef.current?.(range)
+    const aiTrigger = EditorView.updateListener.of((u) => {
+      if (!u.docChanged) return
+      const pos = u.state.selection.main.head
+      const before = u.state.sliceDoc(Math.max(0, pos - AI_CMD.length), pos)
+      const after = u.state.sliceDoc(pos, Math.min(u.state.doc.length, pos + 1))
+      if (before.toLowerCase().endsWith(AI_CMD.toLowerCase()) && !/[a-zA-Z]/.test(after)) {
+        const boundaryOk =
+          before.length === AI_CMD.length || /\s/.test(before[before.length - AI_CMD.length - 1] ?? ' ')
+        if (!boundaryOk) return
+        const from = pos - AI_CMD.length
+        setTimeout(() => {
+          const v = u.view
+          v.dispatch({ changes: { from, to: pos, insert: '' }, selection: { anchor: from } })
+          closeCompletion(v)
+          openAi({ from, to: from })
+        }, 0)
+      }
+    })
     // 슬래시(`/`) 문맥이면 즐겨찾기/명령만 배타적으로 보이고, 아니면 언어 자동완성으로 넘긴다.
     // override 로 언어의 기본 소스(SQL 키워드 등)를 대체해, 슬래시 문맥에 키워드가 섞이지 않게 한다.
-    const loadQuery = makeLoadQueryCompletion(() => favRef.current, openModal)
+    const loadQuery = makeLoadQueryCompletion(() => favRef.current, openModal, () => onAiRef.current)
     const asResult = (r: ReturnType<CompletionSource>): CompletionResult | null =>
       r && !(r instanceof Promise) ? r : null
     if (language === 'javascript') {
       const base = javascript()
       const mongoSrc = completion && completion.length > 0 ? makeMongoCompletion(completion) : null
       const src: CompletionSource = (ctx) => loadQuery(ctx) ?? (mongoSrc ? mongoSrc(ctx) : null)
-      return [acceptKeys, autoTrigger, modalTrigger, base, autocompletion({ override: [src] })]
+      return [acceptKeys, autoTrigger, modalTrigger, aiTrigger, base, autocompletion({ override: [src] })]
     }
     const base = sql()
     const kwSrc = keywordCompletionSource(StandardSQL, true) // SQL 키워드(대소문자 무시)
@@ -580,7 +613,7 @@ export function SqlEditor({
       if (slash) return slash // 슬래시 문맥 → 즐겨찾기/명령만
       return mergeCompletions(asResult(kwSrc(ctx)), tableSrc ? asResult(tableSrc(ctx)) : null)
     }
-    return [acceptKeys, autoTrigger, modalTrigger, base, autocompletion({ override: [src] })]
+    return [acceptKeys, autoTrigger, modalTrigger, aiTrigger, base, autocompletion({ override: [src] })]
   }, [completion, duckCompletion, language])
 
   return (
@@ -878,6 +911,8 @@ export function SqlWorkbench({
   const [fullscreen, setFullscreen] = useState(false)
   // `/loadQuery()` 로 연 즐겨찾기 피커 모달. 교체할 트리거 범위를 담는다.
   const [loadModal, setLoadModal] = useState<{ from: number; to: number } | null>(null)
+  // `/aiQuery` 로 열리는 AI 인라인 프롬프트 — 생성 SQL 을 이 범위에 꽂는다.
+  const [aiPrompt, setAiPrompt] = useState<{ from: number; to: number } | null>(null)
   // 편집기 우클릭 컨텍스트 메뉴 (실행 / 즐겨찾기 저장) — 대상 SQL 과 화면 위치.
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; sql: string } | null>(null)
   // 즐겨찾기 저장 대화상자 (우클릭 → 즐겨찾기 저장). 대상 SQL 을 담는다.
@@ -1635,6 +1670,7 @@ export function SqlWorkbench({
             favorites={favorites}
             onRun={run}
             onOpenLoadModal={(r) => setLoadModal(r)}
+            onAiCommand={mode === 'sql' ? (r) => setAiPrompt(r) : undefined}
             placeholder={
               mode === 'mongo'
                 ? 'collection.find({ })   또는   collection.aggregate([ ... ])'
@@ -1952,6 +1988,28 @@ export function SqlWorkbench({
               v.focus()
             }
             setLoadModal(null)
+          }}
+        />
+      )}
+      {aiPrompt && (
+        <AiInlinePrompt
+          dbConnId={connectionId}
+          onInsert={(genSql) => {
+            const v = cmRef.current?.view
+            if (v) {
+              const to = Math.min(aiPrompt.to, v.state.doc.length)
+              const from = Math.min(aiPrompt.from, to)
+              v.dispatch({
+                changes: { from, to, insert: genSql },
+                selection: { anchor: from + genSql.length },
+              })
+              v.focus()
+            }
+            setAiPrompt(null)
+          }}
+          onClose={() => {
+            setAiPrompt(null)
+            cmRef.current?.view?.focus()
           }}
         />
       )}

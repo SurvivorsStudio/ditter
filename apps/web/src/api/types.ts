@@ -209,6 +209,16 @@ export const explainOutSchema = z.object({
 })
 export type ExplainOut = z.infer<typeof explainOutSchema>
 
+// AI 어시스턴트 (자연어 SQL 생성·튜닝, POST /ai/chat)
+export const aiChatOutSchema = z.object({
+  message: z.object({ role: z.string(), content: z.string() }),
+  sql: z.string().nullable().default(null),
+  dialect: z.string().nullable().default(null),
+  schema_note: z.string().nullable().default(null),
+  usage: z.record(z.string(), z.unknown()).nullable().default(null),
+})
+export type AiChatOut = z.infer<typeof aiChatOutSchema>
+
 /** 연합 조회를 재현하는 파이썬 스크립트 (`POST /duckdb/script`). */
 export const duckScriptSchema = z.object({
   filename: z.string(),
