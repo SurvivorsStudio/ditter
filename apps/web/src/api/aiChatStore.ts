@@ -33,7 +33,8 @@ export type ChatState = {
   dbConnId?: string
   intent: ChatIntent
   /** 언급된 테이블의 예시 행을 프롬프트에 넣어 값→컬럼 매핑 정확도를 높인다.
-   *  실제 데이터가 AI 프로바이더로 전송된다 — 사용자가 토글로 켠다(undefined=켜짐 취급). */
+   *  실제 데이터가 AI 프로바이더로 전송된다 — 기본은 꺼짐, 사용자가 토글로 켤 때만 보낸다
+   *  (undefined/미설정=꺼짐. 백엔드 include_samples 기본 False 와 일치). */
   samples?: boolean
   messages: ChatMessage[]
 }

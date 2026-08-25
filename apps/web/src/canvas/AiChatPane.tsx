@@ -120,8 +120,8 @@ export function AiChatPane({
         messages: history.map((m) => ({ role: m.role, content: m.content })),
         intent: state.intent,
         db_connection_id: state.dbConnId || null,
-        // 대상 DB 를 골랐고 예시 데이터를 끄지 않았으면 켠다(정확도↑). undefined=켜짐.
-        include_samples: Boolean(state.dbConnId) && state.samples !== false,
+        // 예시 데이터(실제 DB 행)는 opt-in — 사용자가 명시로 켰을 때만 보낸다(백엔드 기본 False 와 일치).
+        include_samples: Boolean(state.dbConnId) && state.samples === true,
       },
       {
         onSuccess: (out) => {
@@ -226,11 +226,9 @@ export function AiChatPane({
             {/* 예시 데이터 — 언급 테이블의 실제 행을 프롬프트에 넣어 값→컬럼 매핑 정확도를 높인다. */}
             {state.dbConnId && (
               <button
-                className={`ai-icon-btn ${state.samples !== false ? 'on' : ''}`}
-                onClick={() =>
-                  setState((s) => ({ ...s, samples: s.samples === false ? true : false }))
-                }
-                title={`예시 데이터 ${state.samples !== false ? '켜짐' : '꺼짐'} — 언급한 테이블의 실제 행을 AI 에 보내 정확도를 높입니다(데이터가 전송됩니다)`}
+                className={`ai-icon-btn ${state.samples === true ? 'on' : ''}`}
+                onClick={() => setState((s) => ({ ...s, samples: s.samples === true ? false : true }))}
+                title={`예시 데이터 ${state.samples === true ? '켜짐' : '꺼짐'} — 언급한 테이블의 실제 행을 AI 에 보내 정확도를 높입니다(데이터가 전송됩니다)`}
               >
                 <Icon.table />
               </button>

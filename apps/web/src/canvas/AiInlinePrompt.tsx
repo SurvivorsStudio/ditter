@@ -89,6 +89,8 @@ export function AiInlinePrompt({
   const [input, setInput] = useState('')
   const [note, setNote] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // 예시 데이터(실제 DB 행) 전송은 opt-in — 기본 꺼짐. 사용자가 켤 때만 보낸다(백엔드 기본 False 와 일치).
+  const [samples, setSamples] = useState(false)
   const historyRef = useRef<Msg[]>([])
 
   useEffect(() => {
@@ -156,7 +158,7 @@ export function AiInlinePrompt({
         messages: historyRef.current,
         intent: 'sql.generate',
         db_connection_id: dbConnId || null,
-        include_samples: Boolean(dbConnId),
+        include_samples: Boolean(dbConnId) && samples,
       },
       {
         onSuccess: (out) => {
@@ -222,6 +224,16 @@ export function AiInlinePrompt({
             />
             <div className="ai-inline-bar">
               <MiniSelect value={model} options={aiOptions} onChange={setModel} placeholder="AI 모델" />
+              {/* 예시 데이터 — 언급 테이블의 실제 행을 AI 에 보내 정확도를 높인다(데이터가 전송됨). 기본 꺼짐. */}
+              {dbConnId && (
+                <button
+                  className={`ai-icon-btn ${samples ? 'on' : ''}`}
+                  onClick={() => setSamples((v) => !v)}
+                  title={`예시 데이터 ${samples ? '켜짐' : '꺼짐'} — 언급한 테이블의 실제 행을 AI 에 보내 정확도를 높입니다(데이터가 전송됩니다)`}
+                >
+                  <Icon.table />
+                </button>
+              )}
               <span className="ai-inline-sp" />
               {chat.isPending ? (
                 <span className="ai-inline-loading">생성 중…</span>
