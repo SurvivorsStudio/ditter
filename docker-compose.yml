@@ -231,7 +231,11 @@ services:
     volumes:
       - ollamadata:/root/.ollama   # 내려받은 가중치. 지우면 다시 pull 해야 한다
     ports:
-      - "${OLLAMA_PORT:-11434}:11434"
+      # **127.0.0.1 에만** 연다. Ollama 의 HTTP API 에는 인증이 아예 없어서,
+      # 0.0.0.0 으로 열면 같은 Wi-Fi 의 누구나 /api/generate 로 이 장비의 추론을 쓰고
+      # /api/pull·/api/delete 로 받아 둔 가중치를 지우거나 디스크를 채울 수 있다.
+      # api·worker 는 compose 네트워크에서 `ollama:11434` 로 붙으므로 영향이 없다.
+      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
     healthcheck:
       test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
       interval: 10s
