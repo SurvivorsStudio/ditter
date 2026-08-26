@@ -3,11 +3,15 @@ import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { json } from '@codemirror/lang-json'
 import { EditorView } from '@codemirror/view'
 import { SqlEditor, sqlStatementRanges, type CompletionTable } from '../canvas/SqlEditor'
-import { useRunQuery, useRunMongo, useRunDuck } from '../api/hooks'
+import { useRunQuery, useRunMongo, useRunDuck, useConnections } from '../api/hooks'
 import { ApiError } from '../api/client'
 import { Icon } from './icons'
 import { FavoritePickerModal } from './Favorites'
 import { ChartView, defaultChartConfig, type ChartConfig } from './ChartView'
+import { CellAiChat } from './NotebookAi'
+import { AiFixPanel } from './AiFixPanel'
+import { specFor } from '../api/connectorFields'
+import type { SelectOption } from './SearchSelect'
 import type { Favorite } from '../api/favoritesStore'
 import type { DuckTable } from '../canvas/duckRefs'
 import type { QueryResult } from '../api/types'
@@ -235,6 +239,13 @@ function SqlCell({
   muted,
   nextExecCount,
   onChangeSrc,
+  aiAvailable,
+  aiConnId,
+  aiOptions,
+  onAiModelChange,
+  aiDbConnId,
+  onInsertAiSqlBelow,
+  onAiEscalate,
   selected,
   editing,
   register,
@@ -259,6 +270,14 @@ function SqlCell({
   muted: SqlStatement[]
   nextExecCount: () => number
   onChangeSrc: (src: string) => void
+  /** 셀별 AI 챗 — `/` 명령으로 이 블럭만 켠다. 모델은 노트북 공용. */
+  aiAvailable: boolean
+  aiConnId: string
+  aiOptions: SelectOption[]
+  onAiModelChange: (v: string) => void
+  aiDbConnId?: string
+  onInsertAiSqlBelow: (src: string) => void
+  onAiEscalate?: (payload: { sql: string; error: string; assistant: string; dbConnId?: string }) => void
   selected: boolean
   editing: boolean
   register: (id: string, api: CellApi | null) => void
@@ -301,6 +320,10 @@ function SqlCell({
   const [resultOpen, setResultOpen] = useState(true)
   // 주피터식 입력 접기 — 왼쪽 막대 클릭. 접으면 첫 줄 + ••• 만 보인다.
   const [collapsed, setCollapsed] = useState(false)
+  // 이 블럭의 AI 챗 활성 여부 — `/` 명령으로 켠다(전역 토글 아님).
+  const [aiActive, setAiActive] = useState(false)
+  // 오류 자리의 AI 수정 패널 열림 여부.
+  const [showFix, setShowFix] = useState(false)
   // 이 셀이 마지막으로 실행된 순번(주피터 `In [n]`). 아직 안 돌렸으면 null.
   const [execCount, setExecCount] = useState<number | null>(hydrated?.execCount ?? null)
   const abortRef = useRef<AbortController | null>(null)
@@ -401,6 +424,7 @@ function SqlCell({
     const sortDir = s?.dir ?? 'asc'
     executedRef.current = { query: q, sort: s, filters }
     setError(null)
+    setShowFix(false) // 새 실행이면 이전 오류의 AI 수정 패널을 접는다
     setPending(true)
     setResultOpen(true)
     const signal = (abortRef.current = new AbortController()).signal
@@ -674,6 +698,10 @@ function SqlCell({
               duckCompletion={mode === 'duck' ? duckTables : undefined}
               favorites={favorites}
               onOpenLoadModal={(r) => setLoadModal(r)}
+              // `/aiQuery` 는 기존 슬래시 명령 목록에서 함께 뜬다 — 고르면 이 블럭 AI 챗을 켠다.
+              // AI 모델이 있을 때만 넘긴다(없으면 목록에서 자동으로 숨겨진다). SQL 을 만드는 기능이라
+              // mongo 모드에는 붙이지 않는다.
+              onAiCommand={aiAvailable && mode !== 'mongo' ? () => setAiActive(true) : undefined}
               placeholder={mode === 'mongo' ? 'collection.find({ })' : 'SELECT * FROM ...'}
             />
           </div>
@@ -814,7 +842,36 @@ function SqlCell({
                 }}
               >
                 {error ? (
-                  <div className="nb-err">{error}</div>
+                  <div className="nb-err-wrap">
+                    <div className="nb-err">
+                      <span>{error}</span>
+                      {aiAvailable && mode === 'sql' && executedRef.current.query && (
+                        <button
+                          className="btn sm ai-fix-btn"
+                          onClick={() => setShowFix((v) => !v)}
+                          title="수행된 쿼리와 오류를 AI 가 보고 고칩니다"
+                        >
+                          <Icon.bolt /> AI로 고치기
+                        </button>
+                      )}
+                    </div>
+                    {showFix && executedRef.current.query && (
+                      <AiFixPanel
+                        sql={executedRef.current.query}
+                        error={error}
+                        dbConnId={aiDbConnId}
+                        onApply={(fixed) => {
+                          onChangeSrc(fixed)
+                          setShowFix(false)
+                        }}
+                        onEscalate={(p) => {
+                          onAiEscalate?.({ ...p, dbConnId: aiDbConnId })
+                          setShowFix(false)
+                        }}
+                        onClose={() => setShowFix(false)}
+                      />
+                    )}
+                  </div>
                 ) : data && data.columns.length > 0 ? (
                   <div className="nb-grid-wrap">
                     <table className="nb-grid">
@@ -875,6 +932,18 @@ function SqlCell({
               </div>
             ) : null}
           </div>
+        )}
+        {aiActive && aiConnId && (
+          <CellAiChat
+            cellSrc={cell.src}
+            dbConnId={aiDbConnId}
+            aiConnId={aiConnId}
+            modelOptions={aiOptions}
+            onModelChange={onAiModelChange}
+            onClose={() => setAiActive(false)}
+            onInsert={(sql) => onChangeSrc(sql)}
+            onInsertBelow={onInsertAiSqlBelow}
+          />
         )}
       </div>
       {loadModal && (
@@ -1009,6 +1078,7 @@ export function Notebook({
   toolbarLeft,
   viewToggle,
   onSave,
+  onAiEscalate,
 }: {
   cells: Cell[]
   onChangeCells: (cells: Cell[]) => void
@@ -1024,9 +1094,32 @@ export function Notebook({
   viewToggle?: React.ReactNode
   /** ⌘/Ctrl+S·저장 버튼 — 셀을 하나의 SQL 로 합쳐 저장한다(저장됨 탭). */
   onSave?: () => void
+  /** 셀 오류 수정 패널의 「AI 탭에서 이어가기」 — 페이지가 처리한다. */
+  onAiEscalate?: (payload: { sql: string; error: string; assistant: string; dbConnId?: string }) => void
 }) {
   const [selId, setSelId] = useState<string | null>(cells[0]?.id ?? null)
   const [editing, setEditing] = useState(false)
+
+  // ── 셀별 AI 어시스턴트 ── 각 셀에서 `/` 명령으로 그 블럭만 켠다(전역 토글 아님).
+  // 모델은 노트북 공용 — 활성화된 블럭의 헤더에서 고르며 어느 블럭에서 바꿔도 함께 바뀐다.
+  const { data: allConns = [] } = useConnections()
+  const aiConns = useMemo(
+    () => allConns.filter((c) => specFor(c.type).category === 'ai'),
+    [allConns],
+  )
+  const [aiConnId, setAiConnId] = useState<string>('')
+  // AI 모델 기본값 — 아직 안 골랐고 연결이 하나라도 있으면 첫 번째로.
+  useEffect(() => {
+    if (!aiConnId && aiConns.length > 0) setAiConnId(aiConns[0].id)
+  }, [aiConns, aiConnId])
+  const aiOptions: SelectOption[] = aiConns.map((c) => ({
+    value: c.id,
+    label: c.name,
+    hint: specFor(c.type).label,
+  }))
+  // 스키마 문맥은 SQL 모드에서만(대상 DB 가 sql 계열일 때). mongo·duck 은 붙이지 않는다.
+  const aiDbConnId = mode === 'sql' ? connectionId : undefined
+
   const apiRef = useRef(new Map<string, CellApi>())
   const bodyRef = useRef<HTMLDivElement>(null)
   const deletedRef = useRef<{ cell: Cell; at: number } | null>(null)
@@ -1065,6 +1158,16 @@ export function Notebook({
     next.splice(at, 0, { id, type, src: '' })
     onChangeCells(next)
     return id
+  }
+  // AI 가 만든 SQL 을 특정 셀 바로 아래에 새 SQL 셀로 꽂는다.
+  const insertSqlBelow = (afterId: string, src: string) => {
+    const i = cells.findIndex((c) => c.id === afterId)
+    const at = i < 0 ? cells.length : i + 1
+    const id = cellUid()
+    const next = [...cells]
+    next.splice(at, 0, { id, type: 'sql', src })
+    onChangeCells(next)
+    setSelId(id)
   }
   const removeCell = (id: string) => {
     const i = cells.findIndex((c) => c.id === id)
@@ -1276,6 +1379,13 @@ export function Notebook({
               muted={muted}
               nextExecCount={nextExecCount}
               onChangeSrc={(src) => setCell(cell.id, src)}
+              aiAvailable={aiConns.length > 0}
+              aiConnId={aiConnId}
+              aiOptions={aiOptions}
+              onAiModelChange={setAiConnId}
+              aiDbConnId={aiDbConnId}
+              onInsertAiSqlBelow={(src) => insertSqlBelow(cell.id, src)}
+              onAiEscalate={onAiEscalate}
               {...cellCommonProps(cell, i)}
             />
           ),

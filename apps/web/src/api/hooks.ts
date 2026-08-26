@@ -277,7 +277,13 @@ export function useAiChat() {
     mutationFn: (body: {
       ai_connection_id: string
       messages: { role: 'user' | 'assistant'; content: string }[]
-      intent: 'sql.generate' | 'sql.tune' | 'sql.interpret' | 'data.chart' | 'data.report'
+      intent:
+        | 'sql.generate'
+        | 'sql.tune'
+        | 'sql.interpret'
+        | 'sql.fix'
+        | 'data.chart'
+        | 'data.report'
       db_connection_id?: string | null
       sql?: string | null
       error?: string | null
