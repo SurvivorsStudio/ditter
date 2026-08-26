@@ -8,7 +8,14 @@
  * 필드를 보여주고 있었다. 선언이면 빠뜨리기 어렵다.
  */
 
-export type FieldKind = 'text' | 'password' | 'number' | 'checkbox' | 'section' | 'statements'
+export type FieldKind =
+  | 'text'
+  | 'password'
+  | 'number'
+  | 'checkbox'
+  | 'section'
+  | 'statements'
+  | 'remote-select' // 서버에서 옵션을 불러와 드롭다운으로 고른다 (예: Bedrock 모델 목록)
 
 export type FieldSpec = {
   key: string
@@ -345,6 +352,57 @@ export const CONNECTOR_SPECS: Record<string, ConnectorSpec> = {
         kind: 'text',
         placeholder: 'https://generativelanguage.googleapis.com',
         hint: '프록시·리전 엔드포인트를 쓸 때만. 비우면 기본값.',
+      },
+    ],
+  },
+
+  bedrock: {
+    label: 'AWS Bedrock',
+    category: 'ai',
+    abbr: 'AI',
+    color: '#ff9900',
+    description: '자연어로 SQL 생성 · 튜닝',
+    role: 'ai',
+    summary: (c) => String(c.model || 'bedrock'),
+    // 필드 키는 백엔드 registry.py 의 _BEDROCK_KEYS 와 반드시 같아야 한다.
+    fields: [
+      {
+        key: 'model',
+        label: '모델 ID',
+        kind: 'remote-select',
+        required: true,
+        default: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        placeholder: 'anthropic.claude-3-5-sonnet-20241022-v2:0 …',
+        hint: '리전·자격증명 입력 후 「모델 불러오기」로 사용 가능한 모델을 드롭다운에서 고르세요.',
+      },
+      {
+        key: 'region',
+        label: '리전',
+        kind: 'text',
+        required: true,
+        default: 'us-east-1',
+        placeholder: 'us-east-1 · us-west-2 · ap-northeast-2 …',
+        hint: 'Bedrock 을 활성화한 AWS 리전.',
+      },
+      {
+        key: 'access_key_id',
+        label: 'Access Key ID',
+        kind: 'text',
+        required: true,
+        hint: 'IAM 자격증명의 액세스 키 ID (bedrock:Converse·InvokeModel 권한 필요).',
+      },
+      {
+        key: 'secret_access_key',
+        label: 'Secret Access Key',
+        kind: 'password',
+        required: true,
+        hint: '암호화 저장되며 이후 화면에 다시 표시되지 않습니다.',
+      },
+      {
+        key: 'session_token',
+        label: 'Session Token (선택)',
+        kind: 'password',
+        hint: '임시 자격증명(STS)을 쓸 때만. 비우면 사용하지 않습니다.',
       },
     ],
   },
