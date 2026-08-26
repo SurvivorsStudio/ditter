@@ -35,7 +35,10 @@ services:
       - ./mysql/init:/docker-entrypoint-initdb.d:ro
       - demo-mysql:/var/lib/mysql
     ports:
-      - "${DEMO_MYSQL_PORT:-3307}:3306"
+      # 호스트 포트는 **127.0.0.1 에만** 연다. 붙여 넣은 비밀번호가 저장소에 공개돼 있고
+      # SQL Server 는 sa(최고 권한)라, 0.0.0.0 으로 열면 같은 Wi-Fi 의 누구나 붙을 수 있다.
+      # 컨테이너끼리는 ditter_default 네트워크로 붙으므로 api·worker·seed 는 영향이 없다.
+      - "127.0.0.1:${DEMO_MYSQL_PORT:-3307}:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${DEMO_MYSQL_ROOT_PASSWORD:-DitterDemo!2026}"]
       interval: 5s
@@ -63,7 +66,7 @@ services:
     volumes:
       - demo-mssql:/var/opt/mssql
     ports:
-      - "${DEMO_MSSQL_PORT:-1433}:1433"
+      - "127.0.0.1:${DEMO_MSSQL_PORT:-1433}:1433"
     healthcheck:
       # 2022 이미지의 sqlcmd 는 mssql-tools18 에 있고 TLS 검증을 기본으로 켠다(-C 로 신뢰).
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' -b -o /dev/null"]
@@ -114,7 +117,7 @@ services:
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
       - demo-postgres:/var/lib/postgresql/data
     ports:
-      - "${DEMO_PG_PORT:-5433}:5432"
+      - "127.0.0.1:${DEMO_PG_PORT:-5433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d crm"]
       interval: 5s
