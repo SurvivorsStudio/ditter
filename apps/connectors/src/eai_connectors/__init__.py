@@ -41,6 +41,7 @@ if TYPE_CHECKING:  # 타입 검사기와 IDE 에는 실제 심볼을 보여준�
     from .mongo import MongoConnector
     from .mssql import MsSqlConnector
     from .mysql import MySqlConnector
+    from .ollama import OllamaConnector
     from .postgres import PostgresConnector
     from .s3 import S3Connector
     from .sap_rfc import SapRfcConnector
@@ -53,6 +54,7 @@ _LAZY: dict[str, str] = {
     "MongoConnector": ".mongo",
     "MsSqlConnector": ".mssql",
     "MySqlConnector": ".mysql",
+    "OllamaConnector": ".ollama",
     "PostgresConnector": ".postgres",
     "S3Connector": ".s3",
     "SapRfcConnector": ".sap_rfc",
@@ -90,6 +92,7 @@ __all__ = [
     "MongoConnector",
     "MsSqlConnector",
     "MySqlConnector",
+    "OllamaConnector",
     "PostgresConnector",
     "ReadFailed",
     "ReadSpec",

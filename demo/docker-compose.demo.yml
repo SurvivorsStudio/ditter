@@ -1,0 +1,168 @@
+# 시연용 가상 데이터베이스 스택 (쇼핑몰 · WMS · 고객센터).
+#
+# 본체(ditter) 스택과 **완전히 분리된 프로젝트**다. `down -v` 한 번이면 흔적 없이 사라지고,
+# 본체의 메타DB(postgres:5432)·redis 는 손대지 않는다. 포트도 전부 비켜 두었다.
+#
+#   docker compose -f demo/docker-compose.demo.yml up -d          # DB 3종 기동
+#   docker compose -f demo/docker-compose.demo.yml --profile seed run --rm seed
+#
+# **네트워크는 본체(ditter)의 것을 그대로 쓴다.** 반대로 본체를 데모 네트워크에 붙이면
+# `docker compose up -d --build`(= /dev)가 컨테이너를 재생성할 때마다 연결이 풀린다 —
+# 촬영 도중에 "이름을 찾을 수 없다"로 터지고, 원인을 엉뚱한 데서 찾게 된다.
+# 데모 DB 쪽이 본체 네트워크에 올라타면 본체는 손댈 것이 없고 재생성에도 영향받지 않는다.
+#
+# 전제: 본체 스택이 먼저 떠 있어야 한다(네트워크를 그쪽이 만든다). up.sh 가 확인한다.
+name: ditter-demo
+
+services:
+  # ─────────────────────────────────────────────────────────────────
+  # 쇼핑몰 (MySQL) — 주문·고객·상품·결제. 클라우드에 있는 최신 커머스 프론트라는 설정.
+  # binlog 를 ROW/FULL 로 켜 두어 Debezium CDC 소스로 바로 쓸 수 있다.
+  # ─────────────────────────────────────────────────────────────────
+  mysql-shop:
+    image: mysql:8.0
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DEMO_MYSQL_ROOT_PASSWORD:-DitterDemo!2026}
+      MYSQL_DATABASE: shop
+      DEMO_APP_PASSWORD: ${DEMO_APP_PASSWORD:-DitterDemo!2026}
+      DEMO_DEBEZIUM_PASSWORD: ${DEMO_DEBEZIUM_PASSWORD:-DitterDemo!2026}
+      TZ: Asia/Seoul
+    volumes:
+      - ./mysql/conf.d:/etc/mysql/conf.d:ro
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+      - demo-mysql:/var/lib/mysql
+    ports:
+      # 호스트 포트는 **127.0.0.1 에만** 연다. 붙여 넣은 비밀번호가 저장소에 공개돼 있고
+      # SQL Server 는 sa(최고 권한)라, 0.0.0.0 으로 열면 같은 Wi-Fi 의 누구나 붙을 수 있다.
+      # 컨테이너끼리는 ditter_default 네트워크로 붙으므로 api·worker·seed 는 영향이 없다.
+      - "127.0.0.1:${DEMO_MYSQL_PORT:-3307}:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${DEMO_MYSQL_ROOT_PASSWORD:-DitterDemo!2026}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  # ─────────────────────────────────────────────────────────────────
+  # 창고관리 WMS (SQL Server) — 사내 온프레미스 레거시라는 설정.
+  #
+  # **콜레이션을 여기서 못 박는다.** SymmetricDS 는 변경분을 SYM_DATA.row_data(varchar)에
+  # 담는데, DB 콜레이션이 유니코드가 아니면 nvarchar 한글이 글자마다 '?' 가 된다 —
+  # 원본 DB 안에서 이미 손실되므로 타깃을 UTF-8 로 만들어도 소용없다 (CLAUDE.md §20).
+  # SYM_* 를 만든 뒤에는 고칠 수 없어서, 처음 뜰 때 정하는 것 말고는 방법이 없다.
+  # ─────────────────────────────────────────────────────────────────
+  mssql-wms:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${DEMO_MSSQL_SA_PASSWORD:-DitterDemo!2026}
+      MSSQL_PID: Developer
+      MSSQL_COLLATION: Korean_Wansung_CI_AS
+      MSSQL_AGENT_ENABLED: "true"   # CDC 를 대안으로 켜 볼 수 있게 (기본 시나리오는 SymmetricDS)
+      TZ: Asia/Seoul
+    volumes:
+      - demo-mssql:/var/opt/mssql
+    ports:
+      - "127.0.0.1:${DEMO_MSSQL_PORT:-1433}:1433"
+    healthcheck:
+      # 2022 이미지의 sqlcmd 는 mssql-tools18 에 있고 TLS 검증을 기본으로 켠다(-C 로 신뢰).
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  # SQL Server 이미지에는 docker-entrypoint-initdb.d 가 없다 — 스키마를 밀어 넣을 자리가
+  # 아예 없어서, 서버가 뜬 뒤 sqlcmd 로 한 번 실행하는 원샷 컨테이너를 따로 둔다.
+  mssql-wms-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    depends_on:
+      mssql-wms: {condition: service_healthy}
+    environment:
+      MSSQL_SA_PASSWORD: ${DEMO_MSSQL_SA_PASSWORD:-DitterDemo!2026}
+      DEMO_APP_PASSWORD: ${DEMO_APP_PASSWORD:-DitterDemo!2026}
+      DEMO_SYM_PASSWORD: ${DEMO_SYM_PASSWORD:-DitterDemo!2026}
+    volumes:
+      - ./mssql/init:/init:ro
+    entrypoint: ["/bin/bash", "/init/apply.sh"]
+    restart: "no"
+
+  # ─────────────────────────────────────────────────────────────────
+  # 고객센터 CRM + 통합 마트 (PostgreSQL).
+  #   crm — 클레임·상담 (운영계, 연합 조회의 세 번째 조인 대상)
+  #   dw  — 적재 타깃. **일부러 비어 있다.** 파이프라인이 채우는 것을 보여주는 자리다.
+  # wal_level=logical 은 PG 를 CDC 소스로도 써 볼 수 있게 열어 둔 것이다.
+  # ─────────────────────────────────────────────────────────────────
+  postgres-crm:
+    image: postgres:16-alpine
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=10
+      - -c
+      - max_wal_senders=10
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DEMO_PG_PASSWORD:-DitterDemo!2026}
+      POSTGRES_DB: crm
+      DEMO_APP_PASSWORD: ${DEMO_APP_PASSWORD:-DitterDemo!2026}
+      DEMO_SYM_PASSWORD: ${DEMO_SYM_PASSWORD:-DitterDemo!2026}
+      # mysql-shop 과 **같은 값**을 넘긴다. 여기만 빼 두면 PostgreSQL 의 debezium 롤이
+      # 앱 비밀번호로 만들어져, .env 에서 CDC 비밀번호만 바꿨을 때 MySQL 은 되는데
+      # PostgreSQL 만 인증 실패하는 비대칭 실패가 난다.
+      DEMO_DEBEZIUM_PASSWORD: ${DEMO_DEBEZIUM_PASSWORD:-DitterDemo!2026}
+      TZ: Asia/Seoul
+    volumes:
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - demo-postgres:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:${DEMO_PG_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d crm"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # ─────────────────────────────────────────────────────────────────
+  # 목데이터 시더. 세 DB 를 **한 스크립트가 함께** 채운다 — DB 별로 나누면
+  # order_no·sku 같은 DB 를 넘는 키가 반드시 어긋나고, 그러면 연합 조회가 0행을 뱉는다.
+  # ─────────────────────────────────────────────────────────────────
+  seed:
+    build:
+      context: ./seed
+    profiles: ["seed"]
+    depends_on:
+      mysql-shop: {condition: service_healthy}
+      postgres-crm: {condition: service_healthy}
+      mssql-wms-init: {condition: service_completed_successfully}
+    environment:
+      DEMO_SCALE: ${DEMO_SCALE:-standard}      # standard | small | large
+      DEMO_MYSQL_HOST: mysql-shop
+      DEMO_MYSQL_PORT: "3306"
+      DEMO_MYSQL_USER: eai_ddl
+      DEMO_MYSQL_PASSWORD: ${DEMO_APP_PASSWORD:-DitterDemo!2026}
+      DEMO_MSSQL_HOST: mssql-wms
+      DEMO_MSSQL_PORT: "1433"
+      DEMO_MSSQL_USER: eai_ddl
+      DEMO_MSSQL_PASSWORD: ${DEMO_APP_PASSWORD:-DitterDemo!2026}
+      DEMO_PG_HOST: postgres-crm
+      DEMO_PG_PORT: "5432"
+      DEMO_PG_USER: eai_ddl
+      DEMO_PG_PASSWORD: ${DEMO_APP_PASSWORD:-DitterDemo!2026}
+    restart: "no"
+
+volumes:
+  demo-mysql:
+  demo-mssql:
+  demo-postgres:
+
+networks:
+  # 본체 compose(project=ditter)가 만든 네트워크. external 이라 `down -v` 로도 지워지지 않는다.
+  default:
+    name: ${DEMO_NETWORK:-ditter_default}
+    external: true

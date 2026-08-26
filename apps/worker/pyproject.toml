@@ -2,6 +2,7 @@
 name = "eai-worker"
 version = "0.1.0"
 description = "EAI 플랫폼 워커 (Celery) — 수집·변환·적재 실행"
+license = "Apache-2.0"
 requires-python = ">=3.12"
 dependencies = [
     "celery[redis]>=5.4.0,<5.5",

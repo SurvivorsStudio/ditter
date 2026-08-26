@@ -2,6 +2,7 @@
 name = "eai-connectors"
 version = "0.1.0"
 description = "EAI 플랫폼 공통 커넥터 라이브러리"
+license = "Apache-2.0"
 requires-python = ">=3.12"
 dependencies = [
     # FastMCP 와 마찬가지로 상위 호환 파손을 막기 위해 상한을 고정한다 (설계 문서 §2 주의사항)

@@ -2,6 +2,7 @@
 name = "eai-sap-connector"
 version = "0.1.0"
 description = "SAP RFC 전용 사이드카 — NW RFC SDK 격리 (설계 문서 §2, §3)"
+license = "Apache-2.0"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.5,<0.116",
