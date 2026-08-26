@@ -24,6 +24,8 @@ class AiChatRequest(BaseModel):
     sql: str | None = None
     #: 방금 실패한 오류 메시지 (선택)
     error: str | None = None
+    #: 실제 실행 계획(EXPLAIN [ANALYZE]) 텍스트 — 계획 기반 튜닝(intent=sql.tune)에 쓴다.
+    explain: str | None = None
     #: 언급된 테이블의 예시 행을 프롬프트에 넣어 값→컬럼 매핑 정확도를 높인다.
     #: 실제 데이터가 AI 프로바이더로 전송되므로 기본은 꺼짐 — 프론트가 토글로 켠다.
     include_samples: bool = False
