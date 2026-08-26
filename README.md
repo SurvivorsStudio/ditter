@@ -266,3 +266,12 @@ OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES celery -A eai_worker.celery_app:app work
 ```
 
 배포 대상인 Linux 컨테이너에서는 이 증상이 나타나지 않는다.
+
+---
+
+## 라이선스
+
+[Apache License 2.0](LICENSE).
+
+사용한 오픈웨이트 모델의 라이선스는 별개다 — 모델마다 이용 약관이 다르므로 직접 확인한다
+(예: Qwen 계열 Apache-2.0, Gemma 는 자체 이용약관, Llama 는 커뮤니티 라이선스).
