@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 시연용 DB 3종을 띄우고 스키마가 적용될 때까지 기다린다. 데이터는 넣지 않는다(seed.sh).
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
+require_safe_passwords   # 컨테이너를 만들기 전에 — 초기화는 첫 기동에만 돈다
 
 NET="${DEMO_NETWORK:-ditter_default}"
 docker network inspect "$NET" >/dev/null 2>&1 || {
