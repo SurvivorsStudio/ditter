@@ -35,6 +35,7 @@ from .errors import (
 from .registry import build, register, supported_types
 
 if TYPE_CHECKING:  # 타입 검사기와 IDE 에는 실제 심볼을 보여준다
+    from .bedrock import BedrockConnector
     from .gemini import GeminiConnector
     from .local_file import LocalFileConnector
     from .mongo import MongoConnector
@@ -46,6 +47,7 @@ if TYPE_CHECKING:  # 타입 검사기와 IDE 에는 실제 심볼을 보여준�
 
 #: 지연 로딩 대상 — 속성 접근 시점에 해당 모듈을 임포트한다
 _LAZY: dict[str, str] = {
+    "BedrockConnector": ".bedrock",
     "GeminiConnector": ".gemini",
     "LocalFileConnector": ".local_file",
     "MongoConnector": ".mongo",
@@ -77,6 +79,7 @@ __all__ = [
     "ConnectionFailed",
     "ConnectorError",
     "ConnectorType",
+    "BedrockConnector",
     "DbObject",
     "GeminiConnector",
     "HealthResult",

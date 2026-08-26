@@ -22,6 +22,7 @@ class ConnectorType(StrEnum):
     LOCAL_FILE = "local_file"
     #: AI 모델 (자연어 SQL 생성·튜닝). 데이터 커넥터가 아니라 test_connection+generate 만 구현.
     GEMINI = "gemini"
+    BEDROCK = "bedrock"
 
 
 class WriteMode(StrEnum):
