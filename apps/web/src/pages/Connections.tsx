@@ -14,9 +14,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { z } from 'zod'
 import { auth } from '../api/auth'
 import { api } from '../api/client'
-import type { FieldSpec } from '../api/connectorFields'
+import type { FieldSpec, ConnectorCategory } from '../api/connectorFields'
 import {
   CATEGORY_META,
+  CATEGORY_ORDER,
   CONNECTOR_SPECS,
   ROLE_LABEL,
   defaultsFor,
@@ -53,6 +54,7 @@ export function Connections() {
   const { data: connections, isLoading, error } = useConnections()
   const [showForm, setShowForm] = useState(false)
   const [addType, setAddType] = useState<string | null>(null)
+  const [addCategory, setAddCategory] = useState<ConnectorCategory | null>(null)
   const [editing, setEditing] = useState<Connection | null>(null)
   const [viewing, setViewing] = useState<Connection | null>(null)
   const [deleting, setDeleting] = useState<Connection | null>(null)
@@ -108,12 +110,79 @@ export function Connections() {
 
         {isLoading && !connections && <EmptyState title="불러오는 중…" />}
 
-        <div className="conn-grid">
-          {(connections ?? []).map((conn) => {
-            const m = specFor(conn.type)
-            return (
-              <div className="conn" key={conn.id}>
-                <div className="top">
+        {/* 카테고리별로 묶어 보여준다 — DB 는 DB 끼리, AI 모델은 AI 끼리, SAP 은 SAP 끼리.
+            평평하게 늘어놓는 것보다 "어떤 종류인가"로 나뉘어 있어야 찾기 쉽다.
+            각 카테고리마다 「새 연결 추가」를 두어, 그 카테고리 타입만 골라 바로 만든다.
+            AI 모델을 최상단으로 — 타입 선택 화면(CATEGORY_ORDER)과 달리 이 목록만의 순서다. */}
+        {(['ai', ...CATEGORY_ORDER.filter((c) => c !== 'ai')] as ConnectorCategory[]).map((cat) => {
+          const items = (connections ?? []).filter((c) => specFor(c.type).category === cat)
+          const meta = CATEGORY_META[cat]
+          return (
+            <div className="conn-cat" key={cat}>
+              <div className="conn-cat-h">
+                <span className="conn-cat-label">{meta.label}</span>
+                <span className="conn-cat-hint">{meta.hint}</span>
+                {items.length > 0 && <span className="conn-cat-count">{items.length}</span>}
+              </div>
+              <div className="conn-grid">
+                {items.map(renderCard)}
+                {canEdit && (
+                  <div
+                    className="add-conn"
+                    onClick={() => {
+                      setAddType(null)
+                      setAddCategory(cat)
+                      setShowForm(true)
+                    }}
+                  >
+                    <Icon.plus />
+                    새 {meta.label} 연결
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {showForm && (
+        <ConnectionForm
+          initialType={addType}
+          initialCategory={addCategory}
+          onClose={() => {
+            setShowForm(false)
+            setAddType(null)
+            setAddCategory(null)
+          }}
+        />
+      )}
+      {editing && <ConnectionForm connection={editing} onClose={() => setEditing(null)} />}
+      {viewing && <UsageDialog connection={viewing} onClose={() => setViewing(null)} />}
+      {deleting && (
+        <DeleteDialog
+          connection={deleting}
+          onClose={() => setDeleting(null)}
+          onDeleted={(affected) =>
+            setTestResult(
+              affected.length > 0
+                ? {
+                    id: deleting.id,
+                    ok: false,
+                    text: `'${deleting.name}' 을(를) 삭제했습니다. 다음 파이프라인은 연결을 다시 지정해야 합니다: ${affected.join(', ')}`,
+                  }
+                : { id: deleting.id, ok: true, text: `'${deleting.name}' 을(를) 삭제했습니다.` },
+            )
+          }
+        />
+      )}
+    </div>
+  )
+
+  function renderCard(conn: Connection) {
+    const m = specFor(conn.type)
+    return (
+      <div className="conn" key={conn.id}>
+        <div className="top">
                   <div className="db" style={{ background: m.color }}>
                     {m.abbr}
                   </div>
@@ -180,50 +249,8 @@ export function Connections() {
                   </div>
                 </div>
               </div>
-            )
-          })}
-
-          {canEdit && (
-            <div className="add-conn" onClick={() => setShowForm(true)}>
-              <Icon.plus />
-              새 연결 추가
-            </div>
-          )}
-        </div>
-      </div>
-
-      {showForm && (
-        <ConnectionForm
-          initialType={addType}
-          onClose={() => {
-            setShowForm(false)
-            setAddType(null)
-          }}
-        />
-      )}
-      {editing && (
-        <ConnectionForm connection={editing} onClose={() => setEditing(null)} />
-      )}
-      {viewing && <UsageDialog connection={viewing} onClose={() => setViewing(null)} />}
-      {deleting && (
-        <DeleteDialog
-          connection={deleting}
-          onClose={() => setDeleting(null)}
-          onDeleted={(affected) =>
-            setTestResult(
-              affected.length > 0
-                ? {
-                    id: deleting.id,
-                    ok: false,
-                    text: `'${deleting.name}' 을(를) 삭제했습니다. 다음 파이프라인은 연결을 다시 지정해야 합니다: ${affected.join(', ')}`,
-                  }
-                : { id: deleting.id, ok: true, text: `'${deleting.name}' 을(를) 삭제했습니다.` },
-            )
-          }
-        />
-      )}
-    </div>
-  )
+    )
+  }
 }
 
 /** 연결 추가·편집.
@@ -237,11 +264,14 @@ export function Connections() {
 function ConnectionForm({
   connection,
   initialType,
+  initialCategory,
   onClose,
 }: {
   connection?: Connection
   /** 생성 시 타입 선택을 건너뛰고 이 타입으로 바로 연다 (AI 탭 딥링크 ?add=gemini). */
   initialType?: string | null
+  /** 생성 시 타입 선택을 이 카테고리로 좁힌다 (카테고리별 「새 연결 추가」). */
+  initialCategory?: ConnectorCategory | null
   onClose: () => void
 }) {
   const { data: types } = useConnectionTypes()
@@ -256,7 +286,10 @@ function ConnectionForm({
     connection ? initialValues(connection) : initialType ? defaultsFor(initialType) : {},
   )
 
-  const available = types ?? Object.keys(CONNECTOR_SPECS)
+  // 카테고리가 지정되면 그 카테고리의 타입만 고르게 한다.
+  const available = (types ?? Object.keys(CONNECTOR_SPECS)).filter(
+    (t) => !initialCategory || specFor(t).category === initialCategory,
+  )
 
   const choose = (next: string) => {
     setType(next)
@@ -284,7 +317,9 @@ function ConnectionForm({
           )}
           <h3>
             {type === null
-              ? '커넥터 타입 선택'
+              ? initialCategory
+                ? `${CATEGORY_META[initialCategory].label} — 타입 선택`
+                : '커넥터 타입 선택'
               : isEdit
                 ? `${connection.name} 편집`
                 : `새 ${specFor(type).label} 연결`}
