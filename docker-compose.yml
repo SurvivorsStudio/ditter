@@ -211,9 +211,38 @@ services:
     ports:
       - "${SYMMETRIC_PORT:-31415}:31415"
 
+  # --- 로컬 오픈웨이트 AI 모델. `docker compose --profile ai up -d` 로만 기동 ---
+  #
+  # AI 어시스턴트를 **상용 API 없이** 돌리는 경로다. Gemini·Bedrock 커넥터와 같은
+  # generate() 계약을 구현하므로 화면에서 연결만 바꾸면 그대로 동작한다.
+  #
+  # 오픈소스 개발자대회 운영규정 제9조·[별표 2]가 요구하는 '독립 구동 가능성'이 이것이다 —
+  # 외부 상용 API 없이도 같은 기능이 작동해야 하고, 그 경로가 실제로 동작한다는 점을
+  # 소스코드와 실행 방법으로 보여야 한다. `eai_connectors/ollama.py` 와 이 서비스가 그 짝이다.
+  #
+  # 모델은 이미지에 들어 있지 않다. 처음 한 번 내려받는다:
+  #   docker compose --profile ai exec ollama ollama pull qwen3:8b
+  # (GPU 가 있는 리눅스라면 deploy.resources 로 넘길 수 있다. 맥은 컨테이너에서 GPU 를
+  #  못 쓰므로 호스트에 ollama 를 설치하고 연결 엔드포인트를
+  #  http://host.docker.internal:11434 로 두는 편이 훨씬 빠르다.)
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ai"]
+    volumes:
+      - ollamadata:/root/.ollama   # 내려받은 가중치. 지우면 다시 pull 해야 한다
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
 volumes:
   pgdata:
   redisdata:
+  ollamadata:   # Ollama 가 내려받은 오픈웨이트 모델 가중치 (--profile ai)
   kafkadata:
   symlogs:      # SymmetricDS 노드 로그 (전송 실패 원인이 여기 남는다)
   exportsdata:  # 로컬 파일 타깃 산출물 (api·worker 공유)
