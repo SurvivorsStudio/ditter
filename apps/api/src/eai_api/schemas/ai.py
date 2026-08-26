@@ -15,7 +15,9 @@ class AiChatMessage(BaseModel):
 class AiChatRequest(BaseModel):
     ai_connection_id: str
     messages: list[AiChatMessage] = Field(min_length=1)
-    intent: Literal["sql.generate", "sql.tune"] = "sql.generate"
+    intent: Literal[
+        "sql.generate", "sql.tune", "sql.interpret", "data.chart", "data.report"
+    ] = "sql.generate"
     #: 대상 DB (스키마 문맥·방언). 없으면 일반 SQL 로 생성.
     db_connection_id: str | None = None
     #: 튜닝 대상 쿼리 (intent=sql.tune)
