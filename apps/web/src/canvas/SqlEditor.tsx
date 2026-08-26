@@ -860,7 +860,7 @@ export function SqlWorkbench({
    *  실수 방지용 장치이고, 진짜 가드는 연결의 허용 명령(서버)이다. */
   muted?: SqlStatement[]
   /** 「AI 탭에서 이어가기」 — 오류 수정 패널의 대화 승격을 페이지가 처리한다. */
-  onAiEscalate?: (payload: { sql: string; error: string; assistant: string; dbConnId?: string }) => void
+  onAiEscalate?: (payload: { sql: string; error?: string; explain?: string; assistant: string; dbConnId?: string }) => void
 }) {
   const cmRef = useRef<ReactCodeMirrorRef>(null)
   const gridRef = useRef<HTMLDivElement>(null)
@@ -2111,7 +2111,13 @@ export function SqlWorkbench({
           document.body,
         )}
       {explainResult && (
-        <ExplainModal target={explainResult} onClose={() => setExplainResult(null)} />
+        <ExplainModal
+          target={explainResult}
+          onClose={() => setExplainResult(null)}
+          dbConnId={connectionId}
+          onApply={(fixed) => onChange(fixed)}
+          onAiEscalate={onAiEscalate}
+        />
       )}
       {favSave &&
         createPortal(

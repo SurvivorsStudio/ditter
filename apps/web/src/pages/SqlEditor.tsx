@@ -380,7 +380,7 @@ function SessionEditor({
   /** 이 연결에서 사용자가 잠시 꺼 둔 명령 (툴바 태그 클릭). */
   muted: SqlStatement[]
   onToggleMuted: (connId: string, s: SqlStatement) => void
-  onAiEscalate: (payload: { sql: string; error: string; assistant: string; dbConnId?: string }) => void
+  onAiEscalate: (payload: { sql: string; error?: string; explain?: string; assistant: string; dbConnId?: string }) => void
 }) {
   const duck = isDuckSession(session)
   // 파이썬 코드 팝업 — 세션마다 따로 연다 (탭이 여럿이면 각자 자기 쿼리를 보여야 한다)
@@ -613,7 +613,7 @@ function DockView(props: {
   onChangeConn: (sid: number, connId: string) => void
   bindInsert: (sid: number, fn: (text: string) => void) => void
   onFocusSession: (sid: number) => void
-  onAiEscalate: (payload: { sql: string; error: string; assistant: string; dbConnId?: string }) => void
+  onAiEscalate: (payload: { sql: string; error?: string; explain?: string; assistant: string; dbConnId?: string }) => void
   onSaveSession: (payload: {
     sessionId: number
     mode: 'sql' | 'mongo' | 'duck'
@@ -1390,21 +1390,22 @@ export function SqlEditorPage() {
     setSaveReq(null)
   }
 
-  // 오류 수정 패널의 「AI 탭에서 이어가기」 — AI 어시스턴트 탭에 대화를 심고 앞으로 가져온다.
-  const escalateToAi = (p: { sql: string; error: string; assistant: string; dbConnId?: string }) => {
+  // 오류 수정·튜닝 패널의 「AI 탭에서 이어가기」 — AI 어시스턴트 탭에 대화를 심고 앞으로 가져온다.
+  const escalateToAi = (p: { sql: string; error?: string; explain?: string; assistant: string; dbConnId?: string }) => {
     const aiConn = connections.find((c) => specFor(c.type).category === 'ai')
-    const fixedSql = p.assistant.match(/```sql\s*\n([\s\S]*?)```/i)?.[1].trim() || null
+    const outSql = p.assistant.match(/```sql\s*\n([\s\S]*?)```/i)?.[1].trim() || null
+    // fix(오류)냐 tune(계획)이냐에 따라 첫 사용자 메시지를 다르게 짓는다.
+    const userContent = p.error
+      ? `다음 쿼리에서 오류가 났어요. 고쳐 주세요.\n\n\`\`\`sql\n${p.sql}\n\`\`\`\n\n오류:\n${p.error}`
+      : `다음 쿼리를 튜닝하고 싶어요.\n\n\`\`\`sql\n${p.sql}\n\`\`\`` +
+        (p.explain ? `\n\n실행 계획:\n${p.explain}` : '')
     const seeded: ChatState = {
       aiConnId: aiConn?.id,
       dbConnId: p.dbConnId,
-      intent: 'sql.generate',
+      intent: p.error ? 'sql.generate' : 'sql.tune',
       messages: [
-        {
-          id: chatUid(),
-          role: 'user',
-          content: `다음 쿼리에서 오류가 났어요. 고쳐 주세요.\n\n\`\`\`sql\n${p.sql}\n\`\`\`\n\n오류:\n${p.error}`,
-        },
-        { id: chatUid(), role: 'assistant', content: p.assistant, sql: fixedSql },
+        { id: chatUid(), role: 'user', content: userContent },
+        { id: chatUid(), role: 'assistant', content: p.assistant, sql: outSql },
       ],
     }
     saveChat(AI_TAB, seeded)
