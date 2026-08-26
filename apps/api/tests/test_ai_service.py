@@ -216,6 +216,23 @@ def test_chart_intent_outputs_chart_block(monkeypatch) -> None:
     assert "labels" in conn.seen["system"]  # 차트 형식 안내가 시스템 프롬프트에 있다
 
 
+def test_tune_intent_includes_explain_plan(monkeypatch) -> None:
+    # 계획 기반 튜닝 — EXPLAIN 텍스트가 시스템 프롬프트에 실려 근거로 쓰인다.
+    conn = _AiConnector(text="```sql\nSELECT ...\n```\n날짜 범위로 바꿔 인덱스를 씁니다.")
+    _patch(monkeypatch, ai_conn=_Conn("gemini"), connector=conn)
+    svc.chat(
+        None,
+        ai_connection_id="ai",
+        messages=[{"role": "user", "content": "튜닝"}],
+        intent="sql.tune",
+        sql="SELECT * FROM orders WHERE YEAR(ordered_at)=2024",
+        explain="Filter: (year(o.ordered_at) = 2024)  cost=320",
+    )  # type: ignore[arg-type]
+    assert "실행 계획" in conn.seen["system"]
+    assert "cost=320" in conn.seen["system"]  # 실제 계획을 문맥에 실었다
+    assert "CREATE INDEX" in conn.seen["system"]  # 인덱스 제안 규칙
+
+
 def test_fix_intent_includes_query_and_error(monkeypatch) -> None:
     conn = _AiConnector(text="```sql\nSELECT * FROM shop.customers\n```\n3번째 줄의 '111' 을 지웠습니다.")
     _patch(monkeypatch, ai_conn=_Conn("gemini"), connector=conn)
