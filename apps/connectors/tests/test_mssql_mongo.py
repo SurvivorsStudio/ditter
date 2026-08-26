@@ -182,7 +182,8 @@ class TestRegistry:
         from eai_connectors import supported_types
 
         assert set(supported_types()) == {
-            "mysql", "postgres", "mssql", "mongo", "sap_rfc", "s3", "local_file", "gemini", "bedrock",
+            "mysql", "postgres", "mssql", "mongo", "sap_rfc", "s3", "local_file",
+            "gemini", "bedrock", "ollama",
         }
 
     def test_build_mssql(self) -> None:

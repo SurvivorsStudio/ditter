@@ -127,6 +127,9 @@ _LOCAL_FILE_KEYS = frozenset({"root", "base_dir"})
 _GEMINI_KEYS = frozenset({"api_key", "model", "endpoint"})
 #: AWS Bedrock — 프론트 CONNECTOR_SPECS.bedrock.fields 와 키가 같아야 한다.
 _BEDROCK_KEYS = frozenset({"access_key_id", "secret_access_key", "session_token", "region", "model"})
+#: Ollama(로컬 오픈웨이트) — 프론트 CONNECTOR_SPECS.ollama.fields 와 키가 같아야 한다.
+#: 자격증명이 없다 — 자기 장비에서 도는 모델이라 키를 받을 것이 없다.
+_OLLAMA_KEYS = frozenset({"endpoint", "model", "timeout"})
 
 _ALLOWED_KEYS: dict[ConnectorType, frozenset[str]] = {
     ConnectorType.MYSQL: _SQL_KEYS,
@@ -138,6 +141,7 @@ _ALLOWED_KEYS: dict[ConnectorType, frozenset[str]] = {
     ConnectorType.LOCAL_FILE: _LOCAL_FILE_KEYS,
     ConnectorType.GEMINI: _GEMINI_KEYS,
     ConnectorType.BEDROCK: _BEDROCK_KEYS,
+    ConnectorType.OLLAMA: _OLLAMA_KEYS,
 }
 
 
@@ -195,6 +199,12 @@ def _load_bedrock() -> Factory:
     return BedrockConnector
 
 
+def _load_ollama() -> Factory:
+    from .ollama import OllamaConnector
+
+    return OllamaConnector
+
+
 register(ConnectorType.MYSQL, _load_mysql)
 register(ConnectorType.POSTGRES, _load_postgres)
 register(ConnectorType.MSSQL, _load_mssql)
@@ -204,3 +214,4 @@ register(ConnectorType.S3, _load_s3)
 register(ConnectorType.LOCAL_FILE, _load_local_file)
 register(ConnectorType.GEMINI, _load_gemini)
 register(ConnectorType.BEDROCK, _load_bedrock)
+register(ConnectorType.OLLAMA, _load_ollama)

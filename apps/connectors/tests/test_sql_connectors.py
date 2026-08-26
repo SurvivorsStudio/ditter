@@ -190,9 +190,11 @@ class TestRegistry:
     def test_supported_types(self) -> None:
         from eai_connectors import supported_types
 
-        # Phase 2 에서 mssql·mongo, Phase 3 에서 sap_rfc, 이후 AI(gemini·bedrock) 가 추가됐다
+        # Phase 2 에서 mssql·mongo, Phase 3 에서 sap_rfc,
+        # 이후 AI(gemini·bedrock·ollama — 마지막은 로컬 오픈웨이트) 가 추가됐다
         assert set(supported_types()) == {
-            "mysql", "postgres", "mssql", "mongo", "sap_rfc", "s3", "local_file", "gemini", "bedrock",
+            "mysql", "postgres", "mssql", "mongo", "sap_rfc", "s3", "local_file",
+            "gemini", "bedrock", "ollama",
         }
 
 
