@@ -785,6 +785,7 @@ function ChatBubble({
           </div>
         )}
         {after && <Markdown text={after} className="ai-text" />}
+        {msg.note && <div className="ai-note">{msg.note}</div>}
       </div>
     </div>
   )
