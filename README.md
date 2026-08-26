@@ -12,6 +12,8 @@
 - **트랜잭션 제어** — 쓰기는 **자동/수동 커밋** 토글로 다룬다. 수동이면 결과를 확인한 뒤 커밋 또는
   롤백 — 잘못 돌린 UPDATE 를 되돌릴 수 있는 유일한 자리다.
 - **데이터 파이프라인** — 웹에서 드래그앤드롭(n8n 스타일)으로 구성해 **배치·실시간(CDC)** 으로 적재한다.
+- **AI 어시스턴트** — 자연어로 SQL 생성·튜닝·오류 수정. 모델은 DB 와 똑같이 **커넥터 플러그인**이라
+  **로컬 오픈웨이트 모델(Ollama)** 로 상용 API 없이 돌아간다. Gemini·Bedrock 은 선택지 중 하나다.
 - **MCP** — 모든 기능을 MCP tool 로 노출해, UI 와 LLM/에이전트가 **같은 서비스 계층**을 재사용한다.
 
 상세 설계는 [docs/EAI_아키텍처_설계문서.pdf](docs/EAI_아키텍처_설계문서.pdf),
@@ -266,6 +268,37 @@ OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES celery -A eai_worker.celery_app:app work
 ```
 
 배포 대상인 Linux 컨테이너에서는 이 증상이 나타나지 않는다.
+
+---
+
+## AI 모델 — 상용 API 없이 돌아간다
+
+AI 어시스턴트가 쓰는 모델은 DB 와 똑같이 **커넥터 플러그인**이다. `ai_service` 는 벤더를
+전혀 모르고 `test_connection()`·`generate()` 두 가지만 부른다. 그래서 화면에서 연결만 바꾸면
+같은 기능이 다른 모델로 돈다.
+
+| 커넥터 | 구동 위치 | 자격증명 |
+|---|---|---|
+| `ollama` | **내 장비**(컨테이너 또는 호스트) | 없음 |
+| `gemini` | Google 상용 API | API Key |
+| `bedrock` | AWS 상용 API | AWS 자격증명 |
+
+**기본 경로는 `ollama` 다.** 상용 API 없이 AI 기능 전체가 동작한다.
+
+```bash
+docker compose --profile ai up -d ollama
+docker compose --profile ai exec ollama ollama pull qwen3:8b
+```
+
+그다음 「연결 관리」에서 **Ollama (로컬 모델)** 연결을 만든다 — 모델 `qwen3:8b`,
+엔드포인트는 비워 두면 `http://ollama:11434`. 연결 테스트가 모델을 아직 안 받았으면
+`ollama pull` 하라고 알려 준다(서버만 확인하고 넘어가면 나중에 생성 시점에 404 로 늦게 터진다).
+
+맥에서는 컨테이너가 GPU 를 못 쓴다. 호스트에 ollama 를 설치하고 엔드포인트를
+`http://host.docker.internal:11434` 로 두는 편이 훨씬 빠르다.
+
+> 참고 — AI 는 **부가 기능**이다. SQL 콘솔·연합 조회·파이프라인·CDC·실시간 동기화는
+> AI 연결이 하나도 없어도 전부 동작한다.
 
 ---
 
