@@ -27,6 +27,7 @@ import type { Favorite } from '../api/favoritesStore'
 import type { SqlStatement } from '../api/statements'
 import { mutedRunMessage } from '../api/statements'
 import { FavoritePickerModal } from '../components/Favorites'
+import { AiFixPanel } from '../components/AiFixPanel'
 import { AiInlinePrompt } from './AiInlinePrompt'
 
 /** 자동완성에 쓰는 테이블 정보 — 트리용 TreeTable 에 컬럼을 얹은 것. */
@@ -818,6 +819,7 @@ export function SqlWorkbench({
   onAddFavorite,
   viewToggle,
   muted = [],
+  onAiEscalate,
 }: {
   value: string
   onChange: (value: string) => void
@@ -857,6 +859,8 @@ export function SqlWorkbench({
   /** 사용자가 툴바 태그로 잠시 꺼 둔 명령 — 실행 전에 여기서 막는다.
    *  실수 방지용 장치이고, 진짜 가드는 연결의 허용 명령(서버)이다. */
   muted?: SqlStatement[]
+  /** 「AI 탭에서 이어가기」 — 오류 수정 패널의 대화 승격을 페이지가 처리한다. */
+  onAiEscalate?: (payload: { sql: string; error: string; assistant: string; dbConnId?: string }) => void
 }) {
   const cmRef = useRef<ReactCodeMirrorRef>(null)
   const gridRef = useRef<HTMLDivElement>(null)
@@ -906,6 +910,7 @@ export function SqlWorkbench({
   } | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showFix, setShowFix] = useState(false)
   const [view, setView] = useState<'table' | 'json'>('table')
   // 전체 화면 — 편집 영역을 뷰포트 전체로 키운다 (Esc 로 해제)
   const [fullscreen, setFullscreen] = useState(false)
@@ -1170,6 +1175,7 @@ export function SqlWorkbench({
     const sortDir = s?.dir ?? 'asc'
     executed.current = { mode: m, query: q, namespace: ns, sortCol, sortDir, filters }
     setError(null)
+    setShowFix(false) // 새 실행이면 이전 오류의 AI 수정 패널을 접는다
     setCancelled(false)
     if (cancelTimer.current) clearTimeout(cancelTimer.current)
     const signal = (abortRef.current = new AbortController()).signal
@@ -1740,9 +1746,36 @@ export function SqlWorkbench({
             </div>
           )}
           {error ? (
-            <div className="sql-result-error">
-              <Icon.alert />
-              <span>{error}</span>
+            <div className="sql-result-error-wrap">
+              <div className="sql-result-error">
+                <Icon.alert />
+                <span>{error}</span>
+                {mode === 'sql' && executed.current?.query && (
+                  <button
+                    className="btn sm ai-fix-btn"
+                    onClick={() => setShowFix((v) => !v)}
+                    title="수행된 쿼리와 오류를 AI 가 보고 고칩니다"
+                  >
+                    <Icon.bolt /> AI로 고치기
+                  </button>
+                )}
+              </div>
+              {showFix && executed.current?.query && (
+                <AiFixPanel
+                  sql={executed.current.query}
+                  error={error}
+                  dbConnId={connectionId}
+                  onApply={(fixed) => {
+                    onChange(fixed)
+                    setShowFix(false)
+                  }}
+                  onEscalate={(p) => {
+                    onAiEscalate?.({ ...p, dbConnId: connectionId })
+                    setShowFix(false)
+                  }}
+                  onClose={() => setShowFix(false)}
+                />
+              )}
             </div>
           ) : data && data.statement !== 'select' && data.columns.length === 0 ? (
             /* 쓰기 문장은 돌려줄 행이 없다 — 빈 그리드 대신 무엇이 얼마나 바뀌었는지 말한다.

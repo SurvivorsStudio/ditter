@@ -8,7 +8,7 @@ import {
 } from '../api/hooks'
 import { SqlWorkbench } from '../canvas/SqlEditor'
 import { AiChatPane } from '../canvas/AiChatPane'
-import { isChatConn, clearChat } from '../api/aiChatStore'
+import { isChatConn, clearChat, saveChat, chatUid, type ChatState } from '../api/aiChatStore'
 import { ConnectionNavigator } from '../components/ConnectionNavigator'
 import { SearchSelect, type SelectOption } from '../components/SearchSelect'
 import { specFor } from '../api/connectorFields'
@@ -355,6 +355,7 @@ function SessionEditor({
   onAddFavorite,
   muted,
   onToggleMuted,
+  onAiEscalate,
 }: {
   session: Session
   dbConns: Connection[]
@@ -379,6 +380,7 @@ function SessionEditor({
   /** 이 연결에서 사용자가 잠시 꺼 둔 명령 (툴바 태그 클릭). */
   muted: SqlStatement[]
   onToggleMuted: (connId: string, s: SqlStatement) => void
+  onAiEscalate: (payload: { sql: string; error: string; assistant: string; dbConnId?: string }) => void
 }) {
   const duck = isDuckSession(session)
   // 파이썬 코드 팝업 — 세션마다 따로 연다 (탭이 여럿이면 각자 자기 쿼리를 보여야 한다)
@@ -505,6 +507,7 @@ function SessionEditor({
           toolbarLeft={connSelector}
           viewToggle={viewToggle}
           muted={muted}
+          onAiEscalate={onAiEscalate}
           onSave={() =>
             onSave({
               sessionId: session.id,
@@ -537,6 +540,7 @@ function SessionEditor({
             onFocusEditor={onFocus}
             viewToggle={viewToggle}
             muted={muted}
+            onAiEscalate={onAiEscalate}
             onSave={() =>
               onSave({
                 sessionId: session.id,
@@ -609,6 +613,7 @@ function DockView(props: {
   onChangeConn: (sid: number, connId: string) => void
   bindInsert: (sid: number, fn: (text: string) => void) => void
   onFocusSession: (sid: number) => void
+  onAiEscalate: (payload: { sql: string; error: string; assistant: string; dbConnId?: string }) => void
   onSaveSession: (payload: {
     sessionId: number
     mode: 'sql' | 'mongo' | 'duck'
@@ -878,6 +883,7 @@ function DockView(props: {
               onAddFavorite={props.onAddFavorite}
               muted={props.muted[s.connId || props.dbConns[0]?.id || ''] ?? []}
               onToggleMuted={props.onToggleMuted}
+              onAiEscalate={props.onAiEscalate}
             />
           )
         })}
@@ -1384,6 +1390,29 @@ export function SqlEditorPage() {
     setSaveReq(null)
   }
 
+  // 오류 수정 패널의 「AI 탭에서 이어가기」 — AI 어시스턴트 탭에 대화를 심고 앞으로 가져온다.
+  const escalateToAi = (p: { sql: string; error: string; assistant: string; dbConnId?: string }) => {
+    const aiConn = connections.find((c) => specFor(c.type).category === 'ai')
+    const fixedSql = p.assistant.match(/```sql\s*\n([\s\S]*?)```/i)?.[1].trim() || null
+    const seeded: ChatState = {
+      aiConnId: aiConn?.id,
+      dbConnId: p.dbConnId,
+      intent: 'sql.generate',
+      messages: [
+        {
+          id: chatUid(),
+          role: 'user',
+          content: `다음 쿼리에서 오류가 났어요. 고쳐 주세요.\n\n\`\`\`sql\n${p.sql}\n\`\`\`\n\n오류:\n${p.error}`,
+        },
+        { id: chatUid(), role: 'assistant', content: p.assistant, sql: fixedSql },
+      ],
+    }
+    saveChat(AI_TAB, seeded)
+    // 이미 마운트돼 있는 AI 탭 패널이 새로 심은 대화를 다시 읽게 알린다.
+    window.dispatchEvent(new CustomEvent('eai-ai-seed', { detail: AI_TAB }))
+    revealSession(AI_TAB)
+  }
+
   // 세션 탭을 그 도크에서 활성으로 (앞으로 가져오기)
   const revealSession = (sid: number) =>
     setL((L) => {
@@ -1709,6 +1738,7 @@ export function SqlEditorPage() {
                     onChangeConn={changeConn}
                     bindInsert={(sid, fn) => insertReg.current.set(sid, fn)}
                     onFocusSession={(sid) => setLastFocused(sid)}
+                    onAiEscalate={escalateToAi}
                     onSaveSession={saveSession}
                     saved={saved}
                     onOpenSaved={openSaved}

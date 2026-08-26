@@ -81,6 +81,16 @@ export function AiChatPane({
     }
   }, [aiConns, state.aiConnId])
 
+  // 오류 수정 「AI 탭에서 이어가기」가 이 세션에 대화를 심으면 다시 읽어 온다
+  // (패널은 이미 마운트돼 있어 useState 초기값만으로는 갱신되지 않는다).
+  useEffect(() => {
+    const onSeed = (e: Event) => {
+      if ((e as CustomEvent).detail === sessionId) setState(loadChat(sessionId))
+    }
+    window.addEventListener('eai-ai-seed', onSeed)
+    return () => window.removeEventListener('eai-ai-seed', onSeed)
+  }, [sessionId])
+
   const [input, setInput] = useState('')
 
   // ── @멘션 자동완성 — 대상 DB 의 테이블·컬럼을 입력창에 꽂는다 ──
@@ -546,12 +556,15 @@ export function MiniSelect({
   onChange,
   placeholder,
   align = 'left',
+  up = true,
 }: {
   value: string
   options: SelectOption[]
   onChange: (v: string) => void
   placeholder: string
   align?: 'left' | 'right'
+  /** 메뉴를 위로 펼칠지(기본, 하단 바용) 아래로 펼칠지(상단 헤더용). */
+  up?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -565,7 +578,7 @@ export function MiniSelect({
   }, [open])
   const current = options.find((o) => o.value === value)
   return (
-    <div className={`ai-mini ${align === 'right' ? 'right' : ''}`} ref={ref}>
+    <div className={`ai-mini ${align === 'right' ? 'right' : ''} ${up ? '' : 'down'}`} ref={ref}>
       <button className="ai-mini-btn" onClick={() => setOpen((o) => !o)}>
         <span className="ai-mini-label">{current?.label ?? placeholder}</span>
         <Icon.chevron />
