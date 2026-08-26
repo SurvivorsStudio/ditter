@@ -1312,7 +1312,7 @@ UI 는 `specFor(type).category === 'ai'` 로 AI 연결을 고르므로 `CONNECTO
 
 ### Ollama 라서 다른 것 셋
 
-1. **자격증명이 없다.** `_OLLAMA_KEYS = {endpoint, model}` 뿐이라 `SECRET_KEYS` 에 걸릴 것도 없다.
+1. **자격증명이 없다.** `_OLLAMA_KEYS = {endpoint, model, timeout}` 뿐이라 `SECRET_KEYS` 에 걸릴 것도 없다.
 2. **`test_connection` 이 모델 보유까지 본다.** 서버만 확인하고 넘어가면 생성 시점에 404 로
    늦게 터지고, 그때는 "AI 가 안 된다"로만 보인다. `ollama pull <모델>` 을 알려 준다.
    태그 생략(`qwen3` ↔ `qwen3:latest`)으로는 막지 않는다.
