@@ -234,10 +234,21 @@ function PerfCompare({
   tobe: { timeMs: number | null; cost: number | null }
   analyzed?: boolean
 }) {
-  const improve = (a: number | null, b: number | null): string | null =>
-    a != null && b != null && a > 0 ? `${Math.round(((a - b) / a) * 100)}%` : null
-  const timeImp = improve(asis.timeMs, tobe.timeMs)
-  const costImp = improve(asis.cost, tobe.cost)
+  // 개선률을 부호로 갈라 셀 내용·색을 정한다.
+  // 양수(빨라짐/비용↓) → 초록 '↓ N%', 음수(느려짐/비용↑) → 앰버 '↑ N% 느려짐', 0/판정불가 → '—'.
+  const delta = (
+    a: number | null,
+    b: number | null,
+    worseLabel: string,
+  ): { text: string; cls: string } => {
+    if (a == null || b == null || a <= 0) return { text: '—', cls: '' }
+    const pct = Math.round(((a - b) / a) * 100)
+    if (pct > 0) return { text: `↓ ${pct}%`, cls: 'ai-perf-good' }
+    if (pct < 0) return { text: `↑ ${-pct}% ${worseLabel}`, cls: 'ai-perf-bad' }
+    return { text: '변화 없음', cls: '' }
+  }
+  const timeImp = delta(asis.timeMs, tobe.timeMs, '느려짐')
+  const costImp = delta(asis.cost, tobe.cost, '늘어남')
   return (
     <div className="ai-perf">
       <div className="ai-perf-title">성능 비교</div>
@@ -255,13 +266,13 @@ function PerfCompare({
             <td className="ai-perf-metric">실행 시간</td>
             <td>{asis.timeMs != null ? fmtMs(asis.timeMs) : '—'}</td>
             <td>{tobe.timeMs != null ? fmtMs(tobe.timeMs) : '—'}</td>
-            <td className={timeImp ? 'ai-perf-good' : ''}>{timeImp ? `↓ ${timeImp}` : '—'}</td>
+            <td className={timeImp.cls}>{timeImp.text}</td>
           </tr>
           <tr>
             <td className="ai-perf-metric">예상 비용</td>
             <td>{asis.cost != null ? asis.cost.toLocaleString() : '—'}</td>
             <td>{tobe.cost != null ? tobe.cost.toLocaleString() : '—'}</td>
-            <td className={costImp ? 'ai-perf-good' : ''}>{costImp ? `↓ ${costImp}` : '—'}</td>
+            <td className={costImp.cls}>{costImp.text}</td>
           </tr>
         </tbody>
       </table>
