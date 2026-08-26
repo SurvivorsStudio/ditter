@@ -72,6 +72,22 @@ def test_generate_and_extract_sql(monkeypatch) -> None:
     assert out.dialect is None
 
 
+def test_interpret_intent_forbids_sql_and_includes_query(monkeypatch) -> None:
+    # 해석 의도는 프로세 답변만 — 시스템 프롬프트가 SQL 금지를 명시하고, 실행 쿼리를 문맥에 싣는다.
+    conn = _AiConnector(text="상위 5개 공장의 태그 수입니다. plant_cd 별로 고르게 분포합니다.")
+    _patch(monkeypatch, ai_conn=_Conn("gemini"), connector=conn)
+    out = svc.chat(
+        None,
+        ai_connection_id="ai",
+        messages=[{"role": "user", "content": "결과 표: ..."}],
+        intent="sql.interpret",
+        sql="SELECT plant_cd, COUNT(*) FROM t GROUP BY plant_cd",
+    )  # type: ignore[arg-type]
+    assert out.sql is None  # 해석 답변엔 SQL 이 없다
+    assert "코드블록" in conn.seen["system"]  # SQL 금지 규칙
+    assert "SELECT plant_cd" in conn.seen["system"]  # 실행된 쿼리를 문맥에 실었다
+
+
 def test_schema_context_for_sql_db(monkeypatch) -> None:
     col = type("C", (), {"name": "id", "data_type": "int", "primary_key": True})()
     col2 = type("C", (), {"name": "name", "data_type": "text", "primary_key": False})()
@@ -176,3 +192,39 @@ def test_extract_sql_variants() -> None:
     assert _extract_sql("```sql\nSELECT 1\n```") == "SELECT 1"
     assert _extract_sql("설명\n```\nSELECT 2\n```\n끝") == "SELECT 2"
     assert _extract_sql("코드블록 없음") is None
+
+
+def test_chart_block_is_not_extracted_as_sql() -> None:
+    # ```chart 스펙을 SQL 로 착각하면 안 된다 — 그러면 '새 쿼리 탭'에 JSON 이 들어간다.
+    text = '차트입니다.\n```chart\n{"type":"bar","labels":["A"],"series":[{"data":[1]}]}\n```'
+    assert _extract_sql(text) is None
+
+
+def test_chart_intent_outputs_chart_block(monkeypatch) -> None:
+    spec = '```chart\n{"type":"bar","title":"공장별","labels":["V113"],"series":[{"name":"태그수","data":[3285]}]}\n```'
+    conn = _AiConnector(text=f"막대 차트로 표현했습니다.\n{spec}")
+    _patch(monkeypatch, ai_conn=_Conn("gemini"), connector=conn)
+    out = svc.chat(
+        None,
+        ai_connection_id="ai",
+        messages=[{"role": "user", "content": "막대 차트로"}],
+        intent="data.chart",
+        sql="SELECT plant_cd, COUNT(*) FROM t GROUP BY plant_cd",
+    )  # type: ignore[arg-type]
+    assert out.sql is None  # 차트 스펙은 sql 로 새지 않는다
+    assert "```chart" in out.content
+    assert "labels" in conn.seen["system"]  # 차트 형식 안내가 시스템 프롬프트에 있다
+
+
+def test_report_intent_forbids_code_blocks(monkeypatch) -> None:
+    conn = _AiConnector(text="## 보고서\n- 요점")
+    _patch(monkeypatch, ai_conn=_Conn("gemini"), connector=conn)
+    out = svc.chat(
+        None,
+        ai_connection_id="ai",
+        messages=[{"role": "user", "content": "보고서 써줘"}],
+        intent="data.report",
+        sql="SELECT 1",
+    )  # type: ignore[arg-type]
+    assert out.sql is None
+    assert "마크다운" in conn.seen["system"]

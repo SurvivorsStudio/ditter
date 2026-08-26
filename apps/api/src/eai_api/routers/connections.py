@@ -96,6 +96,25 @@ def create_connection(
     return _to_out(svc.create_connection(db, payload))
 
 
+@router.post("/bedrock/models")
+def bedrock_models(
+    config: Annotated[dict[str, Any], Body()],
+    _: object = Depends(require_role(Role.EDITOR)),
+) -> dict[str, list[dict[str, str]]]:
+    """저장 전 자격증명으로 Bedrock 모델 목록을 조회한다 — 폼의 모델 드롭다운용.
+
+    ``config`` 는 {access_key_id, secret_access_key, session_token?, region} 이다.
+    연결을 저장하지 않고 임시 커넥터로 list_foundation_models 만 부른다.
+    """
+    from eai_connectors import build
+    from eai_connectors.bedrock import BedrockConnector
+
+    conn = build("bedrock", config)
+    assert isinstance(conn, BedrockConnector)  # build("bedrock", ...) 는 항상 이 타입
+    with conn:
+        return {"models": conn.list_models()}
+
+
 @router.get("/{connection_id}", response_model=ConnectionOut)
 def get_connection(
     connection_id: str,

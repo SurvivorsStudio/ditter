@@ -125,6 +125,8 @@ _S3_KEYS = frozenset(
 _LOCAL_FILE_KEYS = frozenset({"root", "base_dir"})
 #: AI 모델 — 프론트 CONNECTOR_SPECS.gemini.fields 와 키가 같아야 한다 (한쪽만 늘리면 extra 로 버려짐).
 _GEMINI_KEYS = frozenset({"api_key", "model", "endpoint"})
+#: AWS Bedrock — 프론트 CONNECTOR_SPECS.bedrock.fields 와 키가 같아야 한다.
+_BEDROCK_KEYS = frozenset({"access_key_id", "secret_access_key", "session_token", "region", "model"})
 
 _ALLOWED_KEYS: dict[ConnectorType, frozenset[str]] = {
     ConnectorType.MYSQL: _SQL_KEYS,
@@ -135,6 +137,7 @@ _ALLOWED_KEYS: dict[ConnectorType, frozenset[str]] = {
     ConnectorType.S3: _S3_KEYS,
     ConnectorType.LOCAL_FILE: _LOCAL_FILE_KEYS,
     ConnectorType.GEMINI: _GEMINI_KEYS,
+    ConnectorType.BEDROCK: _BEDROCK_KEYS,
 }
 
 
@@ -186,6 +189,12 @@ def _load_gemini() -> Factory:
     return GeminiConnector
 
 
+def _load_bedrock() -> Factory:
+    from .bedrock import BedrockConnector
+
+    return BedrockConnector
+
+
 register(ConnectorType.MYSQL, _load_mysql)
 register(ConnectorType.POSTGRES, _load_postgres)
 register(ConnectorType.MSSQL, _load_mssql)
@@ -194,3 +203,4 @@ register(ConnectorType.SAP_RFC, _load_sap)
 register(ConnectorType.S3, _load_s3)
 register(ConnectorType.LOCAL_FILE, _load_local_file)
 register(ConnectorType.GEMINI, _load_gemini)
+register(ConnectorType.BEDROCK, _load_bedrock)

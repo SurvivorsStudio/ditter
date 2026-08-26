@@ -11,7 +11,9 @@ import {
   useTestConnection,
 } from '../api/hooks'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { z } from 'zod'
 import { auth } from '../api/auth'
+import { api } from '../api/client'
 import type { FieldSpec } from '../api/connectorFields'
 import {
   CATEGORY_META,
@@ -296,6 +298,7 @@ function ConnectionForm({
           <TypePicker types={available} onPick={choose} />
         ) : (
           <ConnectorSettings
+            key={type}
             type={type}
             isEdit={isEdit}
             connectionId={connection?.id}
@@ -358,13 +361,21 @@ function FieldInput({
   isEdit,
   placeholder,
   onChange,
+  remote,
 }: {
   field: FieldSpec
   value: string | boolean | undefined
   isEdit: boolean
   placeholder?: string
   onChange: (value: string | boolean) => void
+  remote?: {
+    options: { id: string; name: string }[] | null
+    loading: boolean
+    error: string | null
+    onLoad: () => void
+  }
 }) {
+  const [manual, setManual] = useState(false)
   return (
     <div className="field">
       {field.kind === 'statements' ? (
@@ -381,6 +392,66 @@ function FieldInput({
           />
           {field.label}
         </label>
+      ) : field.kind === 'remote-select' ? (
+        <>
+          <label>
+            {field.label}
+            {field.required && <span style={{ color: 'var(--red)' }}> *</span>}
+          </label>
+          {remote?.options && remote.options.length > 0 && !manual ? (
+            <div className="remote-select-row">
+              <select value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
+                <option value="" disabled>
+                  모델을 선택하세요
+                </option>
+                {value && !remote.options.some((o) => o.id === value) && (
+                  <option value={String(value)}>{String(value)} (현재)</option>
+                )}
+                {remote.options.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name} — {o.id}
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="btn sm" onClick={() => setManual(true)}>
+                직접 입력
+              </button>
+              <button
+                type="button"
+                className="btn sm"
+                onClick={() => remote.onLoad()}
+                disabled={remote.loading}
+              >
+                {remote.loading ? '…' : '새로고침'}
+              </button>
+            </div>
+          ) : (
+            <div className="remote-select-row">
+              <input
+                type="text"
+                placeholder={placeholder}
+                value={String(value ?? '')}
+                onChange={(e) => onChange(e.target.value)}
+              />
+              <button
+                type="button"
+                className="btn sm primary"
+                onClick={() => {
+                  setManual(false)
+                  remote?.onLoad()
+                }}
+                disabled={remote?.loading}
+              >
+                {remote?.loading ? '불러오는 중…' : '모델 불러오기'}
+              </button>
+            </div>
+          )}
+          {remote?.error && (
+            <div className="hint" style={{ color: 'var(--red)' }}>
+              {remote.error}
+            </div>
+          )}
+        </>
       ) : (
         <>
           <label>
@@ -562,6 +633,57 @@ function ConnectorSettings({
   const { data: defaults } = useConnectorDefaults()
   const set = (key: string, value: string | boolean) => setValues((v) => ({ ...v, [key]: value }))
 
+  // Bedrock 모델 드롭다운 — 저장 전 자격증명으로 서버에서 목록을 불러온다.
+  // (ConnectorSettings 는 type 마다 remount 되므로 타입을 바꾸면 자연히 초기화된다.)
+  const [bedrockModels, setBedrockModels] = useState<{ id: string; name: string }[] | null>(null)
+  const [modelsLoading, setModelsLoading] = useState(false)
+  const [modelsError, setModelsError] = useState<string | null>(null)
+
+  const loadBedrockModels = async () => {
+    const akid = String(values.access_key_id ?? '').trim()
+    const secret = String(values.secret_access_key ?? '').trim()
+    const region = String(values.region ?? '').trim()
+    const token = String(values.session_token ?? '').trim()
+    if (!akid || !secret || !region) {
+      setModelsError('먼저 리전 · Access Key ID · Secret Access Key 를 입력하세요.')
+      return
+    }
+    setModelsError(null)
+    setModelsLoading(true)
+    try {
+      const cfg: Record<string, string> = {
+        access_key_id: akid,
+        secret_access_key: secret,
+        region,
+      }
+      if (token) cfg.session_token = token
+      const data = await api.parsed(
+        z.object({ models: z.array(z.object({ id: z.string(), name: z.string() })) }),
+        '/connections/bedrock/models',
+        { method: 'POST', body: cfg },
+      )
+      setBedrockModels(data.models)
+      if (data.models.length === 0) {
+        setModelsError('사용 가능한 모델이 없습니다 — 리전·모델 액세스 권한을 확인하세요.')
+      }
+    } catch (e) {
+      setBedrockModels(null)
+      setModelsError(e instanceof Error ? e.message : '모델 목록을 불러오지 못했습니다.')
+    } finally {
+      setModelsLoading(false)
+    }
+  }
+
+  const remoteFor = (f: FieldSpec) =>
+    f.kind === 'remote-select'
+      ? {
+          options: bedrockModels,
+          loading: modelsLoading,
+          error: modelsError,
+          onLoad: loadBedrockModels,
+        }
+      : undefined
+
   // 필드를 '섹션 앞 기본 필드' + '접히는 섹션들'로 나눈다
   const { leading, sections } = groupFields(spec.fields)
   const [open, setOpen] = useState<Record<string, boolean>>(() =>
@@ -679,6 +801,7 @@ function ConnectorSettings({
             isEdit={isEdit}
             placeholder={placeholderFor(f)}
             onChange={(v) => set(f.key, v)}
+            remote={remoteFor(f)}
           />
         ))}
 
@@ -702,6 +825,7 @@ function ConnectorSettings({
                   isEdit={isEdit}
                   placeholder={placeholderFor(f)}
                   onChange={(v) => set(f.key, v)}
+                  remote={remoteFor(f)}
                 />
               ))}
           </div>

@@ -24,6 +24,8 @@ export type ChatMessage = {
   note?: string | null
   /** 오류 말풍선 표시용 */
   error?: boolean
+  /** 해석·보고서처럼 **산문 답변**이면 true — 번호 목록을 클릭 옵션으로 오인하지 않게 한다. */
+  plain?: boolean
 }
 
 export type ChatIntent = 'sql.generate' | 'sql.tune'
