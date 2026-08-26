@@ -6,6 +6,7 @@ set -euo pipefail
 
 APP_PW="${DEMO_APP_PASSWORD:?}"
 SYM_PW="${DEMO_SYM_PASSWORD:?}"
+DBZ_PW="${DEMO_DEBEZIUM_PASSWORD:?}"
 psql_super() { psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" "$@"; }
 
 psql_super --dbname crm <<SQL
@@ -15,7 +16,9 @@ CREATE ROLE eai_ddl LOGIN PASSWORD '${APP_PW}';
 -- SymmetricDS 타깃 노드. SYM_* 45개 테이블을 dw 에 직접 만든다.
 CREATE ROLE sym     LOGIN PASSWORD '${SYM_PW}';
 -- Debezium 이 PostgreSQL 을 소스로도 쓸 수 있게 (기본 시나리오는 MySQL 소스다).
-CREATE ROLE debezium LOGIN REPLICATION PASSWORD '${APP_PW}';
+-- 비밀번호는 MySQL 쪽 debezium 계정과 같은 DEMO_DEBEZIUM_PASSWORD 다 — 문서가 두 DB 를
+-- 한 계정으로 안내하므로 여기서 갈라지면 한쪽만 조용히 로그인이 막힌다.
+CREATE ROLE debezium LOGIN REPLICATION PASSWORD '${DBZ_PW}';
 CREATE DATABASE dw OWNER eai_ddl;
 SQL
 

@@ -112,6 +112,10 @@ services:
       POSTGRES_DB: crm
       DEMO_APP_PASSWORD: ${DEMO_APP_PASSWORD:-DitterDemo!2026}
       DEMO_SYM_PASSWORD: ${DEMO_SYM_PASSWORD:-DitterDemo!2026}
+      # mysql-shop 과 **같은 값**을 넘긴다. 여기만 빼 두면 PostgreSQL 의 debezium 롤이
+      # 앱 비밀번호로 만들어져, .env 에서 CDC 비밀번호만 바꿨을 때 MySQL 은 되는데
+      # PostgreSQL 만 인증 실패하는 비대칭 실패가 난다.
+      DEMO_DEBEZIUM_PASSWORD: ${DEMO_DEBEZIUM_PASSWORD:-DitterDemo!2026}
       TZ: Asia/Seoul
     volumes:
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
