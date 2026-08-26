@@ -2,6 +2,7 @@
 name = "eai-api"
 version = "0.1.0"
 description = "EAI 플랫폼 백엔드 (FastMCP + FastAPI)"
+license = "Apache-2.0"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.5,<0.116",
