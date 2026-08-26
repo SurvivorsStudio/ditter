@@ -1,0 +1,13 @@
+# Debezium CDC 전제. 셋 중 하나라도 빠지면 커넥터가 등록은 되는데 변경이 오지 않는다.
+[mysqld]
+server-id                = 184054
+log_bin                  = /var/lib/mysql/mysql-bin
+binlog_format            = ROW
+binlog_row_image         = FULL
+binlog_expire_logs_seconds = 604800   # 7일
+gtid_mode                = ON
+enforce_gtid_consistency = ON
+
+# 시연 중 대량 INSERT 가 오래 걸리지 않게. 데모 전용이라 내구성보다 속도를 택한다.
+innodb_flush_log_at_trx_commit = 2
+sync_binlog                    = 0
