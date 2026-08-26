@@ -216,6 +216,22 @@ def test_chart_intent_outputs_chart_block(monkeypatch) -> None:
     assert "labels" in conn.seen["system"]  # 차트 형식 안내가 시스템 프롬프트에 있다
 
 
+def test_fix_intent_includes_query_and_error(monkeypatch) -> None:
+    conn = _AiConnector(text="```sql\nSELECT * FROM shop.customers\n```\n3번째 줄의 '111' 을 지웠습니다.")
+    _patch(monkeypatch, ai_conn=_Conn("gemini"), connector=conn)
+    out = svc.chat(
+        None,
+        ai_connection_id="ai",
+        messages=[{"role": "user", "content": "고쳐줘"}],
+        intent="sql.fix",
+        sql="SELECT *\nfrom shop.customers\n111",
+        error="pymysql ProgrammingError (1064) near '111'",
+    )  # type: ignore[arg-type]
+    assert out.sql == "SELECT * FROM shop.customers"  # 고친 쿼리를 추출한다
+    assert "111" in conn.seen["system"]  # 실패한 쿼리를 문맥에 실었다
+    assert "1064" in conn.seen["system"]  # 오류 메시지도 실었다
+
+
 def test_report_intent_forbids_code_blocks(monkeypatch) -> None:
     conn = _AiConnector(text="## 보고서\n- 요점")
     _patch(monkeypatch, ai_conn=_Conn("gemini"), connector=conn)
