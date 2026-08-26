@@ -356,6 +356,43 @@ export const CONNECTOR_SPECS: Record<string, ConnectorSpec> = {
     ],
   },
 
+  ollama: {
+    label: 'Ollama (로컬 모델)',
+    category: 'ai',
+    abbr: 'AI',
+    color: '#0f766e',
+    description: '내 장비에서 도는 오픈웨이트 모델',
+    role: 'ai',
+    summary: (c) => String(c.model || 'ollama'),
+    // 필드 키는 백엔드 registry.py 의 _OLLAMA_KEYS 와 반드시 같아야 한다.
+    // 자격증명 필드가 없다 — 자기 장비에서 도는 모델이라 받을 키가 없다.
+    fields: [
+      {
+        key: 'model',
+        label: '모델',
+        kind: 'text',
+        required: true,
+        default: 'qwen3:8b',
+        placeholder: 'qwen3:8b · gemma3:4b · llama3.1:8b …',
+        hint: '먼저 `ollama pull <모델>` 로 내려받아야 합니다. 없으면 연결 테스트가 알려 줍니다.',
+      },
+      {
+        key: 'endpoint',
+        label: '엔드포인트 (선택)',
+        kind: 'text',
+        placeholder: 'http://ollama:11434',
+        hint: 'compose 로 띄운 ollama 는 기본값 그대로. 호스트에서 직접 돌리면 http://host.docker.internal:11434.',
+      },
+      {
+        key: 'timeout',
+        label: '응답 대기 (초)',
+        kind: 'number',
+        default: 180,
+        hint: '로컬 추론은 상용 API 보다 느립니다. GPU 없이 큰 모델을 쓰면 늘리세요.',
+      },
+    ],
+  },
+
   bedrock: {
     label: 'AWS Bedrock',
     category: 'ai',
