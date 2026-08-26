@@ -3211,6 +3211,11 @@ body.resizing-col .config-resizer::after {
 .obj-sec-hd h4 {
   margin: 0;
 }
+.obj-sec-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .obj-table-wrap {
   overflow-x: auto;
   border: 1px solid var(--line2);
@@ -7776,6 +7781,48 @@ tbody tr:hover {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 10px;
+}
+.ai-perf {
+  margin-top: 12px;
+  border: 1px solid #e5e0f5;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.ai-perf-title {
+  padding: 6px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #6d28d9;
+  background: #f5f1fe;
+  border-bottom: 1px solid #ece6fb;
+}
+.ai-perf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.ai-perf-table th,
+.ai-perf-table td {
+  padding: 6px 10px;
+  text-align: right;
+  border-bottom: 1px solid #f0edf9;
+}
+.ai-perf-table thead th {
+  font-size: 11px;
+  font-weight: 700;
+  color: #8b8f9c;
+  background: #fbfaff;
+}
+.ai-perf-table tbody tr:last-child td { border-bottom: 0; }
+.ai-perf-metric { text-align: left !important; font-weight: 600; color: var(--ink); }
+.ai-perf-good { color: #16a34a; font-weight: 700; }
+.ai-perf-bad { color: #b45309; font-weight: 700; }
+.ai-perf-note {
+  padding: 7px 10px;
+  font-size: 11.5px;
+  color: #8b6d00;
+  background: #fffbeb;
+  border-top: 1px solid #f0edf9;
 }
 
 /* ── 셀별 AI 챗 (노트북) ── 셀 아래에 붙는 작은 대화창 */

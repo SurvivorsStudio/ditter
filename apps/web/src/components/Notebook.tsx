@@ -277,7 +277,7 @@ function SqlCell({
   onAiModelChange: (v: string) => void
   aiDbConnId?: string
   onInsertAiSqlBelow: (src: string) => void
-  onAiEscalate?: (payload: { sql: string; error: string; assistant: string; dbConnId?: string }) => void
+  onAiEscalate?: (payload: { sql: string; error?: string; explain?: string; assistant: string; dbConnId?: string }) => void
   selected: boolean
   editing: boolean
   register: (id: string, api: CellApi | null) => void
@@ -1095,7 +1095,7 @@ export function Notebook({
   /** ⌘/Ctrl+S·저장 버튼 — 셀을 하나의 SQL 로 합쳐 저장한다(저장됨 탭). */
   onSave?: () => void
   /** 셀 오류 수정 패널의 「AI 탭에서 이어가기」 — 페이지가 처리한다. */
-  onAiEscalate?: (payload: { sql: string; error: string; assistant: string; dbConnId?: string }) => void
+  onAiEscalate?: (payload: { sql: string; error?: string; explain?: string; assistant: string; dbConnId?: string }) => void
 }) {
   const [selId, setSelId] = useState<string | null>(cells[0]?.id ?? null)
   const [editing, setEditing] = useState(false)

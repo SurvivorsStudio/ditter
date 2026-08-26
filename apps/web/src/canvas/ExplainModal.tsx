@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from '../components/icons'
+import { AiFixPanel } from '../components/AiFixPanel'
 
 export type ExplainTarget = { plan: string; analyzed: boolean; sql: string }
 
@@ -20,9 +21,30 @@ function summarize(plan: string, analyzed: boolean): { label: string; value: str
   return out
 }
 
-/** 쿼리 실행 계획 모달 — 텍스트 계획 + 요약. */
-export function ExplainModal({ target, onClose }: { target: ExplainTarget; onClose: () => void }) {
+/** 쿼리 실행 계획 모달 — 텍스트 계획 + 요약 + (선택) 계획 기반 AI 튜닝. */
+export function ExplainModal({
+  target,
+  onClose,
+  dbConnId,
+  onApply,
+  onAiEscalate,
+}: {
+  target: ExplainTarget
+  onClose: () => void
+  /** 스키마 문맥용 대상 DB — 있으면 「AI 튜닝」을 띄운다. */
+  dbConnId?: string
+  /** 튜닝된 쿼리를 편집기에 적용. */
+  onApply?: (sql: string) => void
+  onAiEscalate?: (payload: {
+    sql: string
+    error?: string
+    explain?: string
+    assistant: string
+    dbConnId?: string
+  }) => void
+}) {
   const [copied, setCopied] = useState(false)
+  const [tuning, setTuning] = useState(false)
   const summary = useMemo(() => summarize(target.plan, target.analyzed), [target])
 
   const copyPlan = async () => {
@@ -60,11 +82,40 @@ export function ExplainModal({ target, onClose }: { target: ExplainTarget; onClo
           )}
           <div className="obj-sec-hd">
             <h4>실행 계획</h4>
-            <button className="btn sm" onClick={copyPlan}>
-              <Icon.copy />
-              {copied ? '복사됨' : '복사'}
-            </button>
+            <div className="obj-sec-actions">
+              {onApply && (
+                <button
+                  className={`btn sm ${tuning ? '' : 'primary'}`}
+                  onClick={() => setTuning((v) => !v)}
+                  title="이 계획을 근거로 AI 가 쿼리를 튜닝합니다"
+                >
+                  <Icon.bolt /> {tuning ? 'AI 튜닝 닫기' : 'AI 튜닝'}
+                </button>
+              )}
+              <button className="btn sm" onClick={copyPlan}>
+                <Icon.copy />
+                {copied ? '복사됨' : '복사'}
+              </button>
+            </div>
           </div>
+          {tuning && onApply && (
+            <AiFixPanel
+              mode="tune"
+              sql={target.sql}
+              explain={target.plan}
+              explainAnalyzed={target.analyzed}
+              dbConnId={dbConnId}
+              onApply={(sql) => {
+                onApply(sql)
+                onClose()
+              }}
+              onEscalate={(p) => {
+                onAiEscalate?.({ ...p, dbConnId })
+                onClose()
+              }}
+              onClose={() => setTuning(false)}
+            />
+          )}
           <pre className="explain-plan">{target.plan}</pre>
           {!target.analyzed && (
             <div className="explain-note">

@@ -73,7 +73,7 @@ _BASE_RULES = (
 )
 
 
-def _prompt_generate(dialect: str | None, schema: str | None, sql: str | None, error: str | None) -> str:
+def _prompt_generate(dialect: str | None, schema: str | None, sql: str | None, error: str | None, explain: str | None = None) -> str:
     d = dialect or "표준 SQL"
     parts = [f"너는 {d} 전용 SQL 어시스턴트다. 사용자의 요청을 SQL 로 만들어 준다.", _BASE_RULES]
     if schema:
@@ -81,7 +81,13 @@ def _prompt_generate(dialect: str | None, schema: str | None, sql: str | None, e
     return "\n".join(parts)
 
 
-def _prompt_tune(dialect: str | None, schema: str | None, sql: str | None, error: str | None) -> str:
+def _prompt_tune(
+    dialect: str | None,
+    schema: str | None,
+    sql: str | None,
+    error: str | None,
+    explain: str | None = None,
+) -> str:
     d = dialect or "표준 SQL"
     parts = [
         f"너는 {d} 성능 튜닝 전문가다. 주어진 쿼리를 **결과가 동등함을 보장하며** 개선한다.",
@@ -89,6 +95,16 @@ def _prompt_tune(dialect: str | None, schema: str | None, sql: str | None, error
         "- 인덱스·조인 순서·불필요한 스캔을 줄이는 방향으로 고쳐라.\n"
         "- 무엇을 왜 바꿨는지, 어떤 인덱스가 있으면 더 좋은지 짚어라.",
     ]
+    if explain:
+        parts.append(
+            "\n아래는 이 쿼리의 **실제 실행 계획**이다. 추측하지 말고 계획에서 드러난 병목을 "
+            "근거로 튜닝하라:\n"
+            "- 풀스캔(Seq Scan·Table scan)·인덱스 미사용(컬럼을 함수로 감싸 sargable 하지 않음, "
+            "  암시적 형변환, 선두 와일드카드 LIKE)·과도한 정렬/임시테이블을 우선 짚어라.\n"
+            "- 인덱스가 있으면 좋을 자리는 `CREATE INDEX` 문으로 제안하되 **실행하지 말고 제안만** 한다.\n"
+            "- 계획이 이미 최적이면 억지로 바꾸지 말고 그렇다고 말하라.\n"
+            f"\n실행 계획:\n{explain}"
+        )
     if schema:
         parts.append(f"\n대상 스키마:\n{schema}")
     if sql:
@@ -98,7 +114,7 @@ def _prompt_tune(dialect: str | None, schema: str | None, sql: str | None, error
     return "\n".join(parts)
 
 
-def _prompt_interpret(dialect: str | None, schema: str | None, sql: str | None, error: str | None) -> str:
+def _prompt_interpret(dialect: str | None, schema: str | None, sql: str | None, error: str | None, explain: str | None = None) -> str:
     """실행 결과 해석 — SQL 을 새로 만들지 않고, 사용자가 받은 결과를 한국어로 풀어 준다."""
     d = dialect or "SQL"
     parts = [
@@ -120,7 +136,7 @@ def _prompt_interpret(dialect: str | None, schema: str | None, sql: str | None, 
     return "\n".join(parts)
 
 
-def _prompt_chart(dialect: str | None, schema: str | None, sql: str | None, error: str | None) -> str:
+def _prompt_chart(dialect: str | None, schema: str | None, sql: str | None, error: str | None, explain: str | None = None) -> str:
     """차트 생성 — 실행 결과를 ```chart JSON 블록 하나로 시각화한다."""
     parts = [
         "너는 데이터 시각화 어시스턴트다. 사용자가 실행한 SQL 과 결과 표를 받아, 그 결과를 "
@@ -141,7 +157,7 @@ def _prompt_chart(dialect: str | None, schema: str | None, sql: str | None, erro
     return "\n".join(parts)
 
 
-def _prompt_report(dialect: str | None, schema: str | None, sql: str | None, error: str | None) -> str:
+def _prompt_report(dialect: str | None, schema: str | None, sql: str | None, error: str | None, explain: str | None = None) -> str:
     """보고서 작성 — 실행 결과를 구조화된 한국어 마크다운 보고서로 정리한다."""
     parts = [
         "너는 데이터 분석 보고서 작성자다. 사용자가 실행한 SQL 과 결과 표를 받아, 읽기 좋은 "
@@ -161,7 +177,7 @@ def _prompt_report(dialect: str | None, schema: str | None, sql: str | None, err
     return "\n".join(parts)
 
 
-def _prompt_fix(dialect: str | None, schema: str | None, sql: str | None, error: str | None) -> str:
+def _prompt_fix(dialect: str | None, schema: str | None, sql: str | None, error: str | None, explain: str | None = None) -> str:
     """오류 수정 — 실행에 실패한 쿼리와 오류 메시지를 보고, 의미는 유지한 채 오류만 고친다."""
     d = dialect or "표준 SQL"
     parts = [
@@ -185,7 +201,7 @@ def _prompt_fix(dialect: str | None, schema: str | None, sql: str | None, error:
 
 
 #: intent → 시스템 프롬프트 빌더. 새 의도는 여기 한 줄이면 된다.
-_INTENTS: dict[str, Callable[[str | None, str | None, str | None, str | None], str]] = {
+_INTENTS: dict[str, Callable[[str | None, str | None, str | None, str | None, str | None], str]] = {
     "sql.generate": _prompt_generate,
     "sql.tune": _prompt_tune,
     "sql.interpret": _prompt_interpret,
@@ -211,6 +227,7 @@ def chat(
     db_connection_id: str | None = None,
     sql: str | None = None,
     error: str | None = None,
+    explain: str | None = None,
     include_samples: bool = False,
 ) -> AiChatResult:
     if intent not in _INTENTS:
@@ -231,7 +248,7 @@ def chat(
     dialect, schema_text, schema_note = _schema_context(
         session, db_connection_id, convo_text, include_samples=include_samples
     )
-    system = _INTENTS[intent](dialect, schema_text, sql, error)
+    system = _INTENTS[intent](dialect, schema_text, sql, error, explain)
 
     result = connector.generate(list(messages), system=system)  # ConnectorError 는 전역 핸들러가 처리
     return AiChatResult(
