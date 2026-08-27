@@ -31,7 +31,9 @@ export type ChatMessage = {
 export type ChatIntent = 'sql.generate' | 'sql.tune'
 
 export type ChatState = {
-  aiConnId?: string
+  /** AI 연결은 여기 없다 — 툴바의 **AI 기본 연결**(`api/aiDefault`)이 정한다.
+   *  대화마다 따로 기억하면 예전 대화가 옛 연결에 고정되어 기본값이 겉돈다.
+   *  (예전 저장값에 남아 있는 `aiConnId` 키는 그냥 무시된다.) */
   dbConnId?: string
   intent: ChatIntent
   /** 언급된 테이블의 예시 행을 프롬프트에 넣어 값→컬럼 매핑 정확도를 높인다.

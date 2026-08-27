@@ -28,6 +28,7 @@ import type { SqlStatement } from '../api/statements'
 import { mutedRunMessage } from '../api/statements'
 import { FavoritePickerModal } from '../components/Favorites'
 import { AiFixPanel } from '../components/AiFixPanel'
+import { AiDefaultSelect } from '../components/AiDefaultSelect'
 import { AiInlinePrompt } from './AiInlinePrompt'
 
 /** 자동완성에 쓰는 테이블 정보 — 트리용 TreeTable 에 컬럼을 얹은 것. */
@@ -1648,6 +1649,9 @@ export function SqlWorkbench({
                 </button>
               </div>
             )}
+            {/* AI 기본 연결 — 이 탭의 AI(어시스턴트·수정·튜닝·노트북 셀)가 무엇으로 답할지.
+                실행 계획 옆에 두는 것은, 계획을 보고 「AI 튜닝」으로 넘어가는 자리가 여기라서다. */}
+            <AiDefaultSelect />
             {viewToggle}
             <button
               className="sql-fs-btn"

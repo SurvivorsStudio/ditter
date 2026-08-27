@@ -13,6 +13,7 @@ import { Icon } from '../components/icons'
 import { Markdown } from '../components/Markdown'
 import { AiChart, parseChart } from '../components/AiChart'
 import { useConnections, useAiChat, useConnectionSchema, useRunQuery } from '../api/hooks'
+import { setAiDefault, useAiConn } from '../api/aiDefault'
 import { specFor } from '../api/connectorFields'
 import {
   type ChatIntent,
@@ -74,12 +75,10 @@ export function AiChatPane({
     saveChat(sessionId, state)
   }, [sessionId, state])
 
-  // AI 모델 기본값 — 아직 안 골랐고 연결이 하나라도 있으면 첫 번째로.
-  useEffect(() => {
-    if (!state.aiConnId && aiConns.length > 0) {
-      setState((s) => ({ ...s, aiConnId: aiConns[0].id }))
-    }
-  }, [aiConns, state.aiConnId])
+  // 이 챗이 쓸 AI 연결 = 툴바의 **AI 기본 연결**. 대화마다 따로 기억하지 않는다 —
+  // 그러면 예전 대화가 옛 연결에 고정되어, 기본을 바꿔도 "왜 안 따라오지"가 된다.
+  // 아래 드롭다운은 같은 값을 여기서도 바꿀 수 있게 한 것이고 곧 기본값을 바꾼다.
+  const aiConnId = useAiConn(aiConns)
 
   // 오류 수정 「AI 탭에서 이어가기」가 이 세션에 대화를 심으면 다시 읽어 온다
   // (패널은 이미 마운트돼 있어 useState 초기값만으로는 갱신되지 않는다).
@@ -226,7 +225,7 @@ export function AiChatPane({
 
   const sendText = (raw: string) => {
     const text = raw.trim()
-    if (!text || chat.isPending || !state.aiConnId) return
+    if (!text || chat.isPending || !aiConnId) return
     const userMsg: ChatMessage = { id: chatUid(), role: 'user', content: text }
     const history = [...state.messages, userMsg]
     setState((s) => ({ ...s, messages: history }))
@@ -234,7 +233,7 @@ export function AiChatPane({
 
     chat.mutate(
       {
-        ai_connection_id: state.aiConnId,
+        ai_connection_id: aiConnId,
         messages: history.map((m) => ({ role: m.role, content: m.content })),
         intent: state.intent,
         db_connection_id: state.dbConnId || null,
@@ -279,9 +278,9 @@ export function AiChatPane({
     'data.report': '이 결과로 분석 보고서를 작성해 주세요.',
   }
   const runAndAsk = (sql: string, intent: 'sql.interpret' | 'data.chart' | 'data.report') => {
-    if (!state.dbConnId || !state.aiConnId || chat.isPending || runQuery.isPending) return
+    if (!state.dbConnId || !aiConnId || chat.isPending || runQuery.isPending) return
     const dbId = state.dbConnId
-    const aiId = state.aiConnId
+    const aiId = aiConnId
     runQuery.mutate(
       { id: dbId, query: sql, limit: 50 },
       {
@@ -527,9 +526,9 @@ export function AiChatPane({
               </button>
             )}
             <MiniSelect
-              value={state.aiConnId ?? ''}
+              value={aiConnId}
               options={aiOptions}
-              onChange={(v) => setState((s) => ({ ...s, aiConnId: v }))}
+              onChange={setAiDefault}
               placeholder="AI 모델"
               align="right"
             />

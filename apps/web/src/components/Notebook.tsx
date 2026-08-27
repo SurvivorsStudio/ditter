@@ -10,6 +10,7 @@ import { FavoritePickerModal } from './Favorites'
 import { ChartView, defaultChartConfig, type ChartConfig } from './ChartView'
 import { CellAiChat } from './NotebookAi'
 import { AiFixPanel } from './AiFixPanel'
+import { useAiConn } from '../api/aiDefault'
 import { specFor } from '../api/connectorFields'
 import type { SelectOption } from './SearchSelect'
 import type { Favorite } from '../api/favoritesStore'
@@ -1107,11 +1108,11 @@ export function Notebook({
     () => allConns.filter((c) => specFor(c.type).category === 'ai'),
     [allConns],
   )
-  const [aiConnId, setAiConnId] = useState<string>('')
-  // AI 모델 기본값 — 아직 안 골랐고 연결이 하나라도 있으면 첫 번째로.
-  useEffect(() => {
-    if (!aiConnId && aiConns.length > 0) setAiConnId(aiConns[0].id)
-  }, [aiConns, aiConnId])
+  // 시작값은 툴바의 **AI 기본 연결**. 블럭 헤더에서 바꾼 것은 이 노트북에만 쓴다.
+  const defaultAiConn = useAiConn(aiConns)
+  const [picked, setPicked] = useState<string>('')
+  const aiConnId = picked || defaultAiConn
+  const setAiConnId = setPicked
   const aiOptions: SelectOption[] = aiConns.map((c) => ({
     value: c.id,
     label: c.name,

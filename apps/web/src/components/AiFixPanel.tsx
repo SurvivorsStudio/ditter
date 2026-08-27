@@ -4,14 +4,21 @@
  *  tune: 쿼리와 실제 EXPLAIN 계획을 sql.tune 으로 보내 "병목 진단 + 튜닝된 SQL(+인덱스 제안)".
  *  결과 SQL 은 바로 실행하지 않고 **편집기에 적용**(되돌리기 가능)하거나, 부족하면
  *  **AI 탭에서 이어가기**로 대화로 승격한다. 응답은 공용 Markdown 렌더러로 그린다.
+ *
+ *  머리의 **모델사 칩**은 「연결 관리」에 등록된 AI 연결이다. 누르면 그 모델사로 다시 돌고,
+ *  눌려 있는 칩이 지금 화면의 답을 낸 모델사다 — 드롭다운과 달리 "무엇으로 돌았나"가
+ *  펼치지 않아도 보이고, 다른 모델사로 바꿔 보는 것이 한 번의 클릭이다.
+ *
+ *  처음 눌리는 칩은 툴바의 **AI 기본 연결**(`api/aiDefault`)이다. 칩을 눌러 바꾼 것은
+ *  이 패널에서만 쓰고 기본값을 건드리지 않는다 — 비교하려고 한 번 누른 것이 기본이 되면
+ *  다음에 여는 패널이 조용히 다른 모델사로 답한다.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from './icons'
 import { Markdown } from './Markdown'
-import { MiniSelect } from '../canvas/AiChatPane'
 import { useAiChat, useConnections, useExplain } from '../api/hooks'
+import { useAiConn } from '../api/aiDefault'
 import { specFor } from '../api/connectorFields'
-import type { SelectOption } from './SearchSelect'
 
 /** EXPLAIN [ANALYZE] 텍스트에서 총 실행 시간(ms)과 예상 비용을 뽑는다 (MySQL·PostgreSQL). */
 function parsePerf(plan: string): { timeMs: number | null; cost: number | null } {
@@ -72,15 +79,10 @@ export function AiFixPanel({
   const cfg = MODE_CFG[mode]
   const { data: conns = [] } = useConnections()
   const aiConns = useMemo(() => conns.filter((c) => specFor(c.type).category === 'ai'), [conns])
-  const [aiConnId, setAiConnId] = useState('')
-  useEffect(() => {
-    if (!aiConnId && aiConns.length > 0) setAiConnId(aiConns[0].id)
-  }, [aiConns, aiConnId])
-  const aiOptions: SelectOption[] = aiConns.map((c) => ({
-    value: c.id,
-    label: c.name,
-    hint: specFor(c.type).label,
-  }))
+  // 시작 모델사는 툴바의 AI 기본 연결. 칩으로 바꾸면 이 패널에서만 그 선택을 쓴다.
+  const defaultAiConn = useAiConn(aiConns)
+  const [picked, setPicked] = useState('')
+  const aiConnId = picked || defaultAiConn
 
   const chat = useAiChat()
   const [result, setResult] = useState<{ text: string; sql: string | null } | null>(null)
@@ -108,8 +110,13 @@ export function AiFixPanel({
     )
   }
 
+  // 모델사를 바꾸면 앞의 호출이 아직 돌고 있을 수 있다. 늦게 온 옛 응답을 그대로 그리면
+  // **칩은 B 인데 화면은 A 의 답**이 된다 — 순번을 매겨 마지막 요청의 결과만 받는다.
+  const seq = useRef(0)
+
   const run = (connId: string) => {
     if (!connId) return
+    const mine = ++seq.current
     setResult(null)
     setFailed(null)
     setPerf(null)
@@ -125,19 +132,34 @@ export function AiFixPanel({
         explain: explain ?? null,
       },
       {
-        onSuccess: (out) => setResult({ text: out.message.content, sql: out.sql }),
-        onError: (e) => setFailed(e instanceof Error ? e.message : 'AI 호출에 실패했습니다.'),
+        onSuccess: (out) => {
+          if (mine === seq.current) setResult({ text: out.message.content, sql: out.sql })
+        },
+        onError: (e) => {
+          if (mine === seq.current)
+            setFailed(e instanceof Error ? e.message : 'AI 호출에 실패했습니다.')
+        },
       },
     )
   }
 
-  // 모델이 정해지면 한 번 자동 실행한다(오류·계획 자리에서 바로 결과를 보여주려는 것).
-  const started = useRef(false)
+  /** 모델사 칩 클릭 — 이미 그 모델사로 돌았으면 아무 일도 하지 않는다.
+   *  다시 부르는 것은 아래 [다시] 가 할 일이다(누를 때마다 비용이 나간다). */
+  const pick = (connId: string) => {
+    if (connId !== aiConnId) setPicked(connId)
+  }
+
+  // 모델사가 정해지거나 바뀌면 그 모델사로 분석한다(오류·계획 자리에서 바로 결과를 보여주려는 것).
+  // 칩 클릭과 **툴바의 AI 기본 연결 변경**이 같은 경로를 탄다 — 열려 있는 패널이 기본 연결을
+  // 따라가지 않으면 칩은 새 모델사인데 화면은 옛 답이 된다.
+  //
+  // 한 모델사당 한 번만 부른다(연결 id 로 기억). 렌더마다 부르지 않으려는 것이고,
+  // StrictMode 의 이중 실행에도 요금이 두 번 나가지 않는다.
+  const ranFor = useRef('')
   useEffect(() => {
-    if (aiConnId && !started.current) {
-      started.current = true
-      run(aiConnId)
-    }
+    if (!aiConnId || ranFor.current === aiConnId) return
+    ranFor.current = aiConnId
+    run(aiConnId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aiConnId])
 
@@ -162,17 +184,27 @@ export function AiFixPanel({
         <Icon.bolt />
         <span>{cfg.title}</span>
         <div className="ai-fix-head-right">
-          <MiniSelect
-            value={aiConnId}
-            options={aiOptions}
-            onChange={(v) => {
-              setAiConnId(v)
-              run(v)
-            }}
-            placeholder="AI 모델"
-            align="right"
-            up={false}
-          />
+          <div className="ai-vendors" role="group" aria-label="모델사">
+            {aiConns.map((c) => {
+              const on = c.id === aiConnId
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`ai-vendor ${on ? 'on' : ''}`}
+                  aria-pressed={on}
+                  onClick={() => pick(c.id)}
+                  title={
+                    on
+                      ? `${specFor(c.type).label} · 지금 이 모델사로 실행되었습니다`
+                      : `${specFor(c.type).label} 로 다시 분석`
+                  }
+                >
+                  {c.name}
+                </button>
+              )
+            })}
+          </div>
           <button className="ai-fix-x" onClick={onClose} title="닫기">×</button>
         </div>
       </div>
