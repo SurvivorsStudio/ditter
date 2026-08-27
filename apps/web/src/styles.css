@@ -7824,6 +7824,35 @@ tbody tr:hover {
   cursor: default;
 }
 .ai-vendor.on:hover { background: #6d28d9; color: #fff; }
+/* 기본 모델사가 바뀌었다는 알림 — 부르지 않고 알리기만 하므로 경고가 아니라 안내 톤이다.
+   (부르는 것은 사람이 [다시 분석] 을 누를 때다. 자동으로 부르면 열려 있는 패널 수만큼 요금이 나간다.) */
+.ai-fix-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 7px 8px 7px 10px;
+  border: 1px solid #e3dcf7;
+  border-radius: 8px;
+  background: #f8f5ff;
+  color: #4b5563;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.ai-fix-notice > span { flex: 1; min-width: 0; }
+.ai-fix-notice b { color: var(--ink); }
+.ai-fix-notice .btn { flex-shrink: 0; }
+.ai-fix-notice-x {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: #9aa1ad;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+.ai-fix-notice-x:hover { color: var(--ink); }
 .ai-fix-x {
   border: 0;
   background: transparent;
