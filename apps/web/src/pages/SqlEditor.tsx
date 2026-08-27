@@ -1392,7 +1392,6 @@ export function SqlEditorPage() {
 
   // 오류 수정·튜닝 패널의 「AI 탭에서 이어가기」 — AI 어시스턴트 탭에 대화를 심고 앞으로 가져온다.
   const escalateToAi = (p: { sql: string; error?: string; explain?: string; assistant: string; dbConnId?: string }) => {
-    const aiConn = connections.find((c) => specFor(c.type).category === 'ai')
     const outSql = p.assistant.match(/```sql\s*\n([\s\S]*?)```/i)?.[1].trim() || null
     // fix(오류)냐 tune(계획)이냐에 따라 첫 사용자 메시지를 다르게 짓는다.
     const userContent = p.error
@@ -1400,7 +1399,6 @@ export function SqlEditorPage() {
       : `다음 쿼리를 튜닝하고 싶어요.\n\n\`\`\`sql\n${p.sql}\n\`\`\`` +
         (p.explain ? `\n\n실행 계획:\n${p.explain}` : '')
     const seeded: ChatState = {
-      aiConnId: aiConn?.id,
       dbConnId: p.dbConnId,
       intent: p.error ? 'sql.generate' : 'sql.tune',
       messages: [

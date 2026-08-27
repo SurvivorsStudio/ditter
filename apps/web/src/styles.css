@@ -3309,6 +3309,37 @@ body.resizing-col .config-resizer::after {
   width: 13px;
   height: 13px;
 }
+/* ── AI 기본 연결 (툴바) ── 실행 계획 옆. 버튼이 아니라 설정이라 테두리를 옅게 두고
+   번개 아이콘으로 AI 자리임을 알린다. */
+.sql-ai-default {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  /* 툴바가 좁아지면 **이것이 먼저 줄어든다**. 고정폭으로 두면 옆의 허용 명령 태그가
+     한 줄씩 쌓여 툴바가 두 배로 높아진다 — 여기서는 이름 몇 글자를 줄이는 편이 낫다.
+     대신 min-width 아래로는 안 줄어든다(무엇이 기본인지 못 읽으면 있을 이유가 없다). */
+  flex-shrink: 1;
+  min-width: 92px;
+  max-width: 170px;
+  padding: 0 2px 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+.sql-ai-default > svg {
+  width: 13px;
+  height: 13px;
+  color: #7c3aed;
+  flex-shrink: 0;
+}
+.sql-ai-default .ai-mini-btn {
+  padding: 4px 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+.sql-ai-default:hover {
+  border-color: #d9cffa;
+}
 .explain-modal {
   width: min(900px, 96vw);
 }
@@ -3526,6 +3557,10 @@ body.resizing-col .config-resizer::after {
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+  /* 좁아지면 **줄을 바꾼다.** 안 바꾸면 가장 잘 줄어드는 것(허용 명령 태그)이 한 줄씩
+     쌓여 툴바가 두 배로 높아진다 — 묶음은 그대로 두고 줄을 늘리는 편이 낮고 읽기 쉽다. */
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
 /* 실행 버튼이 에디터 하단으로 내려간 페이지 — 툴바엔 연결 선택만. 세로 공간을 아낀다. */
 .sql-editor-toolbar.slim {
@@ -7760,8 +7795,64 @@ tbody tr:hover {
   border-bottom: 1px solid #ece6fb;
   border-radius: 8px 8px 0 0;
 }
-.ai-fix-head svg { width: 14px; height: 14px; }
-.ai-fix-head-right { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.ai-fix-head svg { width: 14px; height: 14px; flex-shrink: 0; }
+/* 제목은 줄여도 되지만 모델사 칩은 읽을 수 있어야 한다 — 좁은 노트북 셀 기준. */
+.ai-fix-head > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-fix-head-right { margin-left: auto; display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* 모델사 칩 — 등록된 AI 연결. 눌린 것이 지금 화면의 답을 낸 모델사다. */
+.ai-vendors { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.ai-vendor {
+  border: 1px solid #e3dcf7;
+  background: #fff;
+  color: #6b7180;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-vendor:hover { background: #f4f0fe; color: var(--ink); }
+/* 눌린 칩은 다시 눌러도 아무 일도 하지 않는다(다시 부르는 것은 [다시] 몫) — 커서로 알린다. */
+.ai-vendor.on {
+  background: #6d28d9;
+  border-color: #6d28d9;
+  color: #fff;
+  cursor: default;
+}
+.ai-vendor.on:hover { background: #6d28d9; color: #fff; }
+/* 기본 모델사가 바뀌었다는 알림 — 부르지 않고 알리기만 하므로 경고가 아니라 안내 톤이다.
+   (부르는 것은 사람이 [다시 분석] 을 누를 때다. 자동으로 부르면 열려 있는 패널 수만큼 요금이 나간다.) */
+.ai-fix-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 7px 8px 7px 10px;
+  border: 1px solid #e3dcf7;
+  border-radius: 8px;
+  background: #f8f5ff;
+  color: #4b5563;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.ai-fix-notice > span { flex: 1; min-width: 0; }
+.ai-fix-notice b { color: var(--ink); }
+.ai-fix-notice .btn { flex-shrink: 0; }
+.ai-fix-notice-x {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: #9aa1ad;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+.ai-fix-notice-x:hover { color: var(--ink); }
 .ai-fix-x {
   border: 0;
   background: transparent;

@@ -4,14 +4,26 @@
  *  tune: 쿼리와 실제 EXPLAIN 계획을 sql.tune 으로 보내 "병목 진단 + 튜닝된 SQL(+인덱스 제안)".
  *  결과 SQL 은 바로 실행하지 않고 **편집기에 적용**(되돌리기 가능)하거나, 부족하면
  *  **AI 탭에서 이어가기**로 대화로 승격한다. 응답은 공용 Markdown 렌더러로 그린다.
+ *
+ *  머리의 **모델사 칩**은 「연결 관리」에 등록된 AI 연결이다. 누르면 그 모델사로 다시 돌고,
+ *  눌려 있는 칩이 지금 화면의 답을 낸 모델사다 — 드롭다운과 달리 "무엇으로 돌았나"가
+ *  펼치지 않아도 보이고, 다른 모델사로 바꿔 보는 것이 한 번의 클릭이다.
+ *
+ *  처음 눌리는 칩은 툴바의 **AI 기본 연결**(`api/aiDefault`)이다. 칩을 눌러 바꾼 것은
+ *  이 패널에서만 쓰고 기본값을 건드리지 않는다 — 비교하려고 한 번 누른 것이 기본이 되면
+ *  다음에 여는 패널이 조용히 다른 모델사로 답한다.
+ *
+ *  **AI 를 자동으로 부르는 것은 패널을 열 때 한 번뿐이다.** 그 뒤로는 칩·[다시]·안내의
+ *  [다시 분석] 처럼 사람이 누른 것만 호출로 이어진다. 이 패널은 한 화면에 여러 개가 살아서
+ *  (노트북은 셀마다 하나) 기본 연결 변경까지 자동 실행에 태우면 드롭다운 한 번이 유료 호출
+ *  여러 건으로 퍼진다 — 몇 건이 나갔는지 화면 어디에도 보이지 않는다.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from './icons'
 import { Markdown } from './Markdown'
-import { MiniSelect } from '../canvas/AiChatPane'
 import { useAiChat, useConnections, useExplain } from '../api/hooks'
+import { useAiConn } from '../api/aiDefault'
 import { specFor } from '../api/connectorFields'
-import type { SelectOption } from './SearchSelect'
 
 /** EXPLAIN [ANALYZE] 텍스트에서 총 실행 시간(ms)과 예상 비용을 뽑는다 (MySQL·PostgreSQL). */
 function parsePerf(plan: string): { timeMs: number | null; cost: number | null } {
@@ -72,15 +84,14 @@ export function AiFixPanel({
   const cfg = MODE_CFG[mode]
   const { data: conns = [] } = useConnections()
   const aiConns = useMemo(() => conns.filter((c) => specFor(c.type).category === 'ai'), [conns])
-  const [aiConnId, setAiConnId] = useState('')
-  useEffect(() => {
-    if (!aiConnId && aiConns.length > 0) setAiConnId(aiConns[0].id)
-  }, [aiConns, aiConnId])
-  const aiOptions: SelectOption[] = aiConns.map((c) => ({
-    value: c.id,
-    label: c.name,
-    hint: specFor(c.type).label,
-  }))
+  // 시작 모델사는 툴바의 AI 기본 연결. 칩으로 바꾸면 이 패널에서만 그 선택을 쓴다.
+  const defaultAiConn = useAiConn(aiConns)
+  /** 지금 화면의 답을 낸(또는 내고 있는) 모델사. 칩의 눌림도 이 값이 정한다 —
+   *  "고르라고 정해진 것"이 아니라 **실제로 돈 것**을 보여야 칩이 답과 어긋나지 않는다. */
+  const [active, setActive] = useState('')
+  const activeRef = useRef('')
+  /** 열려 있는 동안 기본 연결이 바뀌었을 때, **아직 부르지 않은** 그 모델사 id ('' = 안내 없음). */
+  const [pendingDefault, setPendingDefault] = useState('')
 
   const chat = useAiChat()
   const [result, setResult] = useState<{ text: string; sql: string | null } | null>(null)
@@ -108,8 +119,17 @@ export function AiFixPanel({
     )
   }
 
+  // 모델사를 바꾸면 앞의 호출이 아직 돌고 있을 수 있다. 늦게 온 옛 응답을 그대로 그리면
+  // **칩은 B 인데 화면은 A 의 답**이 된다 — 순번을 매겨 마지막 요청의 결과만 받는다.
+  const seq = useRef(0)
+
   const run = (connId: string) => {
     if (!connId) return
+    const mine = ++seq.current
+    // "돈 모델사"는 요청을 **보내는 자리**에서 확정한다. 칩·안내가 모두 이 값을 본다.
+    activeRef.current = connId
+    setActive(connId)
+    setPendingDefault('')
     setResult(null)
     setFailed(null)
     setPerf(null)
@@ -125,21 +145,46 @@ export function AiFixPanel({
         explain: explain ?? null,
       },
       {
-        onSuccess: (out) => setResult({ text: out.message.content, sql: out.sql }),
-        onError: (e) => setFailed(e instanceof Error ? e.message : 'AI 호출에 실패했습니다.'),
+        onSuccess: (out) => {
+          if (mine === seq.current) setResult({ text: out.message.content, sql: out.sql })
+        },
+        onError: (e) => {
+          if (mine === seq.current)
+            setFailed(e instanceof Error ? e.message : 'AI 호출에 실패했습니다.')
+        },
       },
     )
   }
 
-  // 모델이 정해지면 한 번 자동 실행한다(오류·계획 자리에서 바로 결과를 보여주려는 것).
-  const started = useRef(false)
+  /** 모델사 칩 클릭 — 이미 그 모델사로 돌았으면 아무 일도 하지 않는다.
+   *  다시 부르는 것은 아래 [다시] 가 할 일이다(누를 때마다 비용이 나간다). */
+  const pick = (connId: string) => {
+    if (connId !== activeRef.current) run(connId)
+  }
+
+  // 자동 실행은 **패널을 열 때 한 번뿐**이다.
+  //
+  // 예전에는 툴바의 AI 기본 연결이 바뀌는 것까지 같은 경로로 태워 자동으로 다시 불렀다.
+  // 그런데 이 패널은 한 화면에 여러 개가 산다 — 노트북은 셀마다 「AI로 고치기」가 따로 열린다.
+  // 그러면 드롭다운을 **한 번** 바꾼 것이 유료 호출 N 건으로 퍼지고, 몇 건이 나갔는지
+  // 화면 어디에도 보이지 않는다. 열려 있던 답까지 함께 지워진다.
+  //
+  // 그래서 기본 연결이 바뀌면 **부르지 않고 알리기만** 한다(아래 `pendingDefault` 안내).
+  // 칩은 계속 "실제로 돈 모델사"를 가리키므로 화면과 어긋나지도 않는다.
+  const seenDefault = useRef('')
   useEffect(() => {
-    if (aiConnId && !started.current) {
-      started.current = true
-      run(aiConnId)
+    if (!defaultAiConn) return // 연결 목록을 아직 못 받았다
+    const first = !seenDefault.current
+    seenDefault.current = defaultAiConn
+    if (first) {
+      // 마운트 1회 — 오류·계획 자리에서 바로 결과를 보여주려는 것.
+      // ref 로 가드하므로 StrictMode 의 이중 실행에도 요금이 두 번 나가지 않는다.
+      if (!activeRef.current) run(defaultAiConn)
+      return
     }
+    setPendingDefault(defaultAiConn === activeRef.current ? '' : defaultAiConn)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiConnId])
+  }, [defaultAiConn])
 
   if (aiConns.length === 0) {
     return (
@@ -162,22 +207,51 @@ export function AiFixPanel({
         <Icon.bolt />
         <span>{cfg.title}</span>
         <div className="ai-fix-head-right">
-          <MiniSelect
-            value={aiConnId}
-            options={aiOptions}
-            onChange={(v) => {
-              setAiConnId(v)
-              run(v)
-            }}
-            placeholder="AI 모델"
-            align="right"
-            up={false}
-          />
+          <div className="ai-vendors" role="group" aria-label="모델사">
+            {aiConns.map((c) => {
+              const on = c.id === active
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`ai-vendor ${on ? 'on' : ''}`}
+                  aria-pressed={on}
+                  onClick={() => pick(c.id)}
+                  title={
+                    on
+                      ? `${specFor(c.type).label} · 지금 이 모델사로 실행되었습니다`
+                      : `${specFor(c.type).label} 로 다시 분석`
+                  }
+                >
+                  {c.name}
+                </button>
+              )
+            })}
+          </div>
           <button className="ai-fix-x" onClick={onClose} title="닫기">×</button>
         </div>
       </div>
 
       <div className="ai-fix-body">
+        {/* 기본 모델사가 바뀌었다는 알림. **여기서 자동으로 부르지 않는다** — 누르면 그때 부른다. */}
+        {pendingDefault && (
+          <div className="ai-fix-notice">
+            <span>
+              기본 모델사가 <b>{aiConns.find((c) => c.id === pendingDefault)?.name ?? '다른 연결'}</b>
+              (으)로 바뀌었습니다. 지금 답은 이전 모델사의 것입니다.
+            </span>
+            <button className="btn sm" onClick={() => run(pendingDefault)}>
+              <Icon.refresh /> 다시 분석
+            </button>
+            <button
+              className="ai-fix-notice-x"
+              onClick={() => setPendingDefault('')}
+              title="이 안내 닫기"
+            >
+              ×
+            </button>
+          </div>
+        )}
         {chat.isPending ? (
           <div className="ai-fix-loading">
             <span className="ai-progress-spin" />
@@ -211,7 +285,7 @@ export function AiFixPanel({
                   <Icon.chart /> {explainMut.isPending ? '분석 중…' : '성능 비교'}
                 </button>
               )}
-              <button className="btn sm" onClick={() => run(aiConnId)} title="다시 분석">
+              <button className="btn sm" onClick={() => run(active)} title="다시 분석">
                 <Icon.refresh /> 다시
               </button>
             </div>

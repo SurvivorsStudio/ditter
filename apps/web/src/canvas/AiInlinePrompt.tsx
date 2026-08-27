@@ -20,6 +20,7 @@ import { EditorView, keymap } from '@codemirror/view'
 import { Prec } from '@codemirror/state'
 import { Icon } from '../components/icons'
 import { useAiChat, useConnectionSchema, useConnections } from '../api/hooks'
+import { useAiConn } from '../api/aiDefault'
 import { specFor } from '../api/connectorFields'
 import type { SelectOption } from '../components/SearchSelect'
 import { MiniSelect } from './AiChatPane'
@@ -93,9 +94,11 @@ export function AiInlinePrompt({
   const [samples, setSamples] = useState(false)
   const historyRef = useRef<Msg[]>([])
 
+  // 시작값은 툴바의 **AI 기본 연결**. 여기서 바꾼 것은 이 프롬프트에만 쓴다.
+  const defaultAiConn = useAiConn(aiConns)
   useEffect(() => {
-    if (!model && aiConns[0]) setModel(aiConns[0].id)
-  }, [aiConns, model])
+    if (!model && defaultAiConn) setModel(defaultAiConn)
+  }, [defaultAiConn, model])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // 자동완성 팝업이 열려 있으면 Escape 는 팝업부터 닫는다(박스는 그대로).
