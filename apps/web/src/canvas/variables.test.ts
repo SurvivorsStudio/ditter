@@ -330,6 +330,45 @@ describe('Python 코드 문맥 (transform.python 의 code)', () => {
     expect(code('dt = "${주문.dt}"', { '주문.dt': '2026-08-01' })).toBe('dt = "2026-08-01"')
   })
 
+  // ── 제어문자 ────────────────────────────────────────────────────────────
+  // 백엔드 `tests/test_variables.py` 의 `TestPythonControlChars` 와 **같은 사례**다.
+  // 한쪽만 고치면 "편집기에서는 되는데 실행하면 다르다"가 나므로 양쪽이 함께 깨져야 한다.
+
+  it('줄바꿈을 이스케이프한다 — 안 하면 Python SyntaxError 다', () => {
+    expect(code('N = [${주문.memo[]}]', { '주문.memo[]': ['a\nb'] })).toBe("N = ['a\\nb']")
+  })
+
+  it('캐리지리턴·탭도 repr 과 같은 이름으로', () => {
+    expect(code('N = [${주문.memo[]}]', { '주문.memo[]': ['line1\r\nline2'] })).toBe(
+      "N = ['line1\\r\\nline2']",
+    )
+    expect(code('N = [${주문.memo[]}]', { '주문.memo[]': ['a\tb'] })).toBe("N = ['a\\tb']")
+  })
+
+  it('이름 없는 제어문자는 \\xNN 으로 — NUL 은 Python 소스에 아예 못 들어간다', () => {
+    expect(code('N = [${주문.memo[]}]', { '주문.memo[]': ['a\u0000b'] })).toBe("N = ['a\\x00b']")
+    expect(code('N = [${주문.memo[]}]', { '주문.memo[]': ['a\u001bb'] })).toBe("N = ['a\\x1bb']")
+  })
+
+  it('역슬래시는 두 개로 — 이스케이프가 겹쳐도 어긋나지 않는다', () => {
+    expect(code('N = [${주문.p[]}]', { '주문.p[]': ['C:\\path'] })).toBe("N = ['C:\\\\path']")
+    // 값이 이미 `\n` 두 글자면 그대로 두 글자여야 한다 (줄바꿈으로 오해하지 않는다)
+    expect(code('N = [${주문.p[]}]', { '주문.p[]': ['a\\nb'] })).toBe("N = ['a\\\\nb']")
+  })
+
+  it('따옴표가 둘 다 있으면 작은따옴표로 감싸고 안쪽을 이스케이프한다', () => {
+    expect(code('N = [${주문.t[]}]', { '주문.t[]': ['has "dq" and \'sq\''] })).toBe(
+      'N = [\'has "dq" and \\\'sq\\\'\']',
+    )
+  })
+
+  it('비ASCII 비출력 문자는 원문 그대로 — 백엔드와 표기가 갈리는 유일한 자리다', () => {
+    // 백엔드 `repr` 은 이것을 `\\u200b` 로 쓴다. 값은 같고 표기만 다르며, 원문 그대로도
+    // 유효한 Python 이다. 백엔드의 같은 사례:
+    // `test_nonascii_invisible_differs_from_front_but_evaluates_the_same`
+    expect(code('N = [${주문.z[]}]', { '주문.z[]': ['a\u200bb'] })).toBe("N = ['a\u200bb']")
+  })
+
   it('SQL 문맥은 그대로다', () => {
     expect(substitute('id IN (${주문.id[]})', { '주문.id[]': [1, 2] }, { contextKey: 'where' })).toBe(
       'id IN (1, 2)',

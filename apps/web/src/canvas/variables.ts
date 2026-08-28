@@ -226,15 +226,42 @@ export function renderList(
     .join(', ')
 }
 
-/** Python 리터럴 표기. 백엔드 `_py_literal` 과 짝 — 따옴표·역슬래시를 이스케이프한다. */
+/** `repr` 이 이름 있는 이스케이프를 주는 셋. 나머지 제어문자는 `\xNN` 이 된다. */
+const PY_NAMED_ESCAPES: Record<string, string> = { '\t': '\\t', '\n': '\\n', '\r': '\\r' }
+
+/**
+ * 따옴표 안에 들어갈 몸통을 이스케이프한다 (감싸는 따옴표는 호출자가 붙인다).
+ *
+ * **줄바꿈을 빠뜨리면 안 된다.** Python 의 따옴표 하나짜리 문자열 리터럴은 실제 줄바꿈을
+ * 담을 수 없어 `SyntaxError` 가 되고, NUL 은 아예 소스에 들어갈 수 없다
+ * ("source code string cannot contain null bytes").
+ */
+function pyEscapeBody(text: string): string {
+  // eslint-disable-next-line no-control-regex -- 제어문자를 이스케이프하는 것이 이 함수의 일이다
+  return text.replace(/[\\\u0000-\u001f\u007f]/g, (ch) =>
+    ch === '\\'
+      ? '\\\\'
+      : (PY_NAMED_ESCAPES[ch] ?? `\\x${ch.charCodeAt(0).toString(16).padStart(2, '0')}`),
+  )
+}
+
+/**
+ * Python 리터럴 표기. 백엔드 `_py_literal`(= `repr`) 과 짝이다.
+ *
+ * ASCII 입력에서는 `repr` 과 **글자까지 같은** 결과를 낸다. 비ASCII 비출력 문자
+ * (U+200B 같은 것)는 `repr` 이 `\u200b` 로 쓰지만 여기서는 원문 그대로 둔다 — 그 글자는
+ * 리터럴 안에 그냥 있어도 유효한 Python 이라 **값은 같고 표기만 다르다.** 완전한 일치는
+ * 유니코드 printable 표가 있어야 하는데, 그 표를 프런트에 복제하면 이 파일이 경계하는
+ * 「양쪽이 어긋난다」를 하나 더 만드는 셈이다.
+ */
 function pyLiteral(value: unknown): string {
   if (value === null || value === undefined) return 'None'
   if (typeof value === 'boolean') return value ? 'True' : 'False'
   if (typeof value === 'number') return String(value)
-  // repr 과 같은 결과를 낸다: 작은따옴표가 들어 있으면 큰따옴표로 감싼다
+  // repr 과 같은 규칙: 작은따옴표가 들어 있고 큰따옴표가 없을 때만 큰따옴표로 감싼다
   const text = String(value)
-  if (text.includes("'") && !text.includes('"')) return `"${text.replace(/\\/g, '\\\\')}"`
-  return `'${text.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
+  if (text.includes("'") && !text.includes('"')) return `"${pyEscapeBody(text)}"`
+  return `'${pyEscapeBody(text).replace(/'/g, "\\'")}'`
 }
 
 /** 참조됐지만 값이 없는 변수 */
