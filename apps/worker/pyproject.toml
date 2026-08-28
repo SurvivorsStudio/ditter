@@ -9,7 +9,7 @@ dependencies = [
     "croniter>=6.0.0,<7",
     # CDC Sink Worker 가 Kafka 를 소비한다 (Phase 4c). 순수 파이썬이라 네이티브 빌드가 없다.
     # cdc_sink import 시점이 아니라 KafkaSinkConsumer 인스턴스화 때만 로딩한다.
-    "kafka-python>=2.0.2,<3",
+    "kafka-python>=2.0.2,<4",
     # Python 전처리 노드(transform.python)에서 기본 제공하는 라이브러리. 격리 자식
     # 프로세스가 import 할 수 있도록 시스템 site-packages 에 설치된다 (pysandbox 참조).
     "pandas>=2.2,<4",
