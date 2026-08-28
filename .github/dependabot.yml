@@ -66,15 +66,22 @@ updates:
       - /apps/sap-connector
     schedule:
       interval: weekly
-    # 한 디렉터리 안의 이미지를 한 PR 로 묶는다. 실측 베이스 이미지는 5개인데
+    # 디렉터리 4개의 베이스 이미지를 한 PR 로 묶는다. 실측 이미지는 5개인데
     # (python:3.12-slim ×3 · node:22-alpine · nginx:1.27-alpine) 디렉터리는 4개다 —
-    # 묶지 않으면 /apps/web 혼자 두 PR 이 된다.
+    # 묶지 않으면 이미지마다 흩어져 최대 5개의 PR 이 된다.
     groups:
       base-images:
         patterns: ["*"]
-    # 한도를 5 로 두는 이유. 그룹을 넣어도 PR 은 디렉터리마다 하나라 최대 4개가 열린다.
-    # Dependabot 은 한도를 넘긴 갱신을 큐에 쌓지 않고 **그냥 건너뛴다** — 열린 PR 을
-    # 머지하기 전까지 나머지는 오지 않는다. python 베이스가 올라가는 주에 api·worker·
-    # sap-connector 세 건이 자리를 채우면 web 의 node·nginx 는 조용히 빠진다.
+    # `directories` 와 `groups` 를 함께 쓰면 PR 은 디렉터리마다 하나가 아니라
+    # **디렉터리를 가로질러 하나**로 묶인다. 근거는 이 저장소의 과거 그룹 PR 제목 형식이다
+    # (#28 「across 1 directory」 · #15 「in the prod-dependencies group across 1 directory」).
+    # 여기서는 「across 4 directories」로 나올 것으로 본다 — **아직 확인하지 못했다.**
+    # 머지 후 첫 주기의 실제 PR 제목으로 확정된다.
+    #
+    # 그래서 한도 5 는 「4개가 열리니까 넉넉히」가 아니라, 나중에 이 그룹을 좁히거나
+    # 되돌릴 때를 위한 여유다. 보안 갱신은 애초에 이 한도를 따르지 않는다.
+    # 한도를 넘긴 갱신은 큐에 쌓이지 않고 **그냥 건너뛴다** — 열린 PR 을 머지하기
+    # 전까지 나머지는 오지 않는다. 그룹을 풀면 python 베이스가 올라가는 주에
+    # api·worker·sap-connector 세 건이 자리를 채워 web 의 node·nginx 가 조용히 빠진다.
     # 위 symmetricds 와 같은 실패 모양(오지 않는데 오는 것처럼 보인다)이라 넉넉한 쪽으로 둔다.
     open-pull-requests-limit: 5
