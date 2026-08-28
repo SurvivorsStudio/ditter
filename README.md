@@ -219,7 +219,12 @@ MSSQL 커넥터 테스트는 `pyodbc` 가 필요하다. macOS 에서 `libodbc` �
 
 ## 구조
 
-![전체 아키텍처 — 프레젠테이션 · API/BFF(FastMCP) · 오케스트레이션/실행 · 커넥터 · 소스/타깃 계층](docs/diagrams/d1_overall.png)
+![데이터 파이프라인 아키텍처 — 프레젠테이션 · API/BFF(FastMCP) · 오케스트레이션/실행 · 커넥터 · 소스/타깃 계층](docs/diagrams/d1_overall.png)
+
+> 이 그림이 담은 것은 **파이프라인 쪽**이다. SQL 콘솔 · 연합 조회 · AI 어시스턴트는 여기 그려진
+> 것과 **같은 API 계층 위에** 얹힌다 — 위 [「화면」](#화면) 절이 그쪽이다.
+> 인증은 현재 **JWT + RBAC** 이고, 그림의 `OAuth2` 는 아직 스키마(`users.external_id`)만
+> 준비된 상태다 (CLAUDE.md §15).
 
 ```
 apps/
