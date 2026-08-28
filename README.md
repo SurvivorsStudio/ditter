@@ -21,6 +21,35 @@
 
 ---
 
+## 화면
+
+아래 화면은 모두 `demo/` 의 시연용 목데이터로 찍었다 — 실제 데이터가 아니다.
+
+### SQL 콘솔
+
+서로 다른 DB 를 한 트리에 두고 조회한다. 툴바의 **`SELECT` 태그**가 이 연결로 무엇을 할 수
+있는지 실행 전에 알려 준다 — 이 연결은 조회만 열려 있다.
+
+![SQL 콘솔 — 좌측 연결 트리, 허용 명령 태그, 결과 그리드](docs/images/sql-console.png)
+
+### 연합 조회 — 서로 다른 DB 를 한 SELECT 로
+
+고객센터(PostgreSQL)의 클레임과 쇼핑몰(MySQL)의 주문을 **한 문장으로 조인**한다.
+DuckDB 를 가운데 두지만 사용자가 아는 것은 「연결 관리」에 저장해 둔 이름뿐이다.
+
+![연합 조회 — PostgreSQL 클레임과 MySQL 주문을 한 SELECT 로 조인](docs/images/federated-query.png)
+
+### 파이프라인 캔버스
+
+확인한 조회를 반복 적재로 굳힌다. 좌측 팔레트 · 중앙 캔버스 · 우측 노드 설정.
+
+![파이프라인 캔버스 — 트리거·소스·변환·타깃 노드와 설정 패널](docs/images/canvas-pipeline.png)
+
+> AI 어시스턴트(자연어 → SQL·튜닝·오류 수정)는 [아래 절](#ai-모델--상용-api-없이-돌아간다)에서
+> 따로 설명한다. **상용 API 없이 로컬 오픈웨이트 모델로도 그대로 돈다.**
+
+---
+
 ## 현재 구현 범위
 
 | Phase | 내용 | 상태 |
@@ -190,6 +219,13 @@ MSSQL 커넥터 테스트는 `pyodbc` 가 필요하다. macOS 에서 `libodbc` �
 
 ## 구조
 
+![데이터 파이프라인 아키텍처 — 프레젠테이션 · API/BFF(FastMCP) · 오케스트레이션/실행 · 커넥터 · 소스/타깃 계층](docs/diagrams/d1_overall.png)
+
+> 이 그림이 담은 것은 **파이프라인 쪽**이다. SQL 콘솔 · 연합 조회 · AI 어시스턴트는 여기 그려진
+> 것과 **같은 API 계층 위에** 얹힌다 — 위 [「화면」](#화면) 절이 그쪽이다.
+> 인증은 현재 **JWT + RBAC** 이고, 그림의 `OAuth2` 는 아직 스키마(`users.external_id`)만
+> 준비된 상태다 (CLAUDE.md §15).
+
 ```
 apps/
   connectors/   BaseConnector 계약 + MySQL·PostgreSQL·MSSQL·MongoDB·SAP·S3·로컬파일 (지연 로딩)
@@ -205,6 +241,13 @@ docs/           설계 문서, UI 목업, 아키텍처 다이어그램
 
 의존 방향: `web → api → worker`는 없다. API와 Worker는 **Redis 큐로만** 통신하고
 (`send_task` 이름 호출), 모델·DAG 스펙·커넥터만 코드로 공유한다.
+
+그래서 워커는 무상태이고 **수평으로 늘릴 수 있다.** 실행 상태·로그·체크포인트는 전부
+메타DB 에 있고, 진행 상황은 WebSocket 으로 화면에 밀어 준다.
+
+![파이프라인 실행 흐름 — 트리거에서 오케스트레이터·Redis 큐·워커 풀을 거쳐 메타DB 로](docs/diagrams/d2_pipeline.png)
+
+> 다이어그램 원본(`.dot`)은 [docs/diagrams/](docs/diagrams/) 에 있다 — 고쳐서 다시 그릴 수 있다.
 
 ---
 
