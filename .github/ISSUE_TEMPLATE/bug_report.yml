@@ -93,6 +93,6 @@ body:
   - type: textarea
     id: logs
     attributes:
-      label: 로그·스크린샷
-      description: api·worker 컨테이너 로그와 브라우저 콘솔이 가장 도움이 된다. **가린 뒤** 붙인다.
+      label: 로그
+      description: api·worker 컨테이너 로그와 브라우저 콘솔이 가장 도움이 된다. **가린 뒤** 붙인다. 스크린샷은 위 「무슨 일이 일어났나」 칸에 붙인다 — 이 칸은 줄바꿈을 살리려고 글자 그대로 보여 주므로 이미지가 뜨지 않는다.
       render: text
