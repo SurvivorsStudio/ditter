@@ -12,6 +12,7 @@ import pytest
 
 from eai_api.services import connection_service as svc
 from eai_api.services.connection_service import PermissionDeniedError
+from eai_api.services.errors import ValidationError
 
 
 class _FakeConn:
@@ -59,10 +60,10 @@ def test_ensure_statement_allows_explain_as_readonly() -> None:
 
 def test_ensure_statement_explain_with_write_needs_command() -> None:
     """EXPLAIN 안의 UPDATE 는 그 명령이 허용돼야 한다(EXPLAIN ANALYZE UPDATE 안전장치)."""
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         svc.ensure_statement_allowed("EXPLAIN ANALYZE UPDATE t SET x=1", frozenset({"select"}))
     # UPDATE 가 허용되면 통과
-    q, verb = svc.ensure_statement_allowed(
+    _q, verb = svc.ensure_statement_allowed(
         "EXPLAIN ANALYZE UPDATE t SET x=1", frozenset({"select", "update"})
     )
     assert verb == "explain"

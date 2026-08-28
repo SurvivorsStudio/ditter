@@ -55,8 +55,10 @@ _BASE_RULES = (
     "- 요청이 명확하거나 스키마·예시 데이터로 **합리적으로 가정할 수 있으면**: 실행 가능한 SQL 을 "
     "```sql 코드블록 하나로 답하고, 어떤 가정을 했는지 한 줄로 밝혀라.\n"
     "- 하지만 **정말 모호해서 잘못된 SQL 이 나올 위험이 크면**(예: 그 값이 여러 컬럼에 맞을 수 있음, "
-    "어느 테이블·기간·집계 기준인지 불명확) — 억지로 SQL 을 내지 말고, **핵심을 좁히는 짧은 질문 하나**를 하라. "
-    "가능한 후보를 2~4개 제시하면 사용자가 빠르게 고른다(예: \"K123 은 어느 컬럼인가요? ① plant_cd ② line_cd\"). "
+    "어느 테이블·기간·집계 기준인지 불명확) — 억지로 SQL 을 내지 말고, "
+    "**핵심을 좁히는 짧은 질문 하나**를 하라. "
+    "가능한 후보를 2~4개 제시하면 사용자가 빠르게 고른다"
+    "(예: \"K123 은 어느 컬럼인가요? ① plant_cd ② line_cd\"). "
     "이때는 SQL 코드블록을 넣지 않는다.\n"
     "- 사용자가 결과를 **차트·그래프**(막대·꺾은선·원)로 보여 달라고 하면, 대화에 있는 데이터로 "
     "아래 형식의 ```chart 코드블록 하나로 답하라(설명은 한두 줄만). SQL 대신 이 블록을 낸다.\n"
@@ -73,7 +75,13 @@ _BASE_RULES = (
 )
 
 
-def _prompt_generate(dialect: str | None, schema: str | None, sql: str | None, error: str | None, explain: str | None = None) -> str:
+def _prompt_generate(
+    dialect: str | None,
+    schema: str | None,
+    sql: str | None,
+    error: str | None,
+    explain: str | None = None,
+) -> str:
     d = dialect or "표준 SQL"
     parts = [f"너는 {d} 전용 SQL 어시스턴트다. 사용자의 요청을 SQL 로 만들어 준다.", _BASE_RULES]
     if schema:
@@ -114,7 +122,13 @@ def _prompt_tune(
     return "\n".join(parts)
 
 
-def _prompt_interpret(dialect: str | None, schema: str | None, sql: str | None, error: str | None, explain: str | None = None) -> str:
+def _prompt_interpret(
+    dialect: str | None,
+    schema: str | None,
+    sql: str | None,
+    error: str | None,
+    explain: str | None = None,
+) -> str:
     """실행 결과 해석 — SQL 을 새로 만들지 않고, 사용자가 받은 결과를 한국어로 풀어 준다."""
     d = dialect or "SQL"
     parts = [
@@ -136,7 +150,13 @@ def _prompt_interpret(dialect: str | None, schema: str | None, sql: str | None, 
     return "\n".join(parts)
 
 
-def _prompt_chart(dialect: str | None, schema: str | None, sql: str | None, error: str | None, explain: str | None = None) -> str:
+def _prompt_chart(
+    dialect: str | None,
+    schema: str | None,
+    sql: str | None,
+    error: str | None,
+    explain: str | None = None,
+) -> str:
     """차트 생성 — 실행 결과를 ```chart JSON 블록 하나로 시각화한다."""
     parts = [
         "너는 데이터 시각화 어시스턴트다. 사용자가 실행한 SQL 과 결과 표를 받아, 그 결과를 "
@@ -157,7 +177,13 @@ def _prompt_chart(dialect: str | None, schema: str | None, sql: str | None, erro
     return "\n".join(parts)
 
 
-def _prompt_report(dialect: str | None, schema: str | None, sql: str | None, error: str | None, explain: str | None = None) -> str:
+def _prompt_report(
+    dialect: str | None,
+    schema: str | None,
+    sql: str | None,
+    error: str | None,
+    explain: str | None = None,
+) -> str:
     """보고서 작성 — 실행 결과를 구조화된 한국어 마크다운 보고서로 정리한다."""
     parts = [
         "너는 데이터 분석 보고서 작성자다. 사용자가 실행한 SQL 과 결과 표를 받아, 읽기 좋은 "
@@ -177,7 +203,13 @@ def _prompt_report(dialect: str | None, schema: str | None, sql: str | None, err
     return "\n".join(parts)
 
 
-def _prompt_fix(dialect: str | None, schema: str | None, sql: str | None, error: str | None, explain: str | None = None) -> str:
+def _prompt_fix(
+    dialect: str | None,
+    schema: str | None,
+    sql: str | None,
+    error: str | None,
+    explain: str | None = None,
+) -> str:
     """오류 수정 — 실행에 실패한 쿼리와 오류 메시지를 보고, 의미는 유지한 채 오류만 고친다."""
     d = dialect or "표준 SQL"
     parts = [

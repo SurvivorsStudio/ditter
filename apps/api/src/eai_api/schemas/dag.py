@@ -1126,21 +1126,29 @@ def _cdc_target_mapping_issues(node: PipelineNode) -> list[ValidationIssue]:
     for i, m in enumerate(mappings, start=1):
         if not isinstance(m, dict):
             issues.append(
-                ValidationIssue(level="error", node_id=node.id, message=f"매핑 #{i}: 형식이 올바르지 않습니다")
+                ValidationIssue(
+                    level="error", node_id=node.id, message=f"매핑 #{i}: 형식이 올바르지 않습니다"
+                )
             )
             continue
         if not m.get("source_table"):
             issues.append(
-                ValidationIssue(level="error", node_id=node.id, message=f"매핑 #{i}: 소스 테이블이 필요합니다")
+                ValidationIssue(
+                    level="error", node_id=node.id, message=f"매핑 #{i}: 소스 테이블이 필요합니다"
+                )
             )
         if not m.get("target_table"):
             issues.append(
-                ValidationIssue(level="error", node_id=node.id, message=f"매핑 #{i}: 타깃 테이블이 필요합니다")
+                ValidationIssue(
+                    level="error", node_id=node.id, message=f"매핑 #{i}: 타깃 테이블이 필요합니다"
+                )
             )
         columns = m.get("columns")
         if columns is not None and not isinstance(columns, list):
             issues.append(
-                ValidationIssue(level="error", node_id=node.id, message=f"매핑 #{i}: columns 는 목록이어야 합니다")
+                ValidationIssue(
+                    level="error", node_id=node.id, message=f"매핑 #{i}: columns 는 목록이어야 합니다"
+                )
             )
             columns = []
         for c in columns or []:

@@ -20,7 +20,7 @@ from botocore.exceptions import ClientError
 from eai_connectors import build, supported_types
 from eai_connectors.base import ConnectorType, HealthStatus
 from eai_connectors.bedrock import BedrockConnector
-from eai_connectors.errors import ReadFailed, UnsupportedOperation
+from eai_connectors.errors import ConfigurationError, ReadFailed, UnsupportedOperation
 
 
 def _conn(**over: Any) -> BedrockConnector:
@@ -59,9 +59,9 @@ def test_registered_and_key_filtering() -> None:
 
 
 def test_credentials_required() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurationError):
         BedrockConnector(access_key_id="", secret_access_key="s")
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurationError):
         BedrockConnector(access_key_id="a", secret_access_key="")
 
 
@@ -114,7 +114,10 @@ class _TempRejectingRuntime:
                 {
                     "Error": {
                         "Code": "ValidationException",
-                        "Message": "The model returned the following errors: `temperature` is deprecated for this model.",
+                        "Message": (
+                            "The model returned the following errors: "
+                            "`temperature` is deprecated for this model."
+                        ),
                     }
                 },
                 "Converse",
@@ -160,7 +163,9 @@ def test_generate_other_validation_error_not_retried(monkeypatch) -> None:
 
 def test_generate_empty_response_raises(monkeypatch) -> None:
     conn = _conn()
-    monkeypatch.setattr(conn, "_client", lambda service: _FakeRuntime({"output": {"message": {"content": []}}}))
+    monkeypatch.setattr(
+        conn, "_client", lambda service: _FakeRuntime({"output": {"message": {"content": []}}})
+    )
     with pytest.raises(ReadFailed):
         conn.generate([{"role": "user", "content": "x"}])
 

@@ -8,8 +8,9 @@
 
 from __future__ import annotations
 
-from eai_api.services import connection_service as svc
 from eai_connectors.base import ColumnSchema, DbObject, IndexInfo, ObjectDetail
+
+from eai_api.services import connection_service as svc
 
 
 class TestDbObject:

@@ -286,7 +286,12 @@ class TestResolveTargetRoutes:
         # 소스 테이블마다 타깃/컬럼/키를 따로 매핑 → 소스별 라우트가 생겨야 한다
         d = PipelineDefinition(
             nodes=[
-                _node("src", "source.cdc.mysql", connection_id="c1", tables=["shop.customers", "shop.orders"]),
+                _node(
+                    "src",
+                    "source.cdc.mysql",
+                    connection_id="c1",
+                    tables=["shop.customers", "shop.orders"],
+                ),
                 _node(
                     "tgt", "target.db", connection_id="c2",
                     table_mappings=[
@@ -295,7 +300,11 @@ class TestResolveTargetRoutes:
                             "target_namespace": "dw", "key_columns": ["id"],
                             "columns": [{"source": "name", "target": "customer_name"}],
                         },
-                        {"source_table": "shop.orders", "target_table": "order_fact", "key_columns": ["order_id"]},
+                        {
+                            "source_table": "shop.orders",
+                            "target_table": "order_fact",
+                            "key_columns": ["order_id"],
+                        },
                     ],
                 ),
             ],

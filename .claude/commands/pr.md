@@ -36,7 +36,7 @@ main 은 팀이 공유하는 브랜치이므로 직접 push 하지 않는다. �
   `apps/worker/` · `apps/connectors/` · `apps/sap-connector/` · `cdc/` · `sync/` · `docs/`(+ `README.md`·
   `CLAUDE.md`). 경로가 둘 이상 영역에 걸치면 커밋을 나눈다. `apps/connectors/`(공유 라이브러리)
   변경은 이를 쓰는 `apps/api/`·`apps/worker/` 변경보다 먼저 커밋한다. 위 영역 밖(루트 설정·
-  `.claude/`·`.github/`·`docker-compose.yml`·`참고용/`)은 그 목적 하나로 별도 커밋.
+  `.claude/`·`.github/`·`docker-compose.yml`)은 그 목적 하나로 별도 커밋.
 - **2차 분할**: 같은 영역 안에서도 서로 다른 타입·모듈·주제면 나눈다. 리팩터/포맷과
   동작 변경을 한 커밋에 섞지 않는다.
 - **메시지**: `<타입>: <제목>` + 빈 줄 + `-` 글머리 본문.

@@ -10,12 +10,14 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import pytest
 
 import eai_connectors.gemini as gemini_mod
 from eai_connectors import build, supported_types
 from eai_connectors.base import ConnectorType, HealthStatus
-from eai_connectors.errors import ReadFailed, UnsupportedOperation
+from eai_connectors.errors import ConfigurationError, ReadFailed, UnsupportedOperation
 from eai_connectors.gemini import GeminiConnector
 
 
@@ -41,7 +43,7 @@ def test_registered_and_key_filtering() -> None:
 
 
 def test_api_key_required() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurationError):
         GeminiConnector(api_key="")
 
 
@@ -68,7 +70,7 @@ def test_test_connection_bad_key(monkeypatch) -> None:
 def test_generate_builds_request_and_parses(monkeypatch) -> None:
     captured: dict = {}
 
-    def fake_post(url, *, params, json, timeout):  # noqa: A002 - httpx 시그니처
+    def fake_post(url, *, params, json, timeout):
         captured["url"] = url
         captured["params"] = params
         captured["json"] = json
@@ -136,4 +138,4 @@ class _DummySpec:
 
 
 class _DummyBatch:
-    rows: list = []
+    rows: ClassVar[list] = []

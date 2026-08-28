@@ -1132,6 +1132,9 @@ export function SqlEditorPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
+    // addTabToFocused 는 ref·함수형 setState·지역 변수만 쓴다 — 캡처하는 상태가 없어
+    // 첫 렌더의 것을 계속 불러도 결과가 같다. deps 에 넣으면 매 렌더마다 리스너를 다시 단다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const selectTab = (dockId: number, tabId: number) => {

@@ -20,7 +20,7 @@ argument-hint: [commit subject]
   `CLAUDE.md`). 변경이 둘 이상 영역에 걸치면 **커밋을 나눈다**(예: API 라우터 구현은 `apps/api/`
   커밋, 문서 갱신은 `docs/` 커밋). `apps/connectors/`(공유 라이브러리)와 이를 쓰는 `apps/api/`·
   `apps/worker/` 코드를 함께 고쳤다면 **커넥터 커밋을 소비 측 커밋보다 먼저** 올린다. 위 영역
-  밖(루트 설정·`.claude/`·`.github/`·`docker-compose.yml`·`참고용/`)은 그 목적 하나로 별도 커밋.
+  밖(루트 설정·`.claude/`·`.github/`·`docker-compose.yml`)은 그 목적 하나로 별도 커밋.
 - **2차 분할**: 같은 영역 안에서도 서로 다른 타입·모듈·주제면 나눈다. 리팩터/포맷과
   동작 변경을 한 커밋에 섞지 않는다.
 - 분할 결과(어떤 파일이 어떤 커밋으로 가는지)를 먼저 사용자에게 보여주고, 영역이 섞여 여러

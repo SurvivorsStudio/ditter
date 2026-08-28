@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import signal
 import time
@@ -26,6 +27,7 @@ import types
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC
 from enum import StrEnum
 from typing import Any, Protocol
 
@@ -176,10 +178,8 @@ def apply_column_map(row: dict[str, Any], route: TargetRoute) -> dict[str, Any]:
             continue
         val = row[src]
         if cast and cast in CASTS:
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 val = CASTS[cast](val)
-            except (TypeError, ValueError):
-                pass
         if tgt != src:
             out.pop(src, None)
         out[tgt] = val
@@ -436,12 +436,12 @@ def _report_metrics(counts: dict[str, int], last_ts: dict[str, int]) -> None:
     """
     if not counts:
         return
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from eai_api.db import session_scope
     from eai_api.models import CdcStream
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     now_ms = int(now.timestamp() * 1000)
     try:
         with session_scope() as session:
