@@ -161,27 +161,30 @@ cd apps/api && python -m eai_api.cli create-admin admin@company.com
 
 ## 테스트 · 품질
 
-```bash
-cd apps/connectors && pytest && ruff check . && mypy .
-```
+Python 앱은 `uv`, 웹은 `npm` 으로 돌린다. `<영역>` 은 `connectors`·`api`·`worker`·`sap-connector`.
 
 ```bash
-cd apps/api && pytest && ruff check . && mypy .
-```
-
-```bash
-cd apps/worker && pytest && ruff check . && mypy .
-```
-
-```bash
-cd apps/sap-connector && pytest && ruff check . && mypy .
+cd apps/<영역> && uv run --extra dev pytest -q && uv run --extra dev ruff check .
 ```
 
 ```bash
 cd apps/web && npm test && npm run lint && npm run build
 ```
 
-현재: Python 435개 · 프론트 98개 테스트 통과. ruff · mypy(strict) · eslint · tsc 모두 클린.
+**현재 상태 — 테스트 1,278개 통과** (Python 996 · 프론트 282).
+
+| 검사 | 상태 |
+|---|---|
+| pytest · vitest | ✅ 통과 — CI 가 막는다 |
+| ruff | ✅ 통과 — CI 가 막는다 |
+| eslint · tsc(빌드) | ✅ 통과 — CI 가 막는다 |
+| mypy (strict) | ⚠️ **아직 아니다** — `src` 기준 127건 남음(대부분 `apps/api`) |
+
+mypy 는 설정만 strict 이고 실제로는 통과하지 않는다. 상시 빨간 CI 를 만들지 않으려고
+게이트에서 빼 두었고, 줄여 나가는 중이다. 그 밖의 검사는 모두 CI 가 PR 마다 강제한다.
+
+MSSQL 커넥터 테스트는 `pyodbc` 가 필요하다. macOS 에서 `libodbc` 를 못 찾아 실패하면
+`brew install unixodbc` 로 해결된다 (CI 는 `unixodbc-dev` 를 설치한다).
 
 ---
 
