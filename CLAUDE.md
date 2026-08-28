@@ -37,6 +37,7 @@
 | CDC | Debezium (Kafka Connect), Apache Kafka |
 | 메타데이터 | PostgreSQL 16 |
 | 커넥터 드라이버 | PyMySQL, psycopg3, pyodbc, PyMongo, NW RFC SDK, boto3 |
+| AI 모델 (커넥터로 취급) | Gemini · AWS Bedrock · **Ollama**(로컬 오픈웨이트, 상용 API 없이 — §23) |
 | 인프라 | Docker, Docker Compose, AWS EC2 / ALB / RDS / S3 / ECR / CloudWatch |
 | 품질 | pytest, ruff, mypy (백엔드) · vitest, eslint, prettier (프론트) |
 
@@ -76,9 +77,11 @@ eai-platform/
 │   ├── connectors/                # 공통 커넥터 라이브러리 (api·worker 공유)
 │   │   └── src/eai_connectors/
 │   │       ├── base.py            # BaseConnector 프로토콜
+│   │       ├── registry.py        # 종류 → 구현 지연 로딩 (임포트는 싸야 한다 — §15)
 │   │       ├── mysql.py  postgres.py  mssql.py  mongo.py
-│   │       ├── sap_rfc.py         # 전용 컨테이너에서 실행
-│   │       └── s3.py
+│   │       ├── sap_rfc.py         # 사이드카 HTTP 게이트웨이 (SDK 는 여기 없다 — §16)
+│   │       ├── s3.py  local_file.py
+│   │       └── gemini.py  bedrock.py  ollama.py   # AI 모델도 커넥터다 (§23)
 │   ├── sap-connector/             # SAP RFC 전용 컨테이너 (NW RFC SDK 포함)
 │   └── web/                       # React + React Flow 프론트엔드
 │       ├── src/
