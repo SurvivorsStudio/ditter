@@ -269,7 +269,7 @@ cd apps/web && npm test && npm run lint && npm run build
 
 **`mypy` 는 여기 없다.** src 기준 127건이 남아 있어 지금 넣으면 항상 실패한다 —
 CI 게이트가 아닌 이유와 같다(`ci.yml` 머리말). 줄여 나가는 중이며 확인은
-`cd apps/<영역> && uv run --extra dev mypy .` 로 따로 한다.
+`cd apps/<영역> && uv run --extra dev mypy src` 로 따로 한다.
 
 **커버리지는 반대로 게이트다.** CI 는 위 명령에 `--cov` 를 붙여 돌리고 하한을 밑돌면 막는다.
 
