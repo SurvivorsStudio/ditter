@@ -1,0 +1,98 @@
+name: 버그 리포트
+description: 동작이 기대와 다를 때
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        로그·스크린샷을 붙일 때는 **실제 데이터와 접속 정보를 가린 뒤** 붙인다.
+        ditter 는 운영 DB 에 붙는 도구라 화면 캡처 한 장에 자격증명이 섞이기 쉽다.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 영역
+      description: 어디에서 일어났나. 모르면 「모르겠다」를 고른다.
+      options:
+        - api (apps/api — REST·WS·MCP)
+        - web (apps/web — SQL 콘솔·캔버스)
+        - worker (apps/worker — DAG 엔진·스케줄러·CDC Sink)
+        - connectors (apps/connectors — MySQL·PostgreSQL·MSSQL·MongoDB·S3·로컬파일)
+        - sap-connector (apps/sap-connector — SAP RFC 사이드카)
+        - AI 어시스턴트 (SQL 생성·튜닝·오류 수정 — Gemini·Bedrock·Ollama)
+        - cdc (Debezium·Kafka)
+        - sync (SymmetricDS 실시간 동기화)
+        - docs (문서)
+        - 인프라 (docker-compose·CI)
+        - 모르겠다
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 무슨 일이 일어났나
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: 어떻게 재현하나
+      description: 실행한 SQL·파이프라인 정의가 있으면 함께 적는다.
+      placeholder: |
+        1. 연결 관리에서 PostgreSQL 연결을 만든다
+        2. SQL 편집기에서 `...` 를 실행한다
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 기대한 동작
+    validations:
+      required: true
+
+  - type: dropdown
+    id: run-mode
+    attributes:
+      label: 실행 방식
+      options:
+        - docker compose (전체 기동)
+        - 로컬 개발 (uvicorn · npm run dev)
+        - 둘 다에서 재현된다
+        - 모르겠다
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: ditter 버전
+      description: 커밋 해시나 태그. `git rev-parse --short HEAD`
+      placeholder: c479462
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: OS / 브라우저
+      placeholder: macOS 15 / Chrome 141
+    validations:
+      required: true
+
+  - type: input
+    id: target-db
+    attributes:
+      label: 대상 DB 종류·버전
+      description: DB 에 붙는 동작에서 일어난 문제라면 적는다.
+      placeholder: PostgreSQL 16, MSSQL 2019
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 로그
+      description: api·worker 컨테이너 로그와 브라우저 콘솔이 가장 도움이 된다. **가린 뒤** 붙인다. 스크린샷은 위 「무슨 일이 일어났나」 칸에 붙인다 — 이 칸은 줄바꿈을 살리려고 글자 그대로 보여 주므로 이미지가 뜨지 않는다.
+      render: text

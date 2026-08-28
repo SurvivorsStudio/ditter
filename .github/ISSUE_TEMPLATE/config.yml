@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 보안 취약점을 발견했을 때
+    url: https://github.com/SurvivorsStudio/ditter/blob/main/SECURITY.md
+    about: 공개 이슈로 올리지 않는다. 신고 방법과 적을 내용은 SECURITY.md 에 있다.
+  - name: 설계 배경이 궁금할 때
+    url: https://github.com/SurvivorsStudio/ditter/blob/main/CLAUDE.md
+    about: 「왜 그렇게 했나」가 절별로 정리돼 있다. 각 절 끝의 「여기서 하지 않은 것」도 함께 본다.
+  - name: 로컬에서 직접 돌려보기
+    url: https://github.com/SurvivorsStudio/ditter/blob/main/demo/README.md
+    about: 쇼핑몰·WMS·고객센터 세 DB 를 로컬에 띄우는 시연용 스택.
