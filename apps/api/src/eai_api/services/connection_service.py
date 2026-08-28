@@ -252,7 +252,7 @@ def open_cached_connector(session: Session, conn: Connection) -> BaseConnector:
     if stale is not None:
         try:
             stale.close()
-        except Exception:  # noqa: BLE001 - 정리 실패는 삼킨다
+        except Exception:
             logger.warning("이전 커넥터 정리 실패: %s", conn.id, exc_info=True)
     return connector
 
@@ -270,7 +270,7 @@ def evict_connector(connection_id: str) -> None:
     if cached:
         try:
             cached[1].close()
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.warning("커넥터 evict 실패: %s", connection_id, exc_info=True)
 
 
@@ -567,7 +567,7 @@ def _count_total_sql(
             if batch.rows:
                 val = next(iter(batch.rows[0].values()))
                 return int(val) if val is not None else None
-    except Exception:  # noqa: BLE001 - 카운트는 부가 정보라 실패해도 무시
+    except Exception:
         logger.debug("전체 건수 COUNT 실패 (무시)", exc_info=True)
     return None
 
@@ -975,7 +975,7 @@ def _mongo_columns(rows: list[dict[str, Any]]) -> list[str]:
     columns: list[str] = []
     seen: set[str] = set()
     for r in rows:
-        for k in r.keys():
+        for k in r:
             if k not in seen:
                 seen.add(k)
                 columns.append(k)
@@ -998,7 +998,7 @@ def _count_total_mongo(
             )
         )
         return int(next(iter(res[0].values()))) if res else 0
-    except Exception:  # noqa: BLE001 - 카운트는 부가 정보라 실패해도 무시
+    except Exception:
         logger.debug("Mongo 전체 건수 계산 실패 (무시)", exc_info=True)
         return None
 

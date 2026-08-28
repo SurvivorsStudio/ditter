@@ -201,7 +201,11 @@ def test_chart_block_is_not_extracted_as_sql() -> None:
 
 
 def test_chart_intent_outputs_chart_block(monkeypatch) -> None:
-    spec = '```chart\n{"type":"bar","title":"공장별","labels":["V113"],"series":[{"name":"태그수","data":[3285]}]}\n```'
+    spec = (
+        '```chart\n'
+        '{"type":"bar","title":"공장별","labels":["V113"],'
+        '"series":[{"name":"태그수","data":[3285]}]}\n```'
+    )
     conn = _AiConnector(text=f"막대 차트로 표현했습니다.\n{spec}")
     _patch(monkeypatch, ai_conn=_Conn("gemini"), connector=conn)
     out = svc.chat(
