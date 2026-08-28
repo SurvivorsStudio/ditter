@@ -1,5 +1,5 @@
 # build context 는 저장소 루트 (connectors 를 함께 복사해야 하므로)
-FROM python:3.12-slim AS base
+FROM python:3.14-slim AS base
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

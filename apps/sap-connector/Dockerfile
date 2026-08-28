@@ -14,7 +14,7 @@
 # 목 백엔드는 512자 행폭·72자 OPTIONS 제약을 실제와 똑같이 재현하므로
 # 파이프라인 저작과 분할 로직 검증은 SDK 없이도 가능하다.
 
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 ARG WITH_NWRFC=0
 
