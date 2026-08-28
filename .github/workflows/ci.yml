@@ -6,6 +6,8 @@ on:
   push:
     branches: [main]
 
+# mypy(strict)는 아직 게이트가 아니다. src 기준 127건이 남아 있어(대부분 apps/api)
+# 지금 넣으면 CI 가 상시 빨갛다. 줄여 나가는 중이며 진행 상황은 이슈에서 추적한다.
 jobs:
   build-test:
     runs-on: ubuntu-latest
@@ -32,14 +34,26 @@ jobs:
       - name: Test connectors
         run: cd apps/connectors && uv run --extra dev pytest -q
 
+      - name: Lint connectors (ruff)
+        run: cd apps/connectors && uv run --extra dev ruff check .
+
       - name: Test sap-connector
         run: cd apps/sap-connector && uv run --extra dev pytest -q
+
+      - name: Lint sap-connector (ruff)
+        run: cd apps/sap-connector && uv run --extra dev ruff check .
 
       - name: Test api
         run: cd apps/api && uv run --extra dev pytest -q
 
+      - name: Lint api (ruff)
+        run: cd apps/api && uv run --extra dev ruff check .
+
       - name: Test worker
         run: cd apps/worker && uv run --extra dev pytest -q
+
+      - name: Lint worker (ruff)
+        run: cd apps/worker && uv run --extra dev ruff check .
 
       # ── Web (npm · vitest) ─────────────────────────────────────────────
       - name: Set up Node
@@ -51,3 +65,10 @@ jobs:
 
       - name: Test web
         run: cd apps/web && npm ci && npm test
+
+      - name: Lint web (eslint)
+        run: cd apps/web && npm run lint
+
+      # tsc -b 로 타입까지 본다 — 테스트만으로는 타입 오류가 드러나지 않는다.
+      - name: Build web (tsc + vite)
+        run: cd apps/web && npm run build
