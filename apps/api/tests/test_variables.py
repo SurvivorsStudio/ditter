@@ -377,3 +377,58 @@ class TestPythonContext:
     def test_sql_context_is_unchanged(self) -> None:
         out = substitute_params({"where": "id IN (${주문.id[]})"}, {"주문.id[]": [1, 2]})
         assert out["where"] == "id IN (1, 2)"
+
+
+class TestPythonControlChars:
+    """제어문자가 든 값도 유효한 Python 리터럴이 되어야 한다.
+
+    프런트 `canvas/variables.test.ts` 의 「제어문자」 사례와 **같은 값·같은 기대치**다.
+    한쪽만 고치면 "편집기에서는 되는데 실행하면 다르다"가 나므로 양쪽이 함께 깨져야 한다
+    (`variables.ts` 머리말의 전제).
+    """
+
+    def code(self, source: str, values: dict[str, object]) -> str:
+        return substitute_params({"code": source}, values)["code"]
+
+    def test_newline_is_escaped(self) -> None:
+        """따옴표 하나짜리 리터럴은 실제 줄바꿈을 담을 수 없다 — SyntaxError 다."""
+        out = self.code("N = [${주문.memo[]}]", {"주문.memo[]": ["a\nb"]})
+        assert out == "N = ['a\\nb']"
+        assert ast.literal_eval(out.split("= ")[1]) == ["a\nb"]
+
+    def test_carriage_return_and_tab(self) -> None:
+        assert self.code("N = [${주문.memo[]}]", {"주문.memo[]": ["line1\r\nline2"]}) == (
+            "N = ['line1\\r\\nline2']"
+        )
+        assert self.code("N = [${주문.memo[]}]", {"주문.memo[]": ["a\tb"]}) == "N = ['a\\tb']"
+
+    def test_unnamed_control_chars_use_hex(self) -> None:
+        """NUL 은 Python 소스에 아예 못 들어간다 — 이스케이프가 유일한 길이다."""
+        assert self.code("N = [${주문.memo[]}]", {"주문.memo[]": ["a\x00b"]}) == "N = ['a\\x00b']"
+        assert self.code("N = [${주문.memo[]}]", {"주문.memo[]": ["a\x1bb"]}) == "N = ['a\\x1bb']"
+
+    def test_backslash_is_doubled(self) -> None:
+        assert self.code("N = [${주문.p[]}]", {"주문.p[]": ["C:\\path"]}) == "N = ['C:\\\\path']"
+        # 값이 이미 `\n` 두 글자면 그대로 두 글자여야 한다 (줄바꿈으로 오해하지 않는다)
+        assert self.code("N = [${주문.p[]}]", {"주문.p[]": ["a\\nb"]}) == "N = ['a\\\\nb']"
+
+    def test_both_quote_kinds(self) -> None:
+        out = self.code("N = [${주문.t[]}]", {"주문.t[]": ["has \"dq\" and 'sq'"]})
+        assert out == """N = ['has "dq" and \\'sq\\'']"""
+        assert ast.literal_eval(out.split("= ")[1]) == ["has \"dq\" and 'sq'"]
+
+    def test_nonascii_invisible_differs_from_front_but_evaluates_the_same(self) -> None:
+        """**여기서 양쪽 표기가 갈린다** — 알고 두는 것이지 버그가 아니다.
+
+        `repr` 은 비ASCII 비출력 문자를 ``\\u200b`` 로 쓰지만 프런트는 원문 그대로 둔다.
+        그 글자는 리터럴 안에 그냥 있어도 유효한 Python 이라 **값은 같다.** 글자까지 맞추려면
+        유니코드 printable 표를 프런트에 복제해야 하는데, 그것이야말로 이 파일이 경계하는
+        「양쪽이 어긋난다」를 하나 더 만드는 일이다.
+
+        프런트의 같은 사례: `canvas/variables.test.ts` 의 「비ASCII 비출력 문자」.
+        """
+        out = self.code("N = [${주문.z[]}]", {"주문.z[]": ["a\u200bb"]})
+        assert out == "N = ['a\\u200bb']"          # 백엔드는 이스케이프한다
+        assert ast.literal_eval(out.split("= ")[1]) == ["a\u200bb"]
+        # 프런트가 내는 원문 그대로도 같은 값으로 읽힌다 — 그래서 안전하다
+        assert ast.literal_eval("['a\u200bb']") == ["a\u200bb"]
