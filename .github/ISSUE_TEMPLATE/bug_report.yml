@@ -17,8 +17,9 @@ body:
         - api (apps/api — REST·WS·MCP)
         - web (apps/web — SQL 콘솔·캔버스)
         - worker (apps/worker — DAG 엔진·스케줄러·CDC Sink)
-        - connectors (apps/connectors — MySQL·PostgreSQL·MSSQL·MongoDB·S3)
+        - connectors (apps/connectors — MySQL·PostgreSQL·MSSQL·MongoDB·S3·로컬파일)
         - sap-connector (apps/sap-connector — SAP RFC 사이드카)
+        - AI 어시스턴트 (SQL 생성·튜닝·오류 수정 — Gemini·Bedrock·Ollama)
         - cdc (Debezium·Kafka)
         - sync (SymmetricDS 실시간 동기화)
         - docs (문서)
@@ -53,17 +54,41 @@ body:
     validations:
       required: true
 
-  - type: textarea
-    id: env
+  - type: dropdown
+    id: run-mode
     attributes:
-      label: 환경
-      value: |
-        - OS / 브라우저:
-        - 실행 방식: docker compose / 로컬 개발
-        - ditter 커밋 또는 태그:
-        - 대상 DB 종류·버전: (예: PostgreSQL 16, MSSQL 2019)
+      label: 실행 방식
+      options:
+        - docker compose (전체 기동)
+        - 로컬 개발 (uvicorn · npm run dev)
+        - 둘 다에서 재현된다
+        - 모르겠다
     validations:
       required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: ditter 버전
+      description: 커밋 해시나 태그. `git rev-parse --short HEAD`
+      placeholder: c479462
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: OS / 브라우저
+      placeholder: macOS 15 / Chrome 141
+    validations:
+      required: true
+
+  - type: input
+    id: target-db
+    attributes:
+      label: 대상 DB 종류·버전
+      description: DB 에 붙는 동작에서 일어난 문제라면 적는다.
+      placeholder: PostgreSQL 16, MSSQL 2019
 
   - type: textarea
     id: logs

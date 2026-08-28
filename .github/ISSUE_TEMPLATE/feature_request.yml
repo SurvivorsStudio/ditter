@@ -17,12 +17,13 @@ body:
         - api (apps/api — REST·WS·MCP)
         - web (apps/web — SQL 콘솔·캔버스)
         - worker (apps/worker — DAG 엔진·스케줄러·CDC Sink)
-        - connectors (새 커넥터 / 기존 커넥터 개선)
-        - sap-connector (SAP RFC)
+        - connectors (apps/connectors — MySQL·PostgreSQL·MSSQL·MongoDB·S3·로컬파일)
+        - sap-connector (apps/sap-connector — SAP RFC 사이드카)
+        - AI 어시스턴트 (SQL 생성·튜닝·오류 수정 — Gemini·Bedrock·Ollama)
         - cdc (Debezium·Kafka)
-        - sync (SymmetricDS)
-        - AI 어시스턴트 (SQL 생성·튜닝·오류 수정)
+        - sync (SymmetricDS 실시간 동기화)
         - docs (문서)
+        - 인프라 (docker-compose·CI)
         - 여러 영역에 걸친다
     validations:
       required: true

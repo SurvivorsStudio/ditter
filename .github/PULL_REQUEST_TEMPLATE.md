@@ -31,11 +31,12 @@ cd apps/web && npm test && npm run lint && npm run build
 - [ ] 브랜치명이 `feature/`·`fix/`·`bug/` 로 시작한다 (§4)
 - [ ] 새 커넥터·새 노드를 추가했다면 **단위 테스트를 함께** 넣었다 (CLAUDE.md §11)
 - [ ] 설계 결정이 바뀌었다면 `CLAUDE.md`·`docs/` 를 함께 갱신했다
-- [ ] **시크릿·자격증명이 코드·로그·테스트 픽스처에 남지 않았다** (§11)
+- [ ] **시크릿·자격증명이 코드·로그·테스트 픽스처에 남지 않았다** (CLAUDE.md §11)
 
 <!-- 아래는 해당할 때만 -->
 
-- [ ] 읽기 전용 경계(`ensure_statement_allowed`·`ensure_select_only`)를 건드렸다 — **2인 리뷰 필요**
+- [ ] 읽기 전용 경계(`ensure_statement_allowed`·`ensure_select_only`)를 건드렸다
+      — **리뷰어에게 이 사실을 명시**한다. 이 저장소에서 되돌리기 가장 어려운 경계다
 - [ ] 메타DB 스키마를 바꿨다 — Alembic 마이그레이션을 포함했고 `alembic upgrade head` 를 돌려봤다
 - [ ] 프런트·백엔드 **양쪽에 같은 상수**가 있는 것을 고쳤다 (`SQL_STATEMENTS`·`DUCK_TYPES`·`SYNC_CHANNELS`, 그리고 백엔드 `rbac.py` 의 `_IMPLIES` ↔ 프런트 `auth.can()`)
       — 한쪽만 고치면 화면과 서버가 어긋난다
