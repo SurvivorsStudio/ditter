@@ -5,8 +5,8 @@ digraph G {
   graph [fontname="Noto Sans CJK KR", fontsize=12, nodesep=0.4, ranksep=0.6];
 
   trigger [label="트리거\nCron / 수동 / 이벤트", fillcolor="#ffedd5", color="#fdba74"];
-  main [label="Main (Orchestrator)\n· DAG 파싱\n· 실행 인스턴스 생성\n· Job enqueue", fillcolor="#fed7aa", color="#fb923c"];
-  redis [label="Redis Queue\n(대기 실행 큐)", shape=cylinder, fillcolor="#fee2e2", color="#fca5a5"];
+  main [label="API 안의 Orchestrator\n· DAG 파싱\n· 실행 인스턴스 생성\n· Job enqueue", fillcolor="#fed7aa", color="#fb923c"];
+  redis [label="Redis\n큐 + 이벤트 버스", shape=cylinder, fillcolor="#fee2e2", color="#fca5a5"];
 
   subgraph cluster_w {
     label="Worker Pool (수평 확장)"; style="rounded,filled"; fillcolor="#eef2ff"; color="#c7d2fe"; fontcolor="#3730a3"; fontname="Noto Sans CJK KR";
@@ -15,12 +15,15 @@ digraph G {
     w3 [label="Worker N", fillcolor="#c7d2fe", color="#818cf8"];
   }
 
-  meta [label="Metadata DB\n실행상태·로그·체크포인트", shape=cylinder, fillcolor="#fef9c3", color="#fde047"];
+  meta [label="Metadata DB\n실행상태·로그·체크포인트\n(진실의 원천)", shape=cylinder, fillcolor="#fef9c3", color="#fde047"];
   ws [label="WebSocket\n실시간 진행상황 push", fillcolor="#d1fae5", color="#6ee7b7"];
 
   trigger -> main -> redis;
   redis -> w1; redis -> w2; redis -> w3;
   w1 -> meta [style=dashed]; w2 -> meta [style=dashed]; w3 -> meta [style=dashed];
   main -> meta [style=dashed];
-  meta -> ws -> main [style=dotted, constraint=false, label="UI 반영"];
+  w1 -> redis [style=dotted, constraint=false, label="publish"];
+  w2 -> redis [style=dotted, constraint=false];
+  w3 -> redis [style=dotted, constraint=false];
+  redis -> ws [style=dotted, label="pubsub"];
 }
