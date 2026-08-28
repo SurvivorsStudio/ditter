@@ -19,7 +19,7 @@
 | sync | `sync/` | 설정(SymmetricDS) |
 | docs | `docs/` · `README.md` · `CLAUDE.md` | — |
 
-- 위 영역 **밖**(루트 설정 파일·`.claude/`·`.github/`·`docker-compose.yml`·`참고용/`)은 그 목적
+- 위 영역 **밖**(루트 설정 파일·`.claude/`·`.github/`·`docker-compose.yml`)은 그 목적
   하나로 **별도 커밋**한다.
 - **의존 순서**: `apps/connectors/` 는 `apps/api/`·`apps/worker/` 가 의존하는 공유 패키지다. 커넥터
   계약을 바꾸면서 소비 측도 함께 고쳤다면 **커넥터 커밋을 소비 측 커밋보다 먼저** 올린다.
