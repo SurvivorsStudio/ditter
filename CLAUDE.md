@@ -2,7 +2,8 @@
 
 > 이 문서는 **Claude Code**가 이 프로젝트를 이해하고 구현하도록 돕는 최상위 컨텍스트 파일입니다.
 > 저장소 루트에 `CLAUDE.md`로 두면 Claude Code가 자동으로 읽어 들입니다.
-> 상세 아키텍처는 `docs/EAI_아키텍처_설계문서.docx`, UI 레퍼런스는 `docs/mockups/*.html`를 참고하세요.
+> 상세 아키텍처는 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), UI 레퍼런스는 `docs/mockups/*.html`를 참고하세요.
+> 원본 기획 문서(`docs/EAI_아키텍처_설계문서.docx` · `.pdf`)는 부록입니다 — 바이너리라 diff 가 되지 않습니다.
 
 ---
 
@@ -51,7 +52,8 @@ eai-platform/
 ├── CLAUDE.md                      # 이 파일
 ├── docker-compose.yml             # 로컬/EC2 단일노드 실행
 ├── docs/
-│   ├── EAI_아키텍처_설계문서.docx
+│   ├── ARCHITECTURE.md            # 구조·실행 모델·커넥터 계약 (설계의 진실)
+│   ├── EAI_아키텍처_설계문서.docx  # 원본 기획 (부록)
 │   └── mockups/                   # UI 레퍼런스 (HTML)
 ├── apps/
 │   ├── api/                       # FastMCP + FastAPI 백엔드
@@ -221,25 +223,34 @@ WS     /runs/{id}/stream           # 실시간 로그/진행률
 > 이 절은 **`README.md` 「빠른 시작」·「테스트 · 품질」과 `.github/workflows/ci.yml` 을 따른다.**
 > 셋이 갈라지면 낡은 쪽은 여기다 — 실제로 도는 것은 CI 뿐이므로 거기를 진실로 본다.
 
+파이썬 명령은 전부 **`uv run`** 을 거친다. `uv run` 은 그 디렉터리의 프로젝트 환경을 알아서
+잡아(없으면 만들고 의존성을 맞춘 뒤) 그 안에서 실행하므로, **venv 를 활성화하지 않은 셸에
+그대로 붙여 넣어도 돈다.** 아래 「테스트·린트」의 경고와 같은 이유다 — 맨 이름으로 부르면
+없거나 다른 것이 잡힌다.
+
 ```bash
 # 전체 로컬 기동
 docker compose up -d
 
 # 백엔드
-cd apps/api && alembic upgrade head && uvicorn eai_api.main:app --reload
+cd apps/api && uv run alembic upgrade head && uv run uvicorn eai_api.main:app --reload
 
 # 워커 (Celery 앱은 celery_app.py 에 있다. 태스크는 autodiscover 로 붙는다)
-celery -A eai_worker.celery_app:app worker -l info -Q eai.default
-python -m eai_worker.scheduler
+cd apps/worker && uv run celery -A eai_worker.celery_app:app worker -l info -Q eai.default
+cd apps/worker && uv run python -m eai_worker.scheduler
 
 # 프론트엔드
 cd apps/web && npm install && npm run dev
 
 # DB 마이그레이션
-cd apps/api && alembic upgrade head
+cd apps/api && uv run alembic upgrade head
 ```
 
-테스트·린트는 **`uv run --extra dev`** 를 거친다. `pytest`·`ruff`·`mypy` 는
+> README 「빠른 시작」의 로컬 개발 절은 같은 명령을 **맨 이름으로** 적는다. 그쪽은 루트에
+> `uv venv` 로 만든 환경을 **활성화한 셸**을 전제한 형태이고, 위는 활성화 없이도 도는 형태다.
+> 결과는 같다 — 붙여 넣어 바로 돌리려면 위를 쓴다.
+
+테스트·린트도 같은 방식이되 **`--extra dev`** 가 붙는다. `pytest`·`ruff`·`mypy` 는
 `[project.optional-dependencies].dev` 에 있어 `uv sync` 만으로는 설치되지 않고,
 venv 를 활성화하지 않은 셸에서 맨 이름으로 부르면 없거나 **다른 것이 잡힌다.**
 `<영역>` 은 `connectors`·`api`·`worker`·`sap-connector`.

@@ -16,8 +16,10 @@
   **로컬 오픈웨이트 모델(Ollama)** 로 상용 API 없이 돌아간다. Gemini·Bedrock 은 선택지 중 하나다.
 - **MCP** — 모든 기능을 MCP tool 로 노출해, UI 와 LLM/에이전트가 **같은 서비스 계층**을 재사용한다.
 
-상세 설계는 [docs/EAI_아키텍처_설계문서.pdf](docs/EAI_아키텍처_설계문서.pdf),
+상세 설계는 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
 구현 가이드는 [CLAUDE.md](CLAUDE.md)를 참고.
+원본 기획 문서([docx](docs/EAI_아키텍처_설계문서.docx) · [pdf](docs/EAI_아키텍처_설계문서.pdf))는
+**부록**으로 남는다 — 바이너리라 diff 도 리뷰도 되지 않는다.
 
 ---
 

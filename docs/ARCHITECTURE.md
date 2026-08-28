@@ -29,7 +29,7 @@ ditter 가 어떻게 짜여 있고, **왜 그렇게 됐는지**. 코드를 읽�
 
 ```
 apps/
-  api/             FastAPI(REST·WS) + FastMCP.  메타DB 의 유일한 주인
+  api/             FastAPI(REST·WS) + FastMCP.  메타DB 스키마·마이그레이션의 주인
   worker/          Celery.  파이프라인 실행 엔진
   connectors/      공유 커넥터 라이브러리 — api·worker 양쪽이 쓴다
   sap-connector/   NW RFC SDK 사이드카 (라이선스 바이너리 격리)
@@ -78,6 +78,13 @@ api  <──────────────[worker 가 eai-api 패키지를
 않아 대용량에서 메모리가 상수로 유지된다.
 
 ![파이프라인 실행](diagrams/d2_pipeline.png)
+
+> 이 그림은 **진행률이 화면에 닿는 경로가 실제와 다르다.** 그림은 메타DB 에서
+> WebSocket 으로 화살표를 그렸지만, 실제로는 워커가 Redis Pub/Sub 로 publish 하고
+> ([`services/events.py`](../apps/api/src/eai_api/services/events.py)) API 의 WebSocket 이 구독해
+> 밀어 준다. 그 구분이 중요하다 — **이벤트는 부가 채널이고 진실의 원천은 언제나 메타DB 다.**
+> 구독자가 없어 이벤트를 놓쳐도 UI 는 REST 폴백으로 같은 상태를 복원한다. 그림은 이 둘을 뒤집어
+> 놓았다. `Main (Orchestrator)` 도 별도 프로세스가 아니라 api 안이다.
 
 ### 이 모델이 만드는 결과들
 
@@ -206,12 +213,6 @@ User         email · password_hash(Argon2id) · role · external_id
 동기화 경로는 **구현은 끝났지만 실환경 검증 전이고, 트리거 기반이라 운영 적용 전 부하 테스트가
 게이트다.** 착수 점검(`sync_service.preflight`)이 그 게이트를 코드로 강제한다 — 다만 부하 테스트
 여부는 코드가 판정할 수 없어 경고로만 알린다.
-
-![원본 기획의 수집 경로 — ① 배치 ② SAP RFC ③ CDC(Debezium)](diagrams/d3_ingestion.png)
-
-> 이 그림이 나누는 셋은 위 표와 **기준이 다르다.** 그림은 원본 기획의 「무엇에서 읽는가」
-> (배치 · SAP · CDC)이고, 위 표는 「변경을 어떻게 잡는가」(배치 · CDC · 동기화)다.
-> SymmetricDS 는 그림보다 나중에 붙어 여기 없다.
 
 ---
 
