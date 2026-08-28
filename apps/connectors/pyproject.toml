@@ -7,12 +7,12 @@ requires-python = ">=3.12"
 dependencies = [
     # FastMCP 와 마찬가지로 상위 호환 파손을 막기 위해 상한을 고정한다 (설계 문서 §2 주의사항)
     "sqlalchemy>=2.0.36,<2.1",
-    "pymysql>=1.1.1,<1.2",
+    "pymysql>=1.1.1,<1.3",
     "psycopg[binary]>=3.2.3,<3.3",
     "pyodbc>=5.2.0,<6",
     "pymongo>=4.10.1,<5",
     "urllib3>=2.2.3,<3",
-    "boto3>=1.35.60,<1.36",
+    "boto3>=1.35.60,<1.44",
     "pyarrow>=18.0.0,<19",
     # AI 커넥터(Gemini 등)의 REST 호출용. 지연 임포트라 그 커넥터를 만들 때만 로드된다.
     "httpx>=0.28,<0.29",
