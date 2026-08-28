@@ -1,0 +1,61 @@
+# 의존성 자동 갱신. 주 1회 PR 로 올라온다.
+#
+# 이관(dba5a94) 때 이 파일이 사라져 한동안 갱신이 멈춰 있었다. 그때 원본은 Node 단일 스택
+# 시절이라 대상이 `/`·`/backend`·`/frontend` 였고, 지금 구조에는 그런 경로가 없다.
+# 아래 경로는 전부 실제 매니페스트 위치를 확인해 적었다 — 경로가 틀리면 Dependabot 은
+# 오류를 내지 않고 그냥 아무것도 하지 않는다.
+version: 2
+updates:
+  # ── 프런트엔드 (npm) ──────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /apps/web
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # 자잘한 갱신으로 PR 이 흩어지지 않게 묶는다. 보안 갱신은 그룹과 무관하게 별도로 온다.
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+      prod-dependencies:
+        dependency-type: production
+        update-types: [minor, patch]
+
+  # ── Python 앱 (uv) ────────────────────────────────────────────────────
+  # `pip` 이 아니라 `uv` 다 — 이 저장소는 uv.lock 을 쓴다.
+  # connectors 는 api·worker 가 의존하는 공유 라이브러리라 여기가 먼저 깨지면 양쪽에서 드러난다.
+  - package-ecosystem: uv
+    directories:
+      - /apps/connectors
+      - /apps/api
+      - /apps/worker
+      - /apps/sap-connector
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      python-dev:
+        dependency-type: development
+        update-types: [minor, patch]
+      python-prod:
+        dependency-type: production
+        update-types: [minor, patch]
+
+  # ── CI 액션 ───────────────────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  # ── 컨테이너 베이스 이미지 ────────────────────────────────────────────
+  # demo/ 는 시연 전용이라 제외한다 — 갱신 PR 이 늘어날 뿐 운영에 영향이 없다.
+  - package-ecosystem: docker
+    directories:
+      - /apps/api
+      - /apps/worker
+      - /apps/web
+      - /apps/sap-connector
+      - /sync/symmetricds
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
