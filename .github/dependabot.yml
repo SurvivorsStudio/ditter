@@ -4,6 +4,12 @@
 # 시절이라 대상이 `/`·`/backend`·`/frontend` 였고, 지금 구조에는 그런 경로가 없다.
 # 아래 경로는 전부 실제 매니페스트 위치를 확인해 적었다 — 경로가 틀리면 Dependabot 은
 # 오류를 내지 않고 그냥 아무것도 하지 않는다.
+#
+# 이 파일을 고칠 때 반드시 기억할 것 하나: **`groups` 의 `update-types` 는 갱신을 막지
+# 않는다.** 그것은 "이 묶음 PR 에 무엇을 담을지"만 정하고, 담기지 못한 갱신은 사라지는
+# 것이 아니라 **개별 PR 로 흩어져 다시 온다.** 실제로 막으려면 `ignore` 를 써야 한다.
+# 근거는 이 저장소의 첫 주기다 — npm 두 그룹에 `update-types: [minor, patch]` 가 있었는데도
+# #57(@types/node 22→26)·#58(vitest 3→4)·#59(typescript 5→7) 이 각각 따로 올라왔다.
 version: 2
 updates:
   # ── 프런트엔드 (npm) ──────────────────────────────────────────────────
@@ -20,24 +26,29 @@ updates:
       prod-dependencies:
         dependency-type: production
         update-types: [minor, patch]
-    # 아래 셋은 **메이저만** 뺀다. 마이너·패치는 위 그룹으로 그대로 온다.
-    # 세 건 모두 "이것 하나만 올리면 안 되는" 것들이라 갱신이 아니라 결정이다.
+    # 아래 넷은 **메이저만** 뺀다. 마이너·패치는 위 그룹으로 그대로 온다.
+    # 넷 모두 "이것 하나만 올리면 안 되는" 것들이라 갱신이 아니라 결정이다.
     #
     # 되돌릴 때 주의: 이 항목들을 지우는 것만으로는 갱신이 돌아오지 않는다. 정리하던 중
-    # 해당 PR 에 `@dependabot ignore this major version` 코멘트도 함께 보냈고, 그쪽은
+    # #57·#58·#59 에 `@dependabot ignore this major version` 코멘트도 함께 보냈고, 그쪽은
     # 저장소에 보이지 않는 Dependabot 내부 상태다. `@dependabot unignore ...` 를 함께
     # 보내야 한다 — 안 그러면 설정은 고쳤는데 PR 만 안 오는, 원인을 못 찾는 상태가 된다.
     ignore:
       # vitest 는 자체 vite 를 번들한다 — vite 메이저와 맞춰야 타입이 충돌하지 않는다
       # (CLAUDE.md §14, 지금은 vite 6 ↔ vitest 3). 둘을 함께 올리는 것은 #68.
+      # **짝이므로 양쪽 다 뺀다.** 한쪽만 잠그면 반대쪽이 단독 메이저 PR 로 올라와
+      # 같은 짝을 반대 방향에서 깬다 — 잠그는 의미가 없어진다.
       - dependency-name: vitest
+        update-types: [version-update:semver-major]
+      - dependency-name: vite
         update-types: [version-update:semver-major]
       # @types/node 가 하는 일은 "이 런타임에 무엇이 있는가"를 tsc 에 알려 주는 것이다.
       # 런타임보다 앞서면 Node 26 에만 있는 API 를 tsc 가 통과시키고 컨테이너에서 터진다 —
       # `apps/web/Dockerfile` 은 node:22-alpine 이다. 함께 올리는 것은 #69.
+      # 짝인 node 베이스 이미지도 아래 docker 항목에서 함께 잠갔다.
       - dependency-name: "@types/node"
         update-types: [version-update:semver-major]
-      # TypeScript 메이저는 갱신이 아니라 이관이다. `npm run build`(tsc) 가 CI 게이트라
+      # TypeScript 메이저는 갱신이 아니라 이관이다. `npm run build`(tsc -b) 가 CI 게이트라
       # 컴파일러를 바꾸면 그 자리에서 드러난다 (#59 가 그렇게 실패했다).
       - dependency-name: typescript
         update-types: [version-update:semver-major]
@@ -64,17 +75,41 @@ updates:
       python:
         patterns: ["*"]
         update-types: [minor, patch]
-    # celery·redis 는 **api 와 worker 양쪽에** 있는데 Dependabot 은 두 uv 프로젝트를 따로
-    # 갱신한다. 그래서 한쪽만 올린 PR 이 온다 — #60 은 api 를 celery 5.4.0 → 5.6.3 으로
+    # celery·redis 는 api·worker 두 프로젝트에 함께 얹히는데 Dependabot 은 두 uv 프로젝트를
+    # 따로 갱신한다. 그래서 한쪽만 올린 PR 이 온다 — #60 은 api 를 celery 5.4.0 → 5.6.3 으로
     # 올리면서 worker 는 5.4.0 에 그대로 두었다. 그 둘은 Redis 큐로만 통신하는데(CLAUDE.md
     # §14) `ci.yml` 은 api·worker 를 각각 pytest 로 돌릴 뿐 **같이 띄우지 않아** 스큐를
     # 잡지 못한다. 초록불이 나는데 실환경에서만 어긋나는 모양이다.
     #
+    # 선언 위치가 둘이 다르다. celery 는 양쪽에 직접 있다 —
+    # `apps/api/pyproject.toml` 의 `celery>=5.4.0,<5.5`, `apps/worker/pyproject.toml` 의
+    # `celery[redis]>=5.4.0,<5.5`. redis 를 **직접** 적은 곳은 api(`redis>=5.2.0,<6`) 뿐이고
+    # worker 는 `celery[redis]` extra 로 딸려 받는다. 그래도 잠금 파일에는 양쪽 다 들어가
+    # (지금 둘 다 5.3.1) 어긋날 수 있으므로 제외 대상은 그대로 둘이다.
+    #
+    # 그 핀이 막아 주지 않는다는 것도 확인됐다 — #62 는 `<6` 을 넘겨 redis 5.3.1 → 8.1.0 을
+    # 제안했다. Dependabot 은 필요하면 pyproject 의 제약 자체를 넓힌다.
+    #
+    # **메이저·마이너만** 뺀다. 패치는 그대로 받는다 — celery·redis 의 보안 수정 상당수가
+    # 패치 릴리스로 나오고, 패치 스큐(5.4.0 ↔ 5.4.1)는 5.4 ↔ 5.6 스큐보다 위험이 훨씬 낮다.
+    #
+    # 주의: `ignore` 는 버전 갱신뿐 아니라 **보안 갱신에도 적용된다.** 범위를 좁혀도
+    # 마이너·메이저로 나오는 보안 수정은 여전히 막힌다. 지금 이 저장소는
+    # `automated-security-fixes` 가 enabled=false 라 당장 영향이 없다(취약점 알림 자체는 켜져
+    # 있다) — **그것을 켜기 전에 이 항목을 다시 본다.** 위 16행·아래 한도 주석이 "보안 갱신은
+    # 그룹·한도의 예외"라고 말하는데, `ignore` 는 그 예외에 들지 않는다.
+    #
     # 빼 두면 나머지(fastapi·sqlalchemy·alembic·boto3…)는 그대로 그룹 PR 로 온다.
     # 되돌리는 조건은 #67 — 양쪽 핀을 함께 올리고 실제로 같이 띄워 확인한 뒤다.
+    # 되돌릴 때 둘의 절차가 다르다: **redis 는 #62 에 `@dependabot ignore this major version`
+    # 코멘트가 남아 있어** 설정을 지우는 것만으로는 돌아오지 않는다(`@dependabot unignore
+    # redis` 를 함께 보낸다). **celery 는 그룹 PR #60 안에 있어 닫기만 했고 코멘트가 없다** —
+    # 설정만 지우면 된다.
     ignore:
       - dependency-name: celery
+        update-types: [version-update:semver-minor, version-update:semver-major]
       - dependency-name: redis
+        update-types: [version-update:semver-minor, version-update:semver-major]
 
   # ── CI 액션 ───────────────────────────────────────────────────────────
   - package-ecosystem: github-actions
@@ -104,13 +139,29 @@ updates:
     groups:
       base-images:
         patterns: ["*"]
-        # 베이스 이미지 **메이저는 런타임 승격**이라 의존성 갱신이 아니라 결정이다.
-        # 이게 빠져 있어서 #54 가 python:3.12 → 3.14 · node:22 → 25 를 담아 왔다.
-        # 그리고 `ci.yml` 은 `docker build` 를 하지 않는다 — pytest·vitest·ruff·eslint·
-        # `npm run build` 만 러너의 Python 3.12 위에서 돌아, 그 PR 의 초록불은 바뀐 베이스
-        # 이미지를 **한 번도 건드리지 않은 결과**였다. 승격은 #70(python)·#69(node) 에서
-        # 휠·빌드를 직접 확인하고 다룬다.
+        # 이 줄은 **차단이 아니라 묶음 분리다** (파일 머리말 참조). 메이저 갱신을 이 묶음
+        # PR 에서 빼낼 뿐이고, 빠진 것은 개별 PR 로 다시 온다. 실제 차단은 아래 `ignore` 다.
+        # 남겨 두는 이유는 그래도 묶음의 뜻이 「런타임 승격이 아닌 갱신」으로 좁혀지기
+        # 때문이다 — 여기 없는 이미지(nginx)의 메이저는 개별 PR 로 와서 눈에 띈다.
         update-types: [minor, patch]
+    # 실제 차단. 베이스 이미지 승격은 의존성 갱신이 아니라 결정이고, `ci.yml` 은
+    # `docker build` 를 하지 않는다 — pytest·vitest·ruff·eslint·`npm run build` 만 러너의
+    # Python 3.12 · Node 22 위에서 돌아, #54 의 초록불은 바뀐 베이스 이미지를 **한 번도
+    # 건드리지 않은 결과**였다. 검증하지 못하는 갱신은 받지 않는다.
+    ignore:
+      # python 은 **마이너까지** 뺀다. 3.12 → 3.14 는 semver 상 메이저가 아니다 —
+      # 첫 자리 3 이 그대로라 Dependabot 이 마이너로 센다. 그래서 위 그룹의
+      # `[minor, patch]` 로는 걸러지지 않고, `semver-major` 만 빼도 그대로 통과한다.
+      # #54 가 담아 온 것이 정확히 그 갱신이다(python:3.12-slim → 3.14-slim ×3).
+      # 태그를 마이너까지만 적으므로(`3.12-slim`) 결과적으로 python PR 은 오지 않는다 —
+      # 의도한 상태다. 승격은 #70 에서 휠·빌드를 직접 확인하고 사람이 올린다.
+      - dependency-name: python
+        update-types: [version-update:semver-minor, version-update:semver-major]
+      # node 22 → 25 는 진짜 메이저다(#54). `apps/web/Dockerfile` 의 node 메이저는
+      # devDependencies 의 @types/node 와 짝이라 한쪽만 올릴 수 없다 — 위 npm 항목에서
+      # @types/node 메이저를 뺀 것과 같은 이유다. 되돌리는 조건은 #69.
+      - dependency-name: node
+        update-types: [version-update:semver-major]
     # `directories` 와 `groups` 를 함께 쓰면 PR 은 디렉터리마다 하나가 아니라
     # **디렉터리를 가로질러 하나**로 묶인다. 첫 주기에 확인됐다 — #54 의 제목이
     # 「bump the base-images group **across 4 directories** with 3 updates」였다.
