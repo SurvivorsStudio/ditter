@@ -218,24 +218,40 @@ WS     /runs/{id}/stream           # 실시간 로그/진행률
 
 ## 12. 개발 명령어 (참고)
 
+> 이 절은 **`README.md` 「빠른 시작」·「테스트 · 품질」과 `.github/workflows/ci.yml` 을 따른다.**
+> 셋이 갈라지면 낡은 쪽은 여기다 — 실제로 도는 것은 CI 뿐이므로 거기를 진실로 본다.
+
 ```bash
 # 전체 로컬 기동
 docker compose up -d
 
 # 백엔드
-cd apps/api && uv sync && uvicorn eai_api.main:app --reload
-cd apps/api && pytest && ruff check . && mypy .
+cd apps/api && alembic upgrade head && uvicorn eai_api.main:app --reload
 
-# 워커
-cd apps/worker && celery -A eai_worker.tasks worker -l info
+# 워커 (Celery 앱은 celery_app.py 에 있다. 태스크는 autodiscover 로 붙는다)
+celery -A eai_worker.celery_app:app worker -l info -Q eai.default
+python -m eai_worker.scheduler
 
 # 프론트엔드
-cd apps/web && pnpm i && pnpm dev
-cd apps/web && pnpm test && pnpm lint
+cd apps/web && npm install && npm run dev
 
 # DB 마이그레이션
 cd apps/api && alembic upgrade head
 ```
+
+테스트·린트는 **`uv run --extra dev`** 를 거친다. `pytest`·`ruff`·`mypy` 는
+`[project.optional-dependencies].dev` 에 있어 `uv sync` 만으로는 설치되지 않고,
+venv 를 활성화하지 않은 셸에서 맨 이름으로 부르면 없거나 **다른 것이 잡힌다.**
+`<영역>` 은 `connectors`·`api`·`worker`·`sap-connector`.
+
+```bash
+cd apps/<영역> && uv run --extra dev pytest -q && uv run --extra dev ruff check .
+cd apps/web && npm test && npm run lint && npm run build
+```
+
+**`mypy` 는 여기 없다.** src 기준 127건이 남아 있어 지금 넣으면 항상 실패한다 —
+CI 게이트가 아닌 이유와 같다(`ci.yml` 머리말). 줄여 나가는 중이며 확인은
+`cd apps/<영역> && uv run --extra dev mypy .` 로 따로 한다.
 
 ---
 
