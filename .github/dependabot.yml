@@ -1,0 +1,87 @@
+# 의존성 자동 갱신. 주 1회 PR 로 올라온다.
+#
+# 이관(dba5a94) 때 이 파일이 사라져 한동안 갱신이 멈춰 있었다. 그때 원본은 Node 단일 스택
+# 시절이라 대상이 `/`·`/backend`·`/frontend` 였고, 지금 구조에는 그런 경로가 없다.
+# 아래 경로는 전부 실제 매니페스트 위치를 확인해 적었다 — 경로가 틀리면 Dependabot 은
+# 오류를 내지 않고 그냥 아무것도 하지 않는다.
+version: 2
+updates:
+  # ── 프런트엔드 (npm) ──────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /apps/web
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # 자잘한 갱신으로 PR 이 흩어지지 않게 묶는다. 보안 갱신은 그룹과 무관하게 별도로 온다.
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+      prod-dependencies:
+        dependency-type: production
+        update-types: [minor, patch]
+
+  # ── Python 앱 (uv) ────────────────────────────────────────────────────
+  # `pip` 이 아니라 `uv` 다 — 이 저장소는 uv.lock 을 쓴다.
+  # connectors 는 api·worker 가 의존하는 공유 라이브러리라 여기가 먼저 깨지면 양쪽에서 드러난다.
+  - package-ecosystem: uv
+    directories:
+      - /apps/connectors
+      - /apps/api
+      - /apps/worker
+      - /apps/sap-connector
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # npm 과 달리 여기서는 개발/운영을 나누지 않는다. 개발 도구(pytest·ruff·mypy)가
+      # `[project.optional-dependencies].dev` 에 있는데, Dependabot 의 uv 파서는 그 자리를
+      # 개발용으로 표시하지 않아 전부 **production 으로 읽는다.** 그래서 `dependency-type:
+      # development` 그룹을 두면 아무것도 담기지 않고 조용히 비어 있게 된다.
+      # 나누려면 dev 도구를 PEP 735 `[dependency-groups]` 로 옮겨야 하고, 그러면
+      # `uv run --extra dev` 를 쓰는 CI·README·CONTRIBUTING 도 함께 바뀐다 — 별도 작업이다.
+      python:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  # ── CI 액션 ───────────────────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  # ── 컨테이너 베이스 이미지 ────────────────────────────────────────────
+  # demo/ 는 시연 전용이라 제외한다 — 갱신 PR 이 늘어날 뿐 운영에 영향이 없다.
+  #
+  # `sync/symmetricds` 도 여기 없다. 그 Dockerfile 은 `ARG SYMMETRIC_VERSION=3.15` 를 두고
+  # `FROM jumpmind/symmetricds:${SYMMETRIC_VERSION}` 으로 쓰는데, Dependabot 은 FROM 의 빌드
+  # 변수를 풀지 못한다(dependabot-core#2057, 2020년부터 open). 적어 두면 갱신되고 있다고
+  # **믿게 만들 뿐** 실제로는 PR 이 오지 않는다 — 그게 빠져 있는 것보다 나쁘다.
+  # 태그를 리터럴로 박은 뒤에 이 목록에 넣는다(별도 이슈).
+  - package-ecosystem: docker
+    directories:
+      - /apps/api
+      - /apps/worker
+      - /apps/web
+      - /apps/sap-connector
+    schedule:
+      interval: weekly
+    # 디렉터리 4개의 베이스 이미지를 한 PR 로 묶는다. 실측 이미지는 5개인데
+    # (python:3.12-slim ×3 · node:22-alpine · nginx:1.27-alpine) 디렉터리는 4개다 —
+    # 묶지 않으면 이미지마다 흩어져 최대 5개의 PR 이 된다.
+    groups:
+      base-images:
+        patterns: ["*"]
+    # `directories` 와 `groups` 를 함께 쓰면 PR 은 디렉터리마다 하나가 아니라
+    # **디렉터리를 가로질러 하나**로 묶인다. 근거는 이 저장소의 과거 그룹 PR 제목 형식이다
+    # (#28 「across 1 directory」 · #15 「in the prod-dependencies group across 1 directory」).
+    # 여기서는 「across 4 directories」로 나올 것으로 본다 — **아직 확인하지 못했다.**
+    # 머지 후 첫 주기의 실제 PR 제목으로 확정된다.
+    #
+    # 그래서 한도 5 는 「4개가 열리니까 넉넉히」가 아니라, 나중에 이 그룹을 좁히거나
+    # 되돌릴 때를 위한 여유다. 보안 갱신은 애초에 이 한도를 따르지 않는다.
+    # 한도를 넘긴 갱신은 큐에 쌓이지 않고 **그냥 건너뛴다** — 열린 PR 을 머지하기
+    # 전까지 나머지는 오지 않는다. 그룹을 풀면 python 베이스가 올라가는 주에
+    # api·worker·sap-connector 세 건이 자리를 채워 web 의 node·nginx 가 조용히 빠진다.
+    # 위 symmetricds 와 같은 실패 모양(오지 않는데 오는 것처럼 보인다)이라 넉넉한 쪽으로 둔다.
+    open-pull-requests-limit: 5
