@@ -27,7 +27,7 @@ import types
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Protocol
 
@@ -436,8 +436,6 @@ def _report_metrics(counts: dict[str, int], last_ts: dict[str, int]) -> None:
     """
     if not counts:
         return
-    from datetime import datetime
-
     from eai_api.db import session_scope
     from eai_api.models import CdcStream
 
