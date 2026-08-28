@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 설계 배경이 궁금할 때
+    url: https://github.com/SurvivorsStudio/ditter/blob/main/CLAUDE.md
+    about: 「왜 그렇게 했나」가 절별로 정리돼 있다. 각 절 끝의 「여기서 하지 않은 것」도 함께 본다.
+  - name: 로컬에서 직접 돌려보기
+    url: https://github.com/SurvivorsStudio/ditter/blob/main/demo/README.md
+    about: 쇼핑몰·WMS·고객센터 세 DB 를 로컬에 띄우는 시연용 스택.

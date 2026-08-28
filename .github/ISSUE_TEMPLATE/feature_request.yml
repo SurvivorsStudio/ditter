@@ -1,0 +1,61 @@
+name: 기능 제안
+description: 새 기능이나 개선 제안
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        [CLAUDE.md](https://github.com/SurvivorsStudio/ditter/blob/main/CLAUDE.md) 의 각 절 끝에는 **「여기서 하지 않은 것」** 목록이 있다.
+        제안이 이미 그중 하나이고 **왜 하지 않았는지**가 적혀 있다면, 그 이유가 왜 더 이상
+        유효하지 않은지를 함께 적어 주면 논의가 빨라진다.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 영역
+      options:
+        - api (apps/api — REST·WS·MCP)
+        - web (apps/web — SQL 콘솔·캔버스)
+        - worker (apps/worker — DAG 엔진·스케줄러·CDC Sink)
+        - connectors (새 커넥터 / 기존 커넥터 개선)
+        - sap-connector (SAP RFC)
+        - cdc (Debezium·Kafka)
+        - sync (SymmetricDS)
+        - AI 어시스턴트 (SQL 생성·튜닝·오류 수정)
+        - docs (문서)
+        - 여러 영역에 걸친다
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 어떤 문제를 푸나
+      description: 기능이 아니라 **문제**를 먼저 적는다. 지금은 그 일을 어떻게 하고 있나?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 제안하는 방식
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 검토한 대안
+      description: 기존 기능으로 우회할 수 있다면 그것이 왜 부족한지.
+
+  - type: checkboxes
+    id: contract
+    attributes:
+      label: 기존 계약에 미치는 영향
+      description: 해당하는 것만 고른다. 몰라도 된다 — 논의에서 정해도 된다.
+      options:
+        - label: 새 커넥터다 (`BaseConnector` 계약을 구현해야 한다)
+        - label: DAG 노드 스펙(`schemas/dag.py`)이 바뀐다
+        - label: 메타DB 스키마가 바뀐다 (Alembic 마이그레이션 필요)
+        - label: 읽기 전용 경계·허용 명령 판정을 건드린다
+        - label: 프런트와 백엔드 **양쪽**에 같은 상수가 생긴다 (`DUCK_TYPES` 류)
