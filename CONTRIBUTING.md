@@ -8,6 +8,7 @@ ditter 에 관심을 가져 주어 고맙다. 이 문서는 **어디를 먼저 �
 | 궁금한 것 | 문서 |
 |---|---|
 | 이 프로젝트가 무엇인가 · 어떻게 띄우나 | [README.md](README.md) |
+| 같은 내용의 영어 입구 (외부 기여자용) | [README.en.md](README.en.md) |
 | 어떻게 짜여 있나 (구조·실행 모델·커넥터 계약) | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | 왜 그렇게 만들었나 (기능별 결정 근거의 전문) | [CLAUDE.md](CLAUDE.md) |
 | 커밋·브랜치·머지 규칙 | [docs/conventions/commit-convention.md](docs/conventions/commit-convention.md) |
@@ -29,6 +30,9 @@ docker compose up -d --build
 
 > `.env.example` 은 **docker compose 가 읽는다.** `cd apps/api && uvicorn ...` 처럼 호스트에서
 > 직접 돌릴 때는 그 파일을 읽지 않는다(pydantic 은 프로세스의 현재 디렉터리에서 `.env` 를 찾는다).
+
+> 코드·주석·설계 문서는 한국어다. 다만 **이슈와 PR 은 영어로도 받는다** —
+> [README.en.md](README.en.md) 가 그쪽 입구이고, 거기에도 같은 안내가 있다.
 
 ## 무엇부터 손대면 좋은가
 
