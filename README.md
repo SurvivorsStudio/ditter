@@ -293,6 +293,9 @@ docs/           설계 문서, UI 목업, 아키텍처 다이어그램
 
 > 다이어그램 원본(`.dot`)은 [docs/diagrams/](docs/diagrams/) 에 있다 — 고쳐서 다시 그릴 수 있다.
 
+구조와 설계 결정의 전문은 **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** 에 있다 —
+실행 모델과 그 의도된 한계, 커넥터 계약, 새 것을 붙이는 법, 그리고 **택하지 않은 것과 그 이유**.
+
 ---
 
 ## 알아둘 설계 결정

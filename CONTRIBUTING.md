@@ -8,7 +8,8 @@ ditter 에 관심을 가져 주어 고맙다. 이 문서는 **어디를 먼저 �
 | 궁금한 것 | 문서 |
 |---|---|
 | 이 프로젝트가 무엇인가 · 어떻게 띄우나 | [README.md](README.md) |
-| 왜 그렇게 만들었나 (설계 결정과 그 근거) | [CLAUDE.md](CLAUDE.md) |
+| 어떻게 짜여 있나 (구조·실행 모델·커넥터 계약) | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| 왜 그렇게 만들었나 (기능별 결정 근거의 전문) | [CLAUDE.md](CLAUDE.md) |
 | 커밋·브랜치·머지 규칙 | [docs/conventions/commit-convention.md](docs/conventions/commit-convention.md) |
 | 취약점을 발견했을 때 | [SECURITY.md](SECURITY.md) |
 | 직접 굴려 보고 싶을 때 | [demo/README.md](demo/README.md) |
