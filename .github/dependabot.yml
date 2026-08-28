@@ -34,11 +34,14 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
-      python-dev:
-        dependency-type: development
-        update-types: [minor, patch]
-      python-prod:
-        dependency-type: production
+      # npm 과 달리 여기서는 개발/운영을 나누지 않는다. 개발 도구(pytest·ruff·mypy)가
+      # `[project.optional-dependencies].dev` 에 있는데, Dependabot 의 uv 파서는 그 자리를
+      # 개발용으로 표시하지 않아 전부 **production 으로 읽는다.** 그래서 `dependency-type:
+      # development` 그룹을 두면 아무것도 담기지 않고 조용히 비어 있게 된다.
+      # 나누려면 dev 도구를 PEP 735 `[dependency-groups]` 로 옮겨야 하고, 그러면
+      # `uv run --extra dev` 를 쓰는 CI·README·CONTRIBUTING 도 함께 바뀐다 — 별도 작업이다.
+      python:
+        patterns: ["*"]
         update-types: [minor, patch]
 
   # ── CI 액션 ───────────────────────────────────────────────────────────
@@ -49,13 +52,18 @@ updates:
 
   # ── 컨테이너 베이스 이미지 ────────────────────────────────────────────
   # demo/ 는 시연 전용이라 제외한다 — 갱신 PR 이 늘어날 뿐 운영에 영향이 없다.
+  #
+  # `sync/symmetricds` 도 여기 없다. 그 Dockerfile 은 `ARG SYMMETRIC_VERSION=3.15` 를 두고
+  # `FROM jumpmind/symmetricds:${SYMMETRIC_VERSION}` 으로 쓰는데, Dependabot 은 FROM 의 빌드
+  # 변수를 풀지 못한다(dependabot-core#2057, 2020년부터 open). 적어 두면 갱신되고 있다고
+  # **믿게 만들 뿐** 실제로는 PR 이 오지 않는다 — 그게 빠져 있는 것보다 나쁘다.
+  # 태그를 리터럴로 박은 뒤에 이 목록에 넣는다(별도 이슈).
   - package-ecosystem: docker
     directories:
       - /apps/api
       - /apps/worker
       - /apps/web
       - /apps/sap-connector
-      - /sync/symmetricds
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
