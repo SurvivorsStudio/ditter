@@ -84,7 +84,9 @@ export function AiInlinePrompt({
   const chat = useAiChat()
   // 쿼리 편집기와 같은 스키마(테이블·컬럼) — pk=false 로 가볍게.
   const { data: schema } = useConnectionSchema(dbConnId || undefined, false)
-  const tables = schema?.tables ?? []
+  // 매 렌더마다 새 배열이면 아래 확장 useMemo 가 항상 다시 돌아 CodeMirror 확장이
+  // 통째로 재조립된다. schema 가 바뀔 때만 새로 만든다.
+  const tables = useMemo(() => schema?.tables ?? [], [schema])
 
   const [model, setModel] = useState('')
   const [input, setInput] = useState('')
@@ -145,7 +147,6 @@ export function AiInlinePrompt({
       trigger,
       autocompletion(src ? { override: [src] } : {}),
     ]
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tables])
 
   const submit = () => {
