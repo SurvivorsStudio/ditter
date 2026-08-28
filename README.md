@@ -274,7 +274,9 @@ MSSQL 커넥터 테스트는 `pyodbc` 가 필요하다. macOS 에서 `libodbc` �
 
 ```
 apps/
-  connectors/   BaseConnector 계약 + MySQL·PostgreSQL·MSSQL·MongoDB·SAP·S3·로컬파일 (지연 로딩)
+  connectors/   BaseConnector 계약 — 커넥터 10종 · 소스/타깃 7종
+                (MySQL·PostgreSQL·MSSQL·MongoDB·SAP RFC·S3·로컬파일)
+                + AI 모델 3종 (Gemini·Bedrock·Ollama) — 지연 로딩
   api/          FastAPI(REST/WS) + FastMCP, 모델·Alembic, 인증(JWT/RBAC), 서비스 계층, 운영 CLI
   worker/       Celery 워커 — DAG 엔진, 노드 실행기(Python 격리 샌드박스 포함), 팬아웃 스풀,
                 Cron 스케줄러, CDC Sink Worker
