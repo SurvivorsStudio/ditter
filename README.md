@@ -16,8 +16,10 @@
   **로컬 오픈웨이트 모델(Ollama)** 로 상용 API 없이 돌아간다. Gemini·Bedrock 은 선택지 중 하나다.
 - **MCP** — 모든 기능을 MCP tool 로 노출해, UI 와 LLM/에이전트가 **같은 서비스 계층**을 재사용한다.
 
-상세 설계는 [docs/EAI_아키텍처_설계문서.pdf](docs/EAI_아키텍처_설계문서.pdf),
+상세 설계는 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
 구현 가이드는 [CLAUDE.md](CLAUDE.md)를 참고.
+원본 기획 문서([docx](docs/EAI_아키텍처_설계문서.docx) · [pdf](docs/EAI_아키텍처_설계문서.pdf))는
+**부록**으로 남는다 — 바이너리라 diff 도 리뷰도 되지 않는다.
 
 ---
 
@@ -188,6 +190,50 @@ cd apps/api && python -m eai_api.cli create-admin admin@company.com
 
 ---
 
+## 직접 해보기 — 시연용 가상 DB
+
+빈 화면으로는 이 도구가 무엇을 하는지 보이지 않는다. 그래서 **한 회사의 세 시스템이 서로 다른
+DB 에 흩어진 상황**을 로컬에 그대로 재현해 두었다.
+
+| DB | 무엇이 들어 있나 |
+|---|---|
+| MySQL `shop` | 온라인 쇼핑몰 — 주문·고객·상품·결제 |
+| SQL Server `wms` | 사내 온프레미스 창고관리 — 재고·로케이션·입출고 |
+| PostgreSQL `crm` / `dw` | 고객센터 클레임 / **적재 타깃(비어 있음)** |
+
+*주문은 MySQL, 재고는 사내 MSSQL, 클레임은 PostgreSQL 에 있다. 지연 주문의 원인을 보려면
+지금은 세 팀에 각각 물어봐야 한다* — [연합 조회](#연합-조회--서로-다른-db-를-한-select-로)와
+[파이프라인](#파이프라인-캔버스)이 답하는 것이 이 상황이다.
+
+**본체 스택을 먼저 띄워야 한다.** 데모 DB 는 본체가 만든 네트워크에 올라타므로, api·worker 가
+`mysql-shop:3306` 처럼 컨테이너 이름으로 찾아간다.
+
+```bash
+docker compose up -d
+```
+
+```bash
+bash demo/scripts/up.sh
+```
+
+```bash
+bash demo/scripts/seed.sh
+```
+
+`up.sh` 는 컨테이너와 스키마까지, `seed.sh` 는 목데이터를 넣는다(수 분). **난수 시드가 고정**이라
+`bash demo/scripts/reset.sh` 로 지웠다 다시 만들어도 화면의 숫자가 같다.
+
+계정은 역할별로 나뉜다 — `eai_ro`(조회만) · `eai_rw`(DML) · `eai_ddl`(DDL). 화면의
+[허용 명령](#sql-콘솔)만이 아니라 **DB 권한으로도** 읽기 전용이 기본이라는 것을 보여주는 자리다.
+
+접속 정보·데이터 설계·주의사항은 [demo/README.md](demo/README.md). 위 [「화면」](#화면)의
+스크린샷 세 장도 전부 이 스택으로 찍었다.
+
+> 본체와 **별도 도커 프로젝트**라 `bash demo/scripts/down.sh -v` 한 번이면 볼륨까지
+> 흔적 없이 사라진다. 사내 실데이터는 넣지 않는다 — 그러라고 만든 것이 이 스택이다.
+
+---
+
 ## 테스트 · 품질
 
 Python 앱은 `uv`, 웹은 `npm` 으로 돌린다. `<영역>` 은 `connectors`·`api`·`worker`·`sap-connector`.
@@ -248,6 +294,9 @@ docs/           설계 문서, UI 목업, 아키텍처 다이어그램
 ![파이프라인 실행 흐름 — 트리거에서 오케스트레이터·Redis 큐·워커 풀을 거쳐 메타DB 로](docs/diagrams/d2_pipeline.png)
 
 > 다이어그램 원본(`.dot`)은 [docs/diagrams/](docs/diagrams/) 에 있다 — 고쳐서 다시 그릴 수 있다.
+
+구조와 설계 결정의 전문은 **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** 에 있다 —
+실행 모델과 그 의도된 한계, 커넥터 계약, 새 것을 붙이는 법, 그리고 **택하지 않은 것과 그 이유**.
 
 ---
 
