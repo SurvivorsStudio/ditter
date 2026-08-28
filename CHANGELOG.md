@@ -7,6 +7,27 @@
 > `dba5a94` 하나에 뭉쳐 들어왔다. 그래서 이 문서는 커밋이 아니라 **실제로 동작하는 기능**을
 > 기준으로 적는다.
 
+## [Unreleased]
+
+### Added
+- **커버리지 게이트** — CI 가 하한을 강제한다(`pytest --cov` · `npm run test:coverage`).
+  Python 4개 앱은 `[tool.coverage.report].fail_under`, 웹은 `vite.config.ts` 의
+  `coverage.thresholds`. 하한은 실측보다 3~4%p 낮은 **바닥**이고 올라가면 함께 올린다.
+  웹은 한 숫자로 뭉치지 않고 로직 계층(`src/store` 92% · `src/api` 55%)을 따로 건다.
+- `README.en.md` — 영어 입구. 이슈·PR 을 영어로도 받는다는 안내를 함께 둔다.
+
+### Fixed
+- `apps/api` 커버리지가 실제보다 8%p 높게 보이던 문제. `--cov=eai_api`(임포트된 모듈)로 재면
+  61% 지만 디렉터리를 세면 **53%** 다 — `routers/`·`main.py`·`mcp_server.py`·`cli.py` 가 0% 이고
+  **HTTP 계층을 지나는 테스트가 하나도 없다.** 좁혀 재면 그 구멍이 숫자에서 사라지므로
+  측정 대상을 `src/eai_api` 디렉터리로 고정했다.
+- README·CLAUDE.md 의 구조 설명이 **존재하지 않는 `infra/`** 를 적고 있던 문제. 실제로 있는
+  `sync/`·`demo/` 로 바꾸고, ECS·Terraform 이 Phase 5 라는 사실을 그 자리에 적었다.
+- CLAUDE.md 구조 트리의 루트 이름이 `eai-platform/` 이던 것을 `ditter/` 로 고쳤다.
+- README 의 테스트 수치를 실제와 맞췄다 (1,278 → **1,294**: Python 1,006 · 웹 288).
+
+---
+
 ## [0.1.0] — 2026-08-28
 
 Phase 0~4 완료 시점. 아래가 이 릴리스에서 동작하는 범위다.

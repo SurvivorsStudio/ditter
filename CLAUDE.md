@@ -49,7 +49,7 @@
 ## 3. 저장소 구조 (모노레포)
 
 ```
-eai-platform/
+ditter/
 ├── CLAUDE.md                      # 이 파일
 ├── docker-compose.yml             # 로컬/EC2 단일노드 실행
 ├── docs/
@@ -93,10 +93,14 @@ eai-platform/
 │       └── Dockerfile
 ├── cdc/
 │   └── debezium/                  # Kafka Connect + 커넥터 설정(JSON)
-└── infra/
-    ├── ecs/                       # (확장 시) ECS task def
-    └── terraform/                 # VPC/RDS/S3/ALB (선택)
+├── sync/
+│   └── symmetricds/               # 트리거 기반 실시간 동기화 사이드카 (§20)
+└── demo/                          # 시연용 가상 DB 스택 (MySQL·MSSQL·PostgreSQL)
 ```
+
+배포 확장용 `infra/`(ECS task def · Terraform)는 **아직 없다** — Phase 5 범위다.
+지금 배포 경로는 루트 `docker-compose.yml` 하나뿐이니, 그 디렉터리를 참조하는 문서를
+쓰지 않는다.
 
 ---
 

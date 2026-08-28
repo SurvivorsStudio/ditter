@@ -325,9 +325,14 @@ apps/
   sap-connector/ SAP RFC 전용 사이드카 — NW RFC SDK 격리, 목 백엔드 포함
   web/          React + React Flow — Login / Home / Canvas / Monitor / Connections
 cdc/debezium/   Debezium(Kafka Connect) 커넥터 설정 — MySQL·PostgreSQL·MSSQL 예시
-infra/          ECS task def, Terraform (예정)
-docs/           설계 문서, UI 목업, 아키텍처 다이어그램
+sync/symmetricds/
+                SymmetricDS 사이드카 구성 — 트리거 기반 실시간 동기화 (CDC 를 못 쓸 때)
+demo/           시연용 가상 DB 스택 — MySQL·MSSQL·PostgreSQL + 고정 시드
+docs/           설계 문서, UI 목업, 아키텍처 다이어그램·원본(.dot)
 ```
+
+> 배포 확장용 `infra/`(ECS task def · Terraform)는 **아직 없다** — Phase 5 범위다.
+> 지금 배포 경로는 루트 `docker-compose.yml` 하나다.
 
 의존 방향: `web → api → worker`는 없다. API와 Worker는 **Redis 큐로만** 통신하고
 (`send_task` 이름 호출), 모델·DAG 스펙·커넥터만 코드로 공유한다.
