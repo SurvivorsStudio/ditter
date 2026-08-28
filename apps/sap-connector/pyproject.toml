@@ -5,7 +5,7 @@ description = "SAP RFC 전용 사이드카 — NW RFC SDK 격리 (설계 문서 
 license = "Apache-2.0"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.115.5,<0.116",
+    "fastapi>=0.115.5,<0.142",
     "uvicorn[standard]>=0.32.1",
     "pydantic>=2.10.2,<3",
     "pydantic-settings>=2.6.1,<3",
