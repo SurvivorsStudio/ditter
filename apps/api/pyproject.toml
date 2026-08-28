@@ -23,7 +23,7 @@ dependencies = [
     "celery>=5.4.0,<5.5",
     "cryptography>=44.0.0",
     "pyjwt>=2.10.0,<3",
-    "argon2-cffi>=23.1.0,<25",
+    "argon2-cffi>=23.1.0,<26",
     "email-validator>=2.2.0,<3",
     # 이기종 연합 조회 엔진. postgres·mysql 확장으로 원격 DB 를 카탈로그로 붙인다
     # (services/duck_service). 확장 ABI 가 마이너 버전마다 갈리므로 상한을 둔다.
