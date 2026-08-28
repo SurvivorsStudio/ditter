@@ -6,14 +6,18 @@ ditter 는 운영 중인 데이터베이스에 붙는 도구다. 읽기 전용 �
 
 ## 어디로 신고하나
 
-GitHub 의 비공개 취약점 신고(Private vulnerability reporting)는 **아직 켜져 있지 않다.**
-켜는 대로 이 문서에 신고 링크를 적는다.
+**[비공개 취약점 신고 열기](https://github.com/SurvivorsStudio/ditter/security/advisories/new)**
 
-그때까지는 저장소를 관리하는 [SurvivorsStudio](https://github.com/SurvivorsStudio) 의
-메인테이너에게 **GitHub 을 통해 비공개로** 연락한다. 공개 이슈를 여는 것보다 늦더라도 그쪽이 낫다.
+GitHub 의 비공개 취약점 신고(Private vulnerability reporting)를 쓴다. 신고 내용은 메인테이너와
+신고자에게만 보이고, 수정이 끝난 뒤에 함께 공개할지 정한다. GitHub 계정만 있으면 되고
+따로 메일 주소를 알 필요가 없다.
 
-> 전용 신고 메일 주소는 아직 없다. 확인되지 않은 주소를 여기에 적어 두면 신고가 아무 데도
-> 닿지 않으므로 비워 둔다.
+## 언제 답이 오나
+
+- **영업일 5일 이내**에 접수 확인을 보낸다. 그 안에 답이 없으면 놓친 것이니
+  [SurvivorsStudio](https://github.com/SurvivorsStudio) 메인테이너에게 한 번 더 알려 달라.
+- 공개 시점은 **수정을 배포한 뒤**, 늦어도 **신고로부터 90일** 안에 신고자와 합의해 정한다.
+  합의 없이 먼저 공개하지 말아 달라 — 이 도구는 운영 DB 에 붙는다.
 
 ## 무엇을 적나
 
