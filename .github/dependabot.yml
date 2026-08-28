@@ -88,9 +88,14 @@ updates:
     schedule:
       interval: weekly
     # 한도 10. 근거는 위 npm 항목의 첫 주기 실측과 같다 — uv 도 #60~#64 로 5를 정확히 채웠다.
-    # 아래 ignore 로 #62(redis) 자리가 비지만, 그룹 PR 하나 + cryptography(#61) ·
-    # argon2-cffi(#63) · psycopg(#64) 로 여전히 4다. 디렉터리가 4개라 개별 메이저가
-    # 디렉터리마다 따로 열릴 수 있는 것도 여기가 npm 보다 잘 차는 이유다.
+    # 그 다섯 중 아래 `ignore` 가 걸러 내는 것은 #62(redis) 하나다. 나머지 넷(그룹 PR #60 ·
+    # cryptography #61 · argon2-cffi #63 · psycopg #64)은 **지난주의 구성이지 다음 주 예측이
+    # 아니다** — 셋은 이미 머지되어 다시 오지 않는다.
+    #
+    # 관찰된 것 하나 더: **개별 PR 은 디렉터리 단위로 열린다** (#61·#62·#63 은 `/apps/api`,
+    # #64 는 `/apps/connectors`). 디렉터리가 4개인 이 항목이 npm(1개)보다 불어날 여지가 큰
+    # 것은 그래서다. 다만 같은 패키지가 두 디렉터리에서 두 건으로 열리는 장면은 아직 보지
+    # 못했다 — 첫 주기의 개별 PR 넷은 전부 다른 패키지였다. 거기까지는 추정이다.
     open-pull-requests-limit: 10
     groups:
       # npm 과 달리 여기서는 개발/운영을 나누지 않는다. 개발 도구(pytest·ruff·mypy)가
@@ -203,8 +208,9 @@ updates:
     # **디렉터리를 가로질러 하나**로 묶인다. 첫 주기에 확인됐다 — #54 의 제목이
     # 「bump the base-images group **across 4 directories** with 3 updates」였다.
     #
-    # 여기만 한도가 5다(npm·uv 는 10). 위 `ignore` 로 python·node 가 빠져 지금 이 항목이
-    # 낼 수 있는 PR 은 nginx 를 담은 그룹 PR 하나뿐이라 5도 남아돈다 — 근거 없이 숫자를
+    # 여기는 5로 둔다 — npm·uv 만 10 이고 github-actions 는 한도를 적지 않아 기본값 5다.
+    # 위 `ignore` 로 python·node 가 빠져 지금 이 항목이 낼 수 있는 PR 은 nginx 를 담은
+    # 그룹 PR 하나뿐이라 5도 남아돈다 — 근거 없이 숫자를
     # 올리지 않는다. 5로 두는 근거는 **#69·#70 으로 그 제외를 되돌린 뒤**다. 그때 후보가
     # python ×3 · node · nginx 로 돌아오고, 묶음까지 풀면 다섯이 자리를 다툰다.
     # 한도를 넘긴 갱신은 큐에 쌓이지 않고 **그냥 건너뛴다** — 열린 PR 을 머지하기 전까지
