@@ -4,6 +4,12 @@
 # 시절이라 대상이 `/`·`/backend`·`/frontend` 였고, 지금 구조에는 그런 경로가 없다.
 # 아래 경로는 전부 실제 매니페스트 위치를 확인해 적었다 — 경로가 틀리면 Dependabot 은
 # 오류를 내지 않고 그냥 아무것도 하지 않는다.
+#
+# 이 파일을 고칠 때 반드시 기억할 것 하나: **`groups` 의 `update-types` 는 갱신을 막지
+# 않는다.** 그것은 "이 묶음 PR 에 무엇을 담을지"만 정하고, 담기지 못한 갱신은 사라지는
+# 것이 아니라 **개별 PR 로 흩어져 다시 온다.** 실제로 막으려면 `ignore` 를 써야 한다.
+# 근거는 이 저장소의 첫 주기다 — npm 두 그룹에 `update-types: [minor, patch]` 가 있었는데도
+# #57(@types/node 22→26)·#58(vitest 3→4)·#59(typescript 5→7) 이 각각 따로 올라왔다.
 version: 2
 updates:
   # ── 프런트엔드 (npm) ──────────────────────────────────────────────────
@@ -11,7 +17,13 @@ updates:
     directory: /apps/web
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    # 한도 10. 첫 주기(2026-08-28) 실측이 근거다 — github-actions 3(#51·#52·#53) ·
+    # docker 1(#54) · **npm 5(#55~#59)** · **uv 5(#60~#64)** 로, npm 과 uv 가 그때 설정돼
+    # 있던 한도 5를 **정확히 채웠다.** 한도를 넘긴 갱신은 큐에 쌓이지 않고 그냥 건너뛰므로,
+    # 5로 두면 그 주에 빠진 것이 있었는지조차 알 수 없다.
+    # 초과분이 실제로 있었는지는 확인할 방법이 없다 — 건너뛴 갱신은 어디에도 기록되지
+    # 않는다. 사실로 말할 수 있는 것은 "정확히 5를 채웠다"까지다.
+    open-pull-requests-limit: 10
     groups:
       # 자잘한 갱신으로 PR 이 흩어지지 않게 묶는다. 보안 갱신은 그룹과 무관하게 별도로 온다.
       dev-dependencies:
@@ -20,6 +32,49 @@ updates:
       prod-dependencies:
         dependency-type: production
         update-types: [minor, patch]
+    # 아래 여덟은 **메이저만** 뺀다. 마이너·패치는 위 그룹으로 그대로 온다.
+    # 여덟 모두 "이것 하나만 올리면 안 되는" 것들이라 갱신이 아니라 결정이다.
+    #
+    # 되돌릴 때 주의 — **세 건은 절차가 하나 더 있다.** 첫 주기 정리 중 #57(@types/node)·
+    # #58(vitest)·#59(typescript) 에 `@dependabot ignore this major version` 코멘트도 함께
+    # 보냈고, 그쪽은 저장소에 보이지 않는 Dependabot 내부 상태다. 그 셋은 아래 설정을
+    # 지우는 것만으로 갱신이 돌아오지 않는다 — `@dependabot unignore ...` 를 함께 보내야
+    # 하고, 안 그러면 설정은 고쳤는데 PR 만 안 오는, 원인을 못 찾는 상태가 된다.
+    # 나머지 다섯(vite · react 4형제)은 그런 코멘트가 없어 설정만 지우면 된다.
+    ignore:
+      # vitest 는 자체 vite 를 번들한다 — vite 메이저와 맞춰야 타입이 충돌하지 않는다
+      # (CLAUDE.md §14, 지금은 vite 6 ↔ vitest 3). 둘을 함께 올리는 것은 #68.
+      # **짝이므로 양쪽 다 뺀다.** 한쪽만 잠그면 반대쪽이 단독 메이저 PR 로 올라와
+      # 같은 짝을 반대 방향에서 깬다 — 잠그는 의미가 없어진다.
+      - dependency-name: vitest
+        update-types: [version-update:semver-major]
+      - dependency-name: vite
+        update-types: [version-update:semver-major]
+      # @types/node 가 하는 일은 "이 런타임에 무엇이 있는가"를 tsc 에 알려 주는 것이다.
+      # 런타임보다 앞서면 Node 26 에만 있는 API 를 tsc 가 통과시키고 컨테이너에서 터진다 —
+      # `apps/web/Dockerfile` 은 node:22-alpine 이다. 함께 올리는 것은 #69.
+      # 짝인 node 베이스 이미지도 아래 docker 항목에서 함께 잠갔다.
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
+      # TypeScript 메이저는 갱신이 아니라 이관이다. `npm run build`(tsc -b) 가 CI 게이트라
+      # 컴파일러를 바꾸면 그 자리에서 드러난다 (#59 가 그렇게 실패했다).
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      # react 4형제는 **한 덩어리다.** react 와 react-dom 은 같은 릴리스에서 함께 나와
+      # 버전이 서로 맞아야 하고, `@types/*` 는 그 둘을 따라간다. 넷 중 하나만 올라가면
+      # 그 자리에서 어긋나므로 넷 다 뺀다 — 하나라도 열어 두면 잠그는 의미가 없다
+      # (위 vitest ↔ vite 와 같은 이유다).
+      # 지금은 react·react-dom·@types/react-dom 이 ^18.3.1, @types/react 가 ^18.3.12 다.
+      # React 19 는 갱신이 아니라 **이관**이고 CLAUDE.md §2 가 프런트 스택을 React 18 로
+      # 못박고 있다. 되돌리는 조건은 별도 이슈가 아니라 — **React 19 이관을 하기로 정한 때**다.
+      - dependency-name: react
+        update-types: [version-update:semver-major]
+      - dependency-name: react-dom
+        update-types: [version-update:semver-major]
+      - dependency-name: "@types/react"
+        update-types: [version-update:semver-major]
+      - dependency-name: "@types/react-dom"
+        update-types: [version-update:semver-major]
 
   # ── Python 앱 (uv) ────────────────────────────────────────────────────
   # `pip` 이 아니라 `uv` 다 — 이 저장소는 uv.lock 을 쓴다.
@@ -32,7 +87,16 @@ updates:
       - /apps/sap-connector
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    # 한도 10. 근거는 위 npm 항목의 첫 주기 실측과 같다 — uv 도 #60~#64 로 5를 정확히 채웠다.
+    # 그 다섯 중 아래 `ignore` 가 걸러 내는 것은 #62(redis) 하나다. 나머지 넷(그룹 PR #60 ·
+    # cryptography #61 · argon2-cffi #63 · psycopg #64)은 **지난주의 구성이지 다음 주 예측이
+    # 아니다** — 셋은 이미 머지되어 다시 오지 않는다.
+    #
+    # 관찰된 것 하나 더: **개별 PR 은 디렉터리 단위로 열린다** (#61·#62·#63 은 `/apps/api`,
+    # #64 는 `/apps/connectors`). 디렉터리가 4개인 이 항목이 npm(1개)보다 불어날 여지가 큰
+    # 것은 그래서다. 다만 같은 패키지가 두 디렉터리에서 두 건으로 열리는 장면은 아직 보지
+    # 못했다 — 첫 주기의 개별 PR 넷은 전부 다른 패키지였다. 거기까지는 추정이다.
+    open-pull-requests-limit: 10
     groups:
       # npm 과 달리 여기서는 개발/운영을 나누지 않는다. 개발 도구(pytest·ruff·mypy)가
       # `[project.optional-dependencies].dev` 에 있는데, Dependabot 의 uv 파서는 그 자리를
@@ -43,8 +107,46 @@ updates:
       python:
         patterns: ["*"]
         update-types: [minor, patch]
+    # celery·redis 는 api·worker 두 프로젝트에 함께 얹히는데 Dependabot 은 두 uv 프로젝트를
+    # 따로 갱신한다. 그래서 한쪽만 올린 PR 이 온다 — #60 은 api 를 celery 5.4.0 → 5.6.3 으로
+    # 올리면서 worker 는 5.4.0 에 그대로 두었다. 그 둘은 Redis 큐로만 통신하는데(CLAUDE.md
+    # §14) `ci.yml` 은 api·worker 를 각각 pytest 로 돌릴 뿐 **같이 띄우지 않아** 스큐를
+    # 잡지 못한다. 초록불이 나는데 실환경에서만 어긋나는 모양이다.
+    #
+    # 선언 위치가 둘이 다르다. celery 는 양쪽에 직접 있다 —
+    # `apps/api/pyproject.toml` 의 `celery>=5.4.0,<5.5`, `apps/worker/pyproject.toml` 의
+    # `celery[redis]>=5.4.0,<5.5`. redis 를 **직접** 적은 곳은 api(`redis>=5.2.0,<6`) 뿐이고
+    # worker 는 `celery[redis]` extra 로 딸려 받는다. 그래도 잠금 파일에는 양쪽 다 들어가
+    # (지금 둘 다 5.3.1) 어긋날 수 있으므로 제외 대상은 그대로 둘이다.
+    #
+    # 그 핀이 막아 주지 않는다는 것도 확인됐다 — #62 는 `<6` 을 넘겨 redis 5.3.1 → 8.1.0 을
+    # 제안했다. Dependabot 은 필요하면 pyproject 의 제약 자체를 넓힌다.
+    #
+    # **메이저·마이너만** 뺀다. 패치는 그대로 받는다 — celery·redis 의 보안 수정 상당수가
+    # 패치 릴리스로 나오고, 패치 스큐(5.4.0 ↔ 5.4.1)는 5.4 ↔ 5.6 스큐보다 위험이 훨씬 낮다.
+    #
+    # 주의: `ignore` 는 버전 갱신뿐 아니라 **보안 갱신에도 적용된다.** 범위를 좁혀도
+    # 마이너·메이저로 나오는 보안 수정은 여전히 막힌다. 지금 이 저장소는
+    # `automated-security-fixes` 가 enabled=false 라 당장 영향이 없다(취약점 알림 자체는 켜져
+    # 있다) — **그것을 켜기 전에 이 항목을 다시 본다.** 위 npm 그룹 주석의 「보안 갱신은
+    # 그룹과 무관하게 별도로 온다」와 아래 docker 한도 주석의 「보안 갱신은 애초에 이 한도를
+    # 따르지 않는다」가 "보안 갱신은 예외"라는 인상을 주는데, `ignore` 는 그 예외에 들지 않는다.
+    #
+    # 빼 두면 나머지(fastapi·sqlalchemy·alembic·boto3…)는 그대로 그룹 PR 로 온다.
+    # 되돌리는 조건은 #67 — 양쪽 핀을 함께 올리고 실제로 같이 띄워 확인한 뒤다.
+    # 되돌릴 때 둘의 절차가 다르다: **redis 는 #62 에 `@dependabot ignore this major version`
+    # 코멘트가 남아 있어** 설정을 지우는 것만으로는 돌아오지 않는다(`@dependabot unignore
+    # redis` 를 함께 보낸다). **celery 는 그룹 PR #60 안에 있어 닫기만 했고 코멘트가 없다** —
+    # 설정만 지우면 된다.
+    ignore:
+      - dependency-name: celery
+        update-types: [version-update:semver-minor, version-update:semver-major]
+      - dependency-name: redis
+        update-types: [version-update:semver-minor, version-update:semver-major]
 
   # ── CI 액션 ───────────────────────────────────────────────────────────
+  # 한도를 적지 않아 기본값 5다. 첫 주기에 3건(#51·#52·#53)이라 여유가 있어 그대로 둔다 —
+  # 근거 없이 숫자를 올리면 나중에 그 숫자를 설명할 방법이 없다.
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -66,22 +168,53 @@ updates:
       - /apps/sap-connector
     schedule:
       interval: weekly
-    # 디렉터리 4개의 베이스 이미지를 한 PR 로 묶는다. 실측 이미지는 5개인데
-    # (python:3.12-slim ×3 · node:22-alpine · nginx:1.27-alpine) 디렉터리는 4개다 —
-    # 묶지 않으면 이미지마다 흩어져 최대 5개의 PR 이 된다.
+    # 디렉터리 4개의 베이스 이미지를 한 PR 로 묶는다. 대상 이미지는 5개인데
+    # (python:3.12-slim ×3 · node:22-alpine · nginx:1.27-alpine) 디렉터리는 4개다.
+    # 다만 아래 `ignore` 로 python·node 가 빠져 **지금 이 묶음에 실제로 담기는 것은
+    # nginx 하나**다. 그래도 묶음을 남기는 이유는 #69·#70 으로 그 제외를 되돌릴 때다 —
+    # 그때 묶음이 없으면 이미지마다 흩어져 최대 5개의 PR 이 된다.
     groups:
       base-images:
         patterns: ["*"]
-    # `directories` 와 `groups` 를 함께 쓰면 PR 은 디렉터리마다 하나가 아니라
-    # **디렉터리를 가로질러 하나**로 묶인다. 근거는 이 저장소의 과거 그룹 PR 제목 형식이다
-    # (#28 「across 1 directory」 · #15 「in the prod-dependencies group across 1 directory」).
-    # 여기서는 「across 4 directories」로 나올 것으로 본다 — **아직 확인하지 못했다.**
-    # 머지 후 첫 주기의 실제 PR 제목으로 확정된다.
+        # 이 줄은 **차단이 아니라 묶음 분리다** (파일 머리말 참조). 메이저 갱신을 이 묶음
+        # PR 에서 빼낼 뿐이고, 빠진 것은 개별 PR 로 다시 온다. 실제 차단은 아래 `ignore` 다.
+        # 남겨 두는 이유는 그래도 묶음의 뜻이 「런타임 승격이 아닌 갱신」으로 좁혀지기
+        # 때문이다 — 여기 없는 이미지(nginx)의 메이저는 개별 PR 로 와서 눈에 띈다.
+        update-types: [minor, patch]
+    # 실제 차단. `ci.yml` 은 `docker build` 를 하지 않는다 — pytest·vitest·ruff·eslint·
+    # `npm run build` 만 러너의 Python 3.12 · Node 22 위에서 돌아, #54 의 초록불은 바뀐
+    # 베이스 이미지를 **한 번도 건드리지 않은 결과**였다.
     #
-    # 그래서 한도 5 는 「4개가 열리니까 넉넉히」가 아니라, 나중에 이 그룹을 좁히거나
-    # 되돌릴 때를 위한 여유다. 보안 갱신은 애초에 이 한도를 따르지 않는다.
-    # 한도를 넘긴 갱신은 큐에 쌓이지 않고 **그냥 건너뛴다** — 열린 PR 을 머지하기
-    # 전까지 나머지는 오지 않는다. 그룹을 풀면 python 베이스가 올라가는 주에
-    # api·worker·sap-connector 세 건이 자리를 채워 web 의 node·nginx 가 조용히 빠진다.
-    # 위 symmetricds 와 같은 실패 모양(오지 않는데 오는 것처럼 보인다)이라 넉넉한 쪽으로 둔다.
+    # 그렇다고 "검증 못 하는 갱신은 다 막는다"는 아니다. 여기서 막는 것은 **런타임 승격**뿐이고,
+    # **nginx 마이너·패치는 그대로 받는다.** 정적 파일을 서빙할 뿐 우리 코드가 그 위에서
+    # 컴파일·실행되지 않아 python·node 와 성격이 다르고, nginx 는 마이너에 보안 수정이 자주
+    # 실린다. 게다가 nginx 까지 막으면 이 항목의 갱신 대상이 0이 되어 **설정은 있는데 아무
+    # 일도 안 하는 상태**가 된다 — 위 symmetricds 주석이 경계한 바로 그 모양이다.
+    ignore:
+      # python 은 **마이너까지** 뺀다. 3.12 → 3.14 는 semver 상 메이저가 아니다 —
+      # 첫 자리 3 이 그대로라 Dependabot 이 마이너로 센다. 그래서 위 그룹의
+      # `[minor, patch]` 로는 걸러지지 않고, `semver-major` 만 빼도 그대로 통과한다.
+      # #54 가 담아 온 것이 정확히 그 갱신이다(python:3.12-slim → 3.14-slim ×3).
+      # 태그를 마이너까지만 적으므로(`3.12-slim`) 결과적으로 python PR 은 오지 않는다 —
+      # 의도한 상태다. 승격은 #70 에서 휠·빌드를 직접 확인하고 사람이 올린다.
+      - dependency-name: python
+        update-types: [version-update:semver-minor, version-update:semver-major]
+      # node 22 → 25 는 진짜 메이저다(#54). `apps/web/Dockerfile` 의 node 메이저는
+      # devDependencies 의 @types/node 와 짝이라 한쪽만 올릴 수 없다 — 위 npm 항목에서
+      # @types/node 메이저를 뺀 것과 같은 이유다. 되돌리는 조건은 #69.
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+    # `directories` 와 `groups` 를 함께 쓰면 PR 은 디렉터리마다 하나가 아니라
+    # **디렉터리를 가로질러 하나**로 묶인다. 첫 주기에 확인됐다 — #54 의 제목이
+    # 「bump the base-images group **across 4 directories** with 3 updates」였다.
+    #
+    # 여기는 5로 둔다 — npm·uv 만 10 이고 github-actions 는 한도를 적지 않아 기본값 5다.
+    # 위 `ignore` 로 python·node 가 빠져 지금 이 항목이 낼 수 있는 PR 은 nginx 를 담은
+    # 그룹 PR 하나뿐이라 5도 남아돈다 — 근거 없이 숫자를
+    # 올리지 않는다. 5로 두는 근거는 **#69·#70 으로 그 제외를 되돌린 뒤**다. 그때 후보가
+    # python ×3 · node · nginx 로 돌아오고, 묶음까지 풀면 다섯이 자리를 다툰다.
+    # 한도를 넘긴 갱신은 큐에 쌓이지 않고 **그냥 건너뛴다** — 열린 PR 을 머지하기 전까지
+    # 나머지는 오지 않고, 무엇이 빠졌는지는 어디에도 남지 않는다. 위 symmetricds 와 같은
+    # 실패 모양(오지 않는데 오는 것처럼 보인다)이라 되돌린 뒤를 기준으로 잡아 둔다.
+    # 보안 갱신은 애초에 이 한도를 따르지 않는다.
     open-pull-requests-limit: 5
