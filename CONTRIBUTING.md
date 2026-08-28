@@ -82,6 +82,21 @@ cd apps/web && npm test && npm run lint && npm run build
 CI 가 PR 마다 위 전부를 강제한다. **mypy 는 아직 게이트가 아니다**(`src` 기준 잔여가 있다) —
 현황은 [README 「테스트·품질」](README.md#테스트--품질)의 표에 있다.
 
+**커버리지에도 하한이 있다.** CI 가 막으므로, 코드를 늘리면서 테스트를 안 붙이면 PR 이 빨개진다.
+로컬에서 미리 보려면 `--cov` 를 붙인다.
+
+```bash
+cd apps/<영역> && uv run --extra dev pytest -q --cov
+```
+
+```bash
+cd apps/web && npm run test:coverage
+```
+
+하한은 실측보다 조금 낮게 둔 **바닥**이다. 올랐으면 설정의 숫자도 함께 올려 달라 —
+그래야 다음 사람이 되돌리지 못한다 (`pyproject.toml` 의 `[tool.coverage.report]` ·
+`apps/web/vite.config.ts` 의 `coverage.thresholds`).
+
 > macOS 에서 MSSQL 커넥터 테스트가 `libodbc` 를 못 찾아 실패하면 `brew install unixodbc`.
 
 ## 코드 규칙

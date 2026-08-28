@@ -267,6 +267,26 @@ cd apps/web && npm test && npm run lint && npm run build
 CI 게이트가 아닌 이유와 같다(`ci.yml` 머리말). 줄여 나가는 중이며 확인은
 `cd apps/<영역> && uv run --extra dev mypy .` 로 따로 한다.
 
+**커버리지는 반대로 게이트다.** CI 는 위 명령에 `--cov` 를 붙여 돌리고 하한을 밑돌면 막는다.
+
+```bash
+cd apps/<영역> && uv run --extra dev pytest -q --cov
+cd apps/web && npm run test:coverage
+```
+
+`addopts` 에 넣지 않은 이유가 있다 — 테스트 한 파일만 돌릴 때(`pytest tests/test_x.py`)
+커버리지는 당연히 떨어지고, 그때 `fail_under` 가 걸리면 멀쩡한 작업이 실패로 보인다.
+그래서 `--cov` 를 붙일 때만 켜진다.
+
+하한은 **목표치가 아니라 바닥**이다. 실측보다 3~4%p 낮게 두어 무관한 리팩터링이 소수점
+때문에 빨개지지 않게 하고, 올라가면 그 숫자를 함께 올린다(래칫). 현재 값은
+[README 「커버리지」](README.md#커버리지) 표에 있고, 설정은 각 `pyproject.toml` 의
+`[tool.coverage.report]` 와 `apps/web/vite.config.ts` 의 `coverage.thresholds` 다.
+
+웹은 **한 숫자로 뭉치지 않는다.** 로직 계층(`src/store`·`src/api`)은 테스트가 있어 따로 높게
+걸고, 화면 컴포넌트는 렌더 테스트가 없어 전역 바닥만 적용된다. 뭉쳐 두면 `canvasStore` 가
+무너져도 컴포넌트 몇 줄이 늘어난 것으로 가려진다.
+
 ---
 
 ## 13. Claude Code에게 — 작업 시 유의사항
