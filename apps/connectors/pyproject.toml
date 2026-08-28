@@ -8,7 +8,7 @@ dependencies = [
     # FastMCP 와 마찬가지로 상위 호환 파손을 막기 위해 상한을 고정한다 (설계 문서 §2 주의사항)
     "sqlalchemy>=2.0.36,<2.1",
     "pymysql>=1.1.1,<1.2",
-    "psycopg[binary]>=3.2.3,<3.3",
+    "psycopg[binary]>=3.2.3,<3.4",
     "pyodbc>=5.2.0,<6",
     "pymongo>=4.10.1,<5",
     "urllib3>=2.2.3,<3",
