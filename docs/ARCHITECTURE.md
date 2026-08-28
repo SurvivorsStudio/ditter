@@ -77,14 +77,13 @@ api  <──────────────[worker 가 eai-api 패키지를
 ([`engine._build_stream`](../apps/worker/src/eai_worker/engine.py)). 중간 결과가 메모리에 쌓이지
 않아 대용량에서 메모리가 상수로 유지된다.
 
-![파이프라인 실행](diagrams/d2_pipeline.png)
+![파이프라인 실행 — 워커가 Redis Pub/Sub 로 진행률을 보내고, 메타DB 가 진실의 원천이다](diagrams/d2_pipeline.png)
 
-> 이 그림은 **진행률이 화면에 닿는 경로가 실제와 다르다.** 그림은 메타DB 에서
-> WebSocket 으로 화살표를 그렸지만, 실제로는 워커가 Redis Pub/Sub 로 publish 하고
-> ([`services/events.py`](../apps/api/src/eai_api/services/events.py)) API 의 WebSocket 이 구독해
-> 밀어 준다. 그 구분이 중요하다 — **이벤트는 부가 채널이고 진실의 원천은 언제나 메타DB 다.**
-> 구독자가 없어 이벤트를 놓쳐도 UI 는 REST 폴백으로 같은 상태를 복원한다. 그림은 이 둘을 뒤집어
-> 놓았다. `Main (Orchestrator)` 도 별도 프로세스가 아니라 api 안이다.
+> 진행률 화살표는 워커 → Redis 이벤트 버스 → API WebSocket 이다
+> ([`services/events.py`](../apps/api/src/eai_api/services/events.py)).
+> **이벤트는 부가 채널이고 진실의 원천은 언제나 메타DB 다.**
+> 구독자가 없어 이벤트를 놓쳐도 UI 는 REST 폴백으로 같은 상태를 복원한다.
+> Orchestrator 는 별도 프로세스가 아니라 api 안이다.
 
 ### 이 모델이 만드는 결과들
 
@@ -197,6 +196,8 @@ User         email · password_hash(Argon2id) · role · external_id
 ## 6. 수집 방식 세 갈래
 
 같은 문제(원본의 변경을 타깃으로 옮긴다)에 대한 답이 셋이고, **고르는 기준이 다르다.**
+
+![무엇을 읽는가 — 배치 DB · SAP(워커 HTTP → 사이드카 SDK) · CDC. SymmetricDS 는 이 축이 아니다](diagrams/d3_ingestion.png)
 
 | | 배치 | CDC (Debezium) | 동기화 (SymmetricDS) |
 |---|---|---|---|
