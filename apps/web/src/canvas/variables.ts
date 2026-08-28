@@ -248,11 +248,16 @@ function pyEscapeBody(text: string): string {
 /**
  * Python 리터럴 표기. 백엔드 `_py_literal`(= `repr`) 과 짝이다.
  *
- * ASCII 입력에서는 `repr` 과 **글자까지 같은** 결과를 낸다. 비ASCII 비출력 문자
- * (U+200B 같은 것)는 `repr` 이 `\u200b` 로 쓰지만 여기서는 원문 그대로 둔다 — 그 글자는
- * 리터럴 안에 그냥 있어도 유효한 Python 이라 **값은 같고 표기만 다르다.** 완전한 일치는
- * 유니코드 printable 표가 있어야 하는데, 그 표를 프런트에 복제하면 이 파일이 경계하는
- * 「양쪽이 어긋난다」를 하나 더 만드는 셈이다.
+ * ASCII 입력에서는 `repr` 과 **글자까지 같은** 결과를 낸다 (0x00-0x7f 전수 대조 확인).
+ *
+ * 갈리는 것은 **`str.isprintable()` 이 거짓인 비ASCII 전부**다 — U+200B 하나가 아니라
+ * BMP 에서만 약 7,900자이고, 유니코드 카테고리 Cc·Cf·Cn·Co·Zl·Zp·Zs 가 그 범위다
+ * (U+0085·U+00A0·U+2028·U+FEFF…). `repr` 은 이것들을 `\x85`·`\u2028` 처럼 이스케이프하고
+ * 여기서는 원문 그대로 둔다. 전수 대조에서 **전부 유효한 Python 으로 컴파일되고 값도
+ * 같았다** — 표기만 다르다. 완전한 일치는 유니코드 printable 표가 있어야 하는데, 그 표를
+ * 프런트에 복제하면 이 파일이 경계하는 「양쪽이 어긋난다」를 하나 더 만드는 셈이다.
+ *
+ * 짝 없는 대리 문자(U+D800-U+DFFF)와 숫자 표기는 아직 갈린다 — 별도 이슈.
  */
 function pyLiteral(value: unknown): string {
   if (value === null || value === undefined) return 'None'
