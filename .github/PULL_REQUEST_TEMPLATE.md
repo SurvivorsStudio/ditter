@@ -13,7 +13,7 @@
 
 ```bash
 # Python 영역 (api · worker · connectors · sap-connector)
-cd apps/<영역> && uv run --extra dev pytest -q && uv run --extra dev ruff check . && uv run --extra dev mypy .
+cd apps/<영역> && uv run --extra dev pytest -q && uv run --extra dev ruff check . && uv run --extra dev mypy src
 ```
 
 ```bash
