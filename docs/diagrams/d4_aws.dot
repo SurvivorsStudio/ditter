@@ -1,47 +1,87 @@
+// AWS 배포 — **지금 있는 경로**와 **Phase 5 로 미뤄 둔 것**을 갈라 그린다.
+//
+// 지금 배포 경로는 루트 docker-compose.yml 하나다. `infra/`(ECS task def · Terraform)는
+// 저장소에 없다 — 예전 그림이 "ECS on EC2"를 적어 두어 있는 것처럼 읽혔다.
+//
+// 컨테이너 목록은 docker-compose.yml 을 따른다. 예전 그림은 `orchestrator` 를 별도
+// 컨테이너로 그렸는데 그런 컨테이너는 없다 — 오케스트레이터는 api 안이다
+// (services/run_service.py). 빠져 있던 beat · sap-connector · cdc-sink 도 넣는다.
+//
+// 프로필로 갈린 것(--profile cdc / ai)은 점선 테두리로 구분한다. 기본 기동에는 뜨지 않는다.
+//
+// 다시 그리기: docs/diagrams/README.md
+
 digraph G {
-  rankdir=TB; bgcolor="white";
-  node [fontname="Noto Sans CJK KR", fontsize=10, shape=box, style="rounded,filled"];
-  edge [fontname="Noto Sans CJK KR", fontsize=9, color="#5b6472"];
-  graph [fontname="Noto Sans CJK KR", fontsize=12, nodesep=0.35, ranksep=0.5, compound=true];
+  rankdir=TB; bgcolor="white"; compound=true; newrank=true;
+  node [fontname="Noto Sans CJK KR,Apple SD Gothic Neo", fontsize=10, shape=box, style="rounded,filled"];
+  edge [fontname="Noto Sans CJK KR,Apple SD Gothic Neo", fontsize=9, color="#5b6472"];
+  graph [fontname="Noto Sans CJK KR,Apple SD Gothic Neo", fontsize=12, nodesep=0.3, ranksep=0.55];
 
   user [label="사용자 (브라우저)", shape=ellipse, fillcolor="#e0e7ff", color="#a5b4fc"];
 
   subgraph cluster_vpc {
-    label="AWS VPC"; style="rounded,filled"; fillcolor="#f8fafc"; color="#cbd5e1"; fontcolor="#334155"; fontname="Noto Sans CJK KR";
+    label="AWS VPC"; style="rounded,filled"; fillcolor="#f8fafc"; color="#cbd5e1"; fontcolor="#334155"; fontname="Noto Sans CJK KR,Apple SD Gothic Neo";
 
     alb [label="ALB (HTTPS)\nACM 인증서", fillcolor="#fde68a", color="#fbbf24"];
 
     subgraph cluster_pub {
-      label="Public Subnet"; style="rounded,filled"; fillcolor="#eff6ff"; color="#bfdbfe"; fontname="Noto Sans CJK KR";
+      label="Public Subnet"; style="rounded,filled"; fillcolor="#eff6ff"; color="#bfdbfe"; fontname="Noto Sans CJK KR,Apple SD Gothic Neo";
 
       subgraph cluster_ec2 {
-        label="EC2 (Docker Compose / ECS on EC2)"; style="rounded,filled"; fillcolor="#eef2ff"; color="#c7d2fe"; fontcolor="#3730a3"; fontname="Noto Sans CJK KR";
-        c_fe [label="frontend\n(Nginx+React)", fillcolor="#c7d2fe"];
-        c_api [label="fastmcp-api", fillcolor="#c7d2fe"];
-        c_orch [label="orchestrator", fillcolor="#fed7aa", color="#fb923c"];
-        c_wk [label="worker ×N", fillcolor="#fed7aa", color="#fb923c"];
-        c_dbz [label="debezium\n(Kafka Connect)", fillcolor="#bfdbfe", color="#93c5fd"];
-        c_redis [label="redis", shape=cylinder, fillcolor="#fee2e2", color="#fca5a5"];
-        c_kafka [label="kafka", shape=cylinder, fillcolor="#fee2e2", color="#fca5a5"];
+        label="EC2 — docker compose up -d (지금 배포 경로)"; style="rounded,filled"; fillcolor="#eef2ff"; color="#c7d2fe"; fontcolor="#3730a3"; fontname="Noto Sans CJK KR,Apple SD Gothic Neo";
+        c_web  [label="web\nNginx + React", fillcolor="#c7d2fe"];
+        c_api  [label="api\nFastAPI + FastMCP\n오케스트레이터 · DuckDB 허브", fillcolor="#c7d2fe"];
+        c_beat [label="beat\nCron 스케줄러", fillcolor="#fed7aa", color="#fb923c"];
+        c_wk   [label="worker ×N\nCelery", fillcolor="#fed7aa", color="#fb923c"];
+        c_sap  [label="sap-connector\nNW RFC SDK (목 백엔드 기본)", fillcolor="#fbcfe8", color="#f472b6"];
+        c_redis[label="redis\n잡 큐 + 이벤트 버스", shape=cylinder, fillcolor="#fee2e2", color="#fca5a5"];
+
+        c_dbz  [label="debezium\n(Kafka Connect)", fillcolor="#dbeafe", color="#93c5fd", style="rounded,filled,dashed"];
+        c_kafka[label="kafka", shape=cylinder, fillcolor="#dbeafe", color="#93c5fd", style="filled,dashed"];
+        c_sink [label="cdc-sink\nKafka 구독 → 적재", fillcolor="#dbeafe", color="#93c5fd", style="rounded,filled,dashed"];
+        c_sym  [label="symmetricds\n트리거 기반 동기화", fillcolor="#e0e7ff", color="#a5b4fc", style="rounded,filled,dashed"];
+        c_ol   [label="ollama\n로컬 오픈웨이트 모델", fillcolor="#f1f5f9", color="#cbd5e1", style="rounded,filled,dashed"];
       }
     }
 
     subgraph cluster_priv {
-      label="Private Subnet"; style="rounded,filled"; fillcolor="#f0fdf4"; color="#bbf7d0"; fontname="Noto Sans CJK KR";
+      label="Private Subnet"; style="rounded,filled"; fillcolor="#f0fdf4"; color="#bbf7d0"; fontname="Noto Sans CJK KR,Apple SD Gothic Neo";
       rds [label="RDS (PostgreSQL)\n메타데이터 스토어", shape=cylinder, fillcolor="#bbf7d0", color="#4ade80"];
     }
   }
 
-  s3 [label="Amazon S3\n(적재 타깃 / 로그·아티팩트)", shape=cylinder, fillcolor="#fef9c3", color="#fde047"];
-   src [label="소스 시스템\n온프레미스 DB / SAP\n(VPN·Direct Connect)", fillcolor="#e2e8f0", color="#94a3b8"];
-  ecr [label="Amazon ECR\n(컨테이너 이미지)", fillcolor="#f1f5f9", color="#cbd5e1"];
-  cw [label="CloudWatch\n로그·메트릭·알람", fillcolor="#f1f5f9", color="#cbd5e1"];
+  subgraph cluster_ext {
+    label="VPC 밖 — 관리형 서비스 · 온프레미스"; style="rounded,filled"; fillcolor="#fafafa"; color="#e5e7eb"; fontcolor="#6b7280"; fontname="Noto Sans CJK KR,Apple SD Gothic Neo";
+    s3  [label="Amazon S3\n적재 타깃 · 아티팩트", shape=cylinder, fillcolor="#fef9c3", color="#fde047"];
+    src [label="소스 시스템\n온프레미스 DB · SAP\n(VPN · Direct Connect)", fillcolor="#e2e8f0", color="#94a3b8"];
+    ecr [label="Amazon ECR\n컨테이너 이미지", fillcolor="#f1f5f9", color="#cbd5e1"];
+    cw  [label="CloudWatch\n로그 · 메트릭 · 알람", fillcolor="#f1f5f9", color="#cbd5e1"];
+    { rank=same; s3; src; ecr; cw; }
+  }
 
-  user -> alb -> c_fe; alb -> c_api;
-  c_api -> c_orch -> c_redis; c_orch -> c_wk; c_redis -> c_wk;
-  c_dbz -> c_kafka -> c_wk;
-  c_api -> rds [ltail=cluster_ec2]; c_orch -> rds; c_wk -> rds;
-  c_wk -> s3; c_wk -> src [dir=both]; c_dbz -> src;
-  ecr -> c_api [style=dashed, arrowhead=none, label="deploy"];
-  c_wk -> cw [style=dotted];
+  phase5 [shape=note, style=filled, fillcolor="#fff7ed", color="#fdba74", fontcolor="#9a3412", fontsize=9,
+          label="Phase 5 (아직 없다)\l · ECS/EKS 전환 · 오토스케일\l · 관리형 Kafka(MSK) · HA/DR\l · infra/ (ECS task def · Terraform)\l"];
+
+  // 행을 못박아 높이를 묶는다. 안 그러면 의존 사슬 길이만큼 세로로 늘어난다.
+  { rank=same; c_web; c_api; c_beat; }
+  { rank=same; c_redis; c_dbz; c_sym; c_ol; }
+  { rank=same; c_wk; c_kafka; }
+  { rank=same; c_sap; c_sink; }
+
+  user -> alb;
+  alb -> c_web; alb -> c_api;
+  c_api -> c_redis [label="send_task"];
+  c_beat -> c_api;
+  c_redis -> c_wk;
+  c_wk -> c_sap [label="HTTP"];
+  c_dbz -> c_kafka -> c_sink;
+  c_api -> c_ol [style=dashed, label="AI"];
+
+  c_api -> rds [style=dashed]; c_wk -> rds [style=dashed];
+  c_wk -> s3;
+  c_wk -> src [dir=both, constraint=false]; c_sap -> src [constraint=false];
+  c_dbz -> src [constraint=false]; c_sym -> src [dir=both, constraint=false];
+
+  ecr -> c_api [style=dashed, arrowhead=none, label="deploy", constraint=false];
+  c_wk -> cw [style=dotted, constraint=false];
 }

@@ -1,26 +1,59 @@
-digraph G {
-  rankdir=LR; bgcolor="white";
-  node [fontname="Noto Sans CJK KR", fontsize=10, shape=box, style="rounded,filled"];
-  edge [fontname="Noto Sans CJK KR", fontsize=9, color="#5b6472"];
-  graph [fontname="Noto Sans CJK KR", fontsize=12, nodesep=0.4, ranksep=0.6];
+// 파이프라인 실행 흐름 — 그리고 **상태가 화면에 닿는 두 경로**.
+//
+// 이 그림이 존재하는 이유는 선의 종류다. 예전 그림은 메타DB 에서 WebSocket 으로 화살표를
+// 그렸는데, 그러면 "진행률은 메타DB 를 폴링해서 온다"로 읽힌다. 실제는 반대다 —
+// 워커가 Redis 로 publish 하고 api 의 WebSocket 이 구독해 밀어 준다.
+//
+// 그 구분이 왜 중요한가: 이벤트는 **부가 채널**이고 진실의 원천은 언제나 메타DB 다
+// (services/events.py 도크스트링). 구독자가 없어 이벤트를 놓쳐도 UI 는 REST 로 같은
+// 상태를 복원한다. 둘을 뒤집으면 "이벤트를 놓치면 상태를 잃는다"는 잘못된 그림이 된다.
+//
+// Main (Orchestrator) 는 별도 프로세스가 아니라 **api 안**이다 (services/run_service.py).
+//
+// 다시 그리기: docs/diagrams/README.md
 
-  trigger [label="트리거\nCron / 수동 / 이벤트", fillcolor="#ffedd5", color="#fdba74"];
-  main [label="Main (Orchestrator)\n· DAG 파싱\n· 실행 인스턴스 생성\n· Job enqueue", fillcolor="#fed7aa", color="#fb923c"];
-  redis [label="Redis Queue\n(대기 실행 큐)", shape=cylinder, fillcolor="#fee2e2", color="#fca5a5"];
+digraph G {
+  rankdir=LR; bgcolor="white"; compound=true;
+  node [fontname="Noto Sans CJK KR,Apple SD Gothic Neo", fontsize=10, shape=box, style="rounded,filled"];
+  edge [fontname="Noto Sans CJK KR,Apple SD Gothic Neo", fontsize=9, color="#5b6472"];
+  graph [fontname="Noto Sans CJK KR,Apple SD Gothic Neo", fontsize=12, nodesep=0.45, ranksep=0.75];
+
+  trigger [label="트리거\nCron(beat) · 수동 · API 트리거", fillcolor="#ffedd5", color="#fdba74"];
+
+  subgraph cluster_api {
+    label="api 프로세스"; style="rounded,filled"; fillcolor="#ecfdf5"; color="#a7f3d0"; fontcolor="#065f46"; fontname="Noto Sans CJK KR,Apple SD Gothic Neo";
+    orch [label="오케스트레이터\n· DAG 파싱 · 위상 정렬\n· Run 생성(메타DB)\n· send_task (이름만)", fillcolor="#a7f3d0", color="#34d399"];
+    ws   [label="WebSocket\n/runs/{id}/stream", fillcolor="#d1fae5", color="#6ee7b7"];
+  }
+
+  redis [label="Redis\n잡 큐 + 이벤트 버스(Pub/Sub)", shape=cylinder, fillcolor="#fee2e2", color="#fca5a5"];
 
   subgraph cluster_w {
-    label="Worker Pool (수평 확장)"; style="rounded,filled"; fillcolor="#eef2ff"; color="#c7d2fe"; fontcolor="#3730a3"; fontname="Noto Sans CJK KR";
-    w1 [label="Worker 1\nExtract→Transform→Load", fillcolor="#c7d2fe", color="#818cf8"];
+    label="Celery Worker Pool (무상태 · 수평 확장)"; style="rounded,filled"; fillcolor="#eef2ff"; color="#c7d2fe"; fontcolor="#3730a3"; fontname="Noto Sans CJK KR,Apple SD Gothic Neo";
+    w1 [label="Worker 1\nExtract → Transform → Load", fillcolor="#c7d2fe", color="#818cf8"];
     w2 [label="Worker 2", fillcolor="#c7d2fe", color="#818cf8"];
     w3 [label="Worker N", fillcolor="#c7d2fe", color="#818cf8"];
   }
 
-  meta [label="Metadata DB\n실행상태·로그·체크포인트", shape=cylinder, fillcolor="#fef9c3", color="#fde047"];
-  ws [label="WebSocket\n실시간 진행상황 push", fillcolor="#d1fae5", color="#6ee7b7"];
+  meta    [label="Metadata DB (PostgreSQL)\n실행상태 · 로그 · 체크포인트", shape=cylinder, fillcolor="#fef9c3", color="#fde047"];
+  browser [label="브라우저\n모니터 화면", fillcolor="#e0e7ff", color="#a5b4fc"];
 
-  trigger -> main -> redis;
+  // ── 실선: 잡이 흐르는 길 ──────────────────────────────────────────────
+  trigger -> orch;
+  orch -> redis [label="enqueue"];
   redis -> w1; redis -> w2; redis -> w3;
+
+  // ── 파선: 상태를 쓰는 길. 여기가 진실의 원천이다 ──────────────────────
+  orch -> meta [style=dashed];
   w1 -> meta [style=dashed]; w2 -> meta [style=dashed]; w3 -> meta [style=dashed];
-  main -> meta [style=dashed];
-  meta -> ws -> main [style=dotted, constraint=false, label="UI 반영"];
+  meta -> ws  [style=dashed, constraint=false, label="REST 폴백 — 이벤트를 놓쳐도 복원된다"];
+
+  // ── 점선: 이벤트가 흐르는 길. 빠르지만 부가 채널이다 ──────────────────
+  w1 -> redis [style=dotted, constraint=false, label="진행률 publish"];
+  redis -> ws [style=dotted, constraint=false, label="구독"];
+  ws -> browser [style=dotted, label="실시간 push"];
+
+  legend [shape=note, style="filled", fillcolor="#f8fafc", color="#cbd5e1", fontsize=9,
+          fontcolor="#475569", label="선의 뜻\l  ───  잡 흐름\l  ┈┈┈  상태 기록·조회 (진실의 원천)\l  ⋯⋯  이벤트 (부가 채널 · 놓쳐도 된다)\l"];
+  browser -> legend [style=invis];
 }

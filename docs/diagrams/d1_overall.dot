@@ -1,51 +1,103 @@
+// 전체 구조 — 계층과 **프로세스 경계**.
+//
+// 이 그림이 지켜야 하는 것 셋 (어긋나면 고친다):
+//   1. 없는 기능을 그리지 않는다. 인증은 JWT + RBAC 이다 — OAuth2 는 스키마만 있다.
+//   2. SQL 콘솔·연합 조회는 파이프라인과 나란한 제품의 절반이다. 빼면 그림이 거짓말을 한다.
+//   3. 무엇이 어느 프로세스에서 도는지 보여야 한다. 오케스트레이터는 api 안이고,
+//      SAP SDK 는 사이드카에만 있고, DuckDB 는 api 프로세스의 메모리를 쓴다.
+//
+// 엣지를 늘리지 말 것. api 도 worker 도 같은 커넥터를 쓰는데 둘 다 선으로 이으면
+// 그림이 실타래가 된다 — 그건 커넥터 계층 라벨이 대신 말한다.
+//
+// 다시 그리기: docs/diagrams/README.md
+
 digraph G {
-  rankdir=TB; bgcolor="white";
-  node [fontname="Noto Sans CJK KR", fontsize=11, shape=box, style="rounded,filled", penwidth=1.2];
-  edge [fontname="Noto Sans CJK KR", fontsize=9, color="#5b6472"];
-  graph [fontname="Noto Sans CJK KR", fontsize=13, labelloc=t, nodesep=0.35, ranksep=0.55];
+  rankdir=TB; bgcolor="white"; compound=true;
+  node [fontname="Noto Sans CJK KR,Apple SD Gothic Neo", fontsize=11, shape=box, style="rounded,filled", penwidth=1.2];
+  edge [fontname="Noto Sans CJK KR,Apple SD Gothic Neo", fontsize=9, color="#5b6472"];
+  graph [fontname="Noto Sans CJK KR,Apple SD Gothic Neo", fontsize=13, labelloc=t, nodesep=0.4, ranksep=0.7];
 
   subgraph cluster_pres {
-    label="Presentation Layer (Web / n8n 스타일)"; style="rounded,filled"; fillcolor="#eef2ff"; color="#c7d2fe"; fontcolor="#3730a3";
-    ui [label="React + React Flow\n파이프라인 캔버스\n(드래그앤드롭 노드 에디터)", fillcolor="#c7d2fe", color="#818cf8"];
-    mon [label="모니터링 대시보드\n실행 이력 / 로그 / 알림", fillcolor="#e0e7ff", color="#a5b4fc"];
+    label="Presentation Layer (React · web)"; style="rounded,filled"; fillcolor="#eef2ff"; color="#c7d2fe"; fontcolor="#3730a3";
+    sql [label="SQL 콘솔\n쿼리 탭 · 노트북 · 연합 조회 · AI", fillcolor="#c7d2fe", color="#818cf8"];
+    ui  [label="파이프라인 캔버스\nReact Flow 드래그앤드롭", fillcolor="#c7d2fe", color="#818cf8"];
+    mon [label="모니터링 대시보드\n실행 이력 · 로그 · 진행률", fillcolor="#e0e7ff", color="#a5b4fc"];
   }
 
   subgraph cluster_api {
-    label="API / BFF Layer (FastMCP)"; style="rounded,filled"; fillcolor="#ecfdf5"; color="#a7f3d0"; fontcolor="#065f46";
-    gw [label="API Gateway / BFF\nREST + WebSocket + MCP", fillcolor="#a7f3d0", color="#34d399"];
-    auth [label="인증·인가\nOAuth2 / RBAC / 시크릿", fillcolor="#d1fae5", color="#6ee7b7"];
+    label="api 프로세스 — FastAPI(REST·WS) + FastMCP"; style="rounded,filled"; fillcolor="#ecfdf5"; color="#a7f3d0"; fontcolor="#065f46";
+    gw   [label="API Gateway / BFF\nREST + WebSocket + MCP tool", fillcolor="#a7f3d0", color="#34d399"];
+    auth [label="인증·인가\nJWT / RBAC / 시크릿(KMS·Fernet)", fillcolor="#d1fae5", color="#6ee7b7"];
+    duck [label="연합 조회 허브 (DuckDB)\nREAD_ONLY ATTACH · 같은 프로세스", fillcolor="#d1fae5", color="#6ee7b7"];
+    orch [label="파이프라인 오케스트레이터\nDAG 파싱 · Run 생성 · enqueue", fillcolor="#d1fae5", color="#6ee7b7"];
   }
 
-  subgraph cluster_core {
-    label="Orchestration & Execution Layer"; style="rounded,filled"; fillcolor="#fff7ed"; color="#fed7aa"; fontcolor="#9a3412";
-    orch [label="파이프라인 엔진\nDAG 오케스트레이터", fillcolor="#fed7aa", color="#fb923c"];
-    sched [label="스케줄러\n(Cron / 트리거)", fillcolor="#ffedd5", color="#fdba74"];
-    queue [label="Job Queue\n(Redis / Celery)", fillcolor="#ffedd5", color="#fdba74"];
-    worker [label="Worker Pool\n(수집·변환·적재 실행)", fillcolor="#fed7aa", color="#fb923c"];
+  subgraph cluster_exec {
+    label="실행 — 무상태 · 수평 확장"; style="rounded,filled"; fillcolor="#fff7ed"; color="#fed7aa"; fontcolor="#9a3412";
+    sched  [label="스케줄러 (beat)\nCron 트리거", fillcolor="#ffedd5", color="#fdba74"];
+    queue  [label="Redis\n잡 큐 + 이벤트 버스(Pub/Sub)", shape=cylinder, fillcolor="#ffedd5", color="#fdba74"];
+    worker [label="Celery Worker Pool\nExtract → Transform → Load", fillcolor="#fed7aa", color="#fb923c"];
   }
 
   subgraph cluster_conn {
-    label="Connector Layer"; style="rounded,filled"; fillcolor="#fdf2f8"; color="#fbcfe8"; fontcolor="#9d174b";
-    dbc [label="DB 커넥터\nMySQL·MSSQL·PostgreSQL·MongoDB", fillcolor="#fbcfe8", color="#f472b6"];
-    sapc [label="SAP 커넥터\n(RFC / BAPI)", fillcolor="#fce7f3", color="#f9a8d4"];
-    cdc [label="CDC 커넥터\n(Debezium)", fillcolor="#fce7f3", color="#f9a8d4"];
+    label="Connector Layer — api(조회)·worker(적재) 가 함께 쓰는 공유 라이브러리 · 지연 로딩"; style="rounded,filled"; fillcolor="#fdf2f8"; color="#fbcfe8"; fontcolor="#9d174b";
+    dbc  [label="DB 커넥터\nMySQL · PostgreSQL · MSSQL · MongoDB", fillcolor="#fbcfe8", color="#f472b6"];
+    obj  [label="객체·파일\nAmazon S3 · 로컬 파일", fillcolor="#fce7f3", color="#f9a8d4"];
+    sapc [label="SAP 커넥터\nHTTP 클라이언트 — SDK 를 갖지 않는다", fillcolor="#fce7f3", color="#f9a8d4"];
+    aic  [label="AI 모델 커넥터\nOllama(로컬) · Gemini · Bedrock", fillcolor="#fce7f3", color="#f9a8d4"];
   }
+
+  subgraph cluster_rt {
+    label="실시간 경로 — 별도 컨테이너"; style="rounded,filled"; fillcolor="#eff6ff"; color="#bfdbfe"; fontcolor="#1e40af";
+    dbz   [label="Debezium (Kafka Connect)\n→ Kafka 변경 이벤트 토픽", fillcolor="#dbeafe", color="#93c5fd"];
+    sink  [label="CDC Sink Worker\nKafka 구독 → 적재", fillcolor="#bfdbfe", color="#60a5fa"];
+    symds [label="SymmetricDS 사이드카\n원본 트리거 — 워커를 지나지 않는다", fillcolor="#dbeafe", color="#93c5fd"];
+  }
+
+  sidecar [label="sap-connector 사이드카\nNW RFC SDK + pyrfc — 여기에만 있다", fillcolor="#fce7f3", color="#f472b6", penwidth=1.6];
 
   subgraph cluster_store {
-    label="Source / Target Storage"; style="rounded,filled"; fillcolor="#f1f5f9"; color="#cbd5e1"; fontcolor="#334155";
-    src [label="Source\nRDB / NoSQL / SAP", fillcolor="#e2e8f0", color="#94a3b8"];
-    tgt [label="Target\nDB / Amazon S3", fillcolor="#e2e8f0", color="#94a3b8"];
+    label="Source / Target"; style="rounded,filled"; fillcolor="#f1f5f9"; color="#cbd5e1"; fontcolor="#334155";
+    src [label="Source\nRDB · NoSQL · SAP", fillcolor="#e2e8f0", color="#94a3b8"];
+    tgt [label="Target\nDB · Amazon S3 · 로컬 파일", fillcolor="#e2e8f0", color="#94a3b8"];
   }
 
-  meta [label="Metadata Store\n(파이프라인·스키마·실행이력·오프셋)\nPostgreSQL", shape=cylinder, fillcolor="#fef9c3", color="#fde047", fontcolor="#713f12"];
+  meta [label="Metadata Store (PostgreSQL)\n연결 · 파이프라인 · 실행이력 · 체크포인트", shape=cylinder, fillcolor="#fef9c3", color="#fde047", fontcolor="#713f12"];
 
-  ui -> gw; mon -> gw;
+  // ── 화면 → API ────────────────────────────────────────────────────────
+  sql -> gw; ui -> gw; mon -> gw;
   gw -> auth [style=dashed, arrowhead=none];
-  gw -> orch; gw -> sched;
-  sched -> orch -> queue -> worker;
-  worker -> dbc; worker -> sapc; worker -> cdc;
-  dbc -> src [dir=both]; sapc -> src [dir=both]; cdc -> src;
-  worker -> tgt;
-  orch -> meta [style=dashed, arrowhead=none, label="상태/이력"];
+  gw -> duck [style=dashed, arrowhead=none];
+  gw -> orch [style=dashed, arrowhead=none];
+
+  // ── 파이프라인은 큐를 거쳐 워커로 ─────────────────────────────────────
+  sched -> orch [constraint=false];
+  orch -> queue [label="send_task (이름만)"];
+  queue -> worker;
+
+  // ── 커넥터 계층은 api·worker 가 함께 쓴다 (선 하나로 묶는다) ──────────
+  worker -> dbc [lhead=cluster_conn, label="적재 실행"];
+  gw     -> dbc [lhead=cluster_conn, label="쿼리 편집기 조회", style=dashed];
+
+  // ── 연합 조회만 커넥터를 거치지 않는다 — DuckDB 확장이 직접 붙는다 ────
+  duck -> src [label="READ_ONLY ATTACH", style=dashed];
+
+  // ── 커넥터 → 소스/타깃 ────────────────────────────────────────────────
+  dbc -> src [dir=both];
+  sapc -> sidecar [label="HTTP"];
+  sidecar -> src [label="RFC"];
+  obj -> tgt;
+
+  // ── 실시간 두 갈래 ────────────────────────────────────────────────────
+  src -> dbz [label="binlog · WAL"];
+  dbz -> sink [label="Kafka"];
+  sink -> tgt;
+  src -> symds [label="트리거"];
+  symds -> tgt [style=bold, color="#6366f1"];
+
+  // ── 상태는 메타DB 가 진실, 이벤트는 부가 채널 ─────────────────────────
+  orch -> meta [style=dashed, arrowhead=none, label="상태·이력"];
   worker -> meta [style=dashed, arrowhead=none];
+  worker -> queue [style=dotted, constraint=false, label="진행률 publish"];
+  queue -> gw [style=dotted, constraint=false, label="구독 → WebSocket push"];
 }

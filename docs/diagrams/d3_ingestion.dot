@@ -1,32 +1,65 @@
+// 수집 경로 네 갈래 — **변경을 어떻게 잡아 어디로 옮기는가**.
+//
+// 기준을 제목에 박아 둔다. 예전 그림은 셋(배치·SAP·CDC)으로 갈랐는데 기준이 섞여 있었다 —
+// 배치·CDC 는 "어떻게 잡는가"이고 SAP 은 "무엇에서 읽는가"다. 그래서 SymmetricDS 가
+// 낄 자리가 없었다. ARCHITECTURE §6 의 표와 같은 기준으로 맞춘다.
+//
+// 두 가지를 눈에 보이게 그린다:
+//   1. SAP SDK 는 워커에 없다. 워커는 HTTP 로만 이야기하고 SDK 는 사이드카 안에만 있다
+//      (eai_connectors/sap_rfc.py 는 SAP 라이브러리를 한 줄도 임포트하지 않는다).
+//      예전 그림의 "NW RFC SDK + ctypes"는 이 저장소의 핵심 결정과 정반대였다.
+//   2. 동기화만 데이터가 **워커를 지나지 않는다.** 그래서 변환·컬럼 매핑이 불가능하다.
+//
+//
+// 클러스터를 ④③②① 순으로 선언한 이유: graphviz 가 rankdir=LR 에서 이 그래프를 선언
+// **역순**으로 쌓는다. 그림에서는 ①②③④ 로 읽혀야 하므로 소스에서 뒤집어 둔다.
+// 순서를 원래대로 되돌리면 그림에서 ④가 맨 위로 올라간다.
+//
+// 다시 그리기: docs/diagrams/README.md
+
 digraph G {
-  rankdir=LR; bgcolor="white";
-  node [fontname="Noto Sans CJK KR", fontsize=10, shape=box, style="rounded,filled"];
-  edge [fontname="Noto Sans CJK KR", fontsize=9, color="#5b6472"];
-  graph [fontname="Noto Sans CJK KR", fontsize=12, nodesep=0.35, ranksep=0.7, compound=true];
+  rankdir=LR; bgcolor="white"; compound=true;
+  node [fontname="Noto Sans CJK KR,Apple SD Gothic Neo", fontsize=10, shape=box, style="rounded,filled"];
+  edge [fontname="Noto Sans CJK KR,Apple SD Gothic Neo", fontsize=9, color="#5b6472"];
+  graph [fontname="Noto Sans CJK KR,Apple SD Gothic Neo", fontsize=12, nodesep=0.35, ranksep=0.7];
 
-  subgraph cluster_a {
-    label="① 배치 수집 (DB → DB / S3)"; style="rounded,filled"; fillcolor="#ecfdf5"; color="#a7f3d0"; fontcolor="#065f46"; fontname="Noto Sans CJK KR";
-    a_src [label="Source DB\nMySQL/MSSQL/PG/Mongo", fillcolor="#d1fae5"];
-    a_ext [label="Batch Extractor\n(JDBC/드라이버, 증분키/타임스탬프)", fillcolor="#a7f3d0"];
-    a_tgt [label="Target\nDB / S3(Parquet)", fillcolor="#d1fae5"];
-    a_src -> a_ext -> a_tgt;
-  }
-
-  subgraph cluster_b {
-    label="② SAP 수집 (RFC / BAPI)"; style="rounded,filled"; fillcolor="#fdf2f8"; color="#fbcfe8"; fontcolor="#9d174b"; fontname="Noto Sans CJK KR";
-    b_src [label="SAP ECC / S4HANA", fillcolor="#fce7f3"];
-    b_rfc [label="RFC 커넥터\nNW RFC SDK + ctypes\n(BAPI/RFC_READ_TABLE)", fillcolor="#fbcfe8"];
-    b_tgt [label="Target\nDB / S3", fillcolor="#fce7f3"];
-    b_src -> b_rfc -> b_tgt;
+  subgraph cluster_d {
+    label="④ 동기화 — 원본 테이블 트리거. CDC 를 못 쓸 때"; style="rounded,filled"; fillcolor="#eef2ff"; color="#c7d2fe"; fontcolor="#3730a3"; fontname="Noto Sans CJK KR,Apple SD Gothic Neo";
+    d_src [label="Source MSSQL\n트리거 → SYM_DATA", fillcolor="#e0e7ff"];
+    d_sym [label="SymmetricDS 사이드카\n노드 간 HTTP 직송", fillcolor="#c7d2fe"];
+    d_tgt [label="Target PostgreSQL", fillcolor="#e0e7ff"];
+    d_src -> d_sym -> d_tgt [style=bold, color="#6366f1"];
+    d_note [shape=plaintext, style="", fontsize=9, fontcolor="#3730a3",
+            label="데이터가 워커를 지나지 않는다\n→ 변환·컬럼 매핑 불가 · 다중 타깃 불가\n운영 적용 전 부하 테스트가 게이트"];
+    d_sym -> d_note [style=invis];
   }
 
   subgraph cluster_c {
-    label="③ CDC 수집 (실시간, Debezium)"; style="rounded,filled"; fillcolor="#eff6ff"; color="#bfdbfe"; fontcolor="#1e40af"; fontname="Noto Sans CJK KR";
-    c_src [label="Source DB\n(binlog/WAL/oplog)", fillcolor="#dbeafe"];
-    c_dbz [label="Debezium\n(Kafka Connect)", fillcolor="#bfdbfe"];
-    c_k [label="Kafka\n(변경 이벤트 토픽)", shape=cylinder, fillcolor="#dbeafe"];
-    c_sink [label="Sink Worker\n(적재/변환)", fillcolor="#bfdbfe"];
-    c_tgt [label="Target\nDB / S3", fillcolor="#dbeafe"];
+    label="③ CDC — DB 로그(binlog·WAL). 원본 부담이 거의 없다"; style="rounded,filled"; fillcolor="#eff6ff"; color="#bfdbfe"; fontcolor="#1e40af"; fontname="Noto Sans CJK KR,Apple SD Gothic Neo";
+    c_src  [label="Source DB\nbinlog · WAL · CDC 테이블", fillcolor="#dbeafe"];
+    c_dbz  [label="Debezium\n(Kafka Connect)", fillcolor="#bfdbfe"];
+    c_k    [label="Kafka\n변경 이벤트 토픽", shape=cylinder, fillcolor="#dbeafe"];
+    c_sink [label="CDC Sink Worker\n구독 → 적재 · 삭제 처리", fillcolor="#bfdbfe"];
+    c_tgt  [label="Target\nDB · S3", fillcolor="#dbeafe"];
     c_src -> c_dbz -> c_k -> c_sink -> c_tgt;
+  }
+
+  subgraph cluster_b {
+    label="② SAP — SDK 를 사이드카에 가둔다"; style="rounded,filled"; fillcolor="#fdf2f8"; color="#fbcfe8"; fontcolor="#9d174b"; fontname="Noto Sans CJK KR,Apple SD Gothic Neo";
+    b_src  [label="SAP ECC / S4HANA", fillcolor="#fce7f3"];
+    b_side [label="sap-connector 사이드카\nNW RFC SDK + pyrfc\nBAPI · RFC_READ_TABLE(512자 분할)", fillcolor="#fbcfe8", penwidth=1.6, color="#f472b6"];
+    b_w    [label="Celery Worker\nSAP 커넥터 = HTTP 클라이언트\n(SDK 를 갖지 않는다)", fillcolor="#fce7f3"];
+    b_tgt  [label="Target\nDB · S3", fillcolor="#fce7f3"];
+    b_src -> b_side [label="RFC"];
+    b_side -> b_w [label="HTTP"];
+    b_w -> b_tgt;
+  }
+
+  subgraph cluster_a {
+    label="① 배치 — 주기적 조회(watermark). 기본 경로"; style="rounded,filled"; fillcolor="#ecfdf5"; color="#a7f3d0"; fontcolor="#065f46"; fontname="Noto Sans CJK KR,Apple SD Gothic Neo";
+    a_src [label="Source DB\nMySQL · PostgreSQL · MSSQL · MongoDB", fillcolor="#d1fae5"];
+    a_w   [label="Celery Worker\nExtract → Transform → Load\n증분키 · 체크포인트", fillcolor="#a7f3d0"];
+    a_tgt [label="Target\nDB(upsert) · S3(Parquet)", fillcolor="#d1fae5"];
+    a_src -> a_w -> a_tgt;
   }
 }
