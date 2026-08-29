@@ -101,15 +101,36 @@ carry_over_existing: {carry_over}
             사용자에게 위 형식으로 user_confirmation_required 를 제시하고 응답을 기다린다
             user_responses = wait  # {finding_id, decision(수락|거부|대안), note?}
 
-            # 수락·대안으로 처리될 항목의 상세를 **여기서** 보관한다. reviewer 는 다음 호출에서
-            # 그것을 고쳐 auto_fix_commits 로만 돌려주고, 상세(file·line·severity·category·
-            # cause·risk_factor·suggestion)는 그 응답에 다시 담기지 않는다 — 지금 안 챙기면
-            # 영영 잃는다. /pr §6-D 가 "무엇을 잡아서 어떻게 고쳤나"를 남기려면 이 목록이 필요하다.
-            for r in user_responses where r.decision in ("수락", "대안"):
-                f = user_confirmation_required[r.finding_id]
-                accepted_findings.append({**f, decision: r.decision, note: r.note})
+            # 수락·대안 항목의 **상세**를 여기서 붙잡아 둔다. reviewer 는 다음 호출에서 그것을
+            # 고쳐 auto_fix_commits(sha)로만 돌려주고 상세(file·line·severity·category·cause·
+            # risk_factor·suggestion)는 다시 담기지 않는다 — 지금 안 챙기면 영영 잃는다.
+            #
+            # 다만 **여기서 확정하지 않는다.** 수락은 "고쳐 달라"이지 "고쳐졌다"가 아니다 —
+            # reviewer 는 민감 경로와 security/performance 를 수락받아도 고치지 않는다
+            # (reviewer.md 절대 규칙 4 · 결정 매트릭스). 확정은 응답을 보고 아래에서 한다.
+            #
+            # id 로 자리를 찾지 않고 대응표를 만든다. finding_id 는 1-based 이고 reviewer 호출
+            # 마다 1부터 다시 매겨진다 — 리스트 인덱스로 쓰면 한 칸 밀리고, 같은 항목인지
+            # 판별하는 데도 못 쓴다. 동일성 판정은 key(f) = (file, line, cause) 로 한다.
+            by_id = {f.finding_id: f for f in user_confirmation_required}
+            pending = [{**by_id[r.finding_id], decision: r.decision, note: r.note}
+                       for r in user_responses if r.decision in ("수락", "대안")]
+
             result = Agent(subagent_type="reviewer", prompt=<동일 prompt + cycle_number 유지 + user_responses>)
-            parse result → status, ... (재할당)
+            parse result → status, ... (재할당)   # user_confirmation_required 도 새 값으로 재바인딩된다
+
+            # 반영 여부를 **응답으로** 판정한다. 같은 항목이 또 확인 요청으로 돌아왔으면 아직
+            # 안 끝난 것이고, 커밋이 하나도 없으면 reviewer 가 손대지 못한 것이다.
+            still_open = {key(f) for f in result.user_confirmation_required}
+            for f in pending:
+                if len(result.auto_fix_commits) > 0 and key(f) not in still_open:
+                    upsert(accepted_findings, key(f), {**f, applied: true})
+                else:
+                    upsert(carry_over, key(f), {**f, applied: false, reason:
+                        "수락됐으나 reviewer 가 적용하지 않았다 — 민감 경로이거나 자동수정 금지"
+                        " 카테고리다. 사람이 직접 반영해야 한다."})
+            # upsert 는 같은 key 가 있으면 덮어쓴다. 내부 루프가 두 번 돌면 같은 항목이 두 번
+            # 지나가는데, 그대로 append 하면 PR 리뷰에 같은 코멘트가 두 개 올라간다.
 
             if status != "NEEDS_USER":
                 break
@@ -175,6 +196,10 @@ output f"  종료 사유: {termination_reason}"
   ([pr.md](pr.md) §6-D). reviewer 의 `REVIEW_RESULT` 는 고쳐진 항목을 `auto_fix_commits`(sha)
   로만 돌려주므로 **상세는 이 오케스트레이터가 보관하지 않으면 사라진다.** 계약을 늘리지 않는
   이유가 이것이다 — 수락 직전의 `user_confirmation_required` 에 이미 필요한 필드가 다 있다.
+- **`accepted_findings` 에는 실제로 반영된 것만 들어간다.** 수락받고도 reviewer 가 고치지
+  못한 것(민감 경로·자동수정 금지 카테고리)은 `applied: false` 와 사유를 달아 `carry_over` 로
+  간다 — 사람이 손으로 반영했더라도 코드가 그것을 알 방법이 없으므로 **미적용으로 남긴다.**
+  거부가 아닌데 이월에도 없으면 미해결 지적이 「해결됨」으로 기록되고 추적에서 사라진다.
 - **마지막 사이클 자체가 새 자동수정 commit 을 만들었다면**, 그 commit 이 담긴 최종 HEAD 는
   아직 `cycles_for_head`가 1로 리셋된 상태다(위 「상태 기록」 참고) — 고위험(2사이클 필요)
   변경이었다면 `/pr`의 push 게이트가 여전히 막을 수 있다. 이건 버그가 아니라 "그 마지막 수정은
