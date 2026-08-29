@@ -42,6 +42,7 @@ CORE_PATH_PATTERN='^(apps/connectors/|apps/[a-z-]+/migrations/|apps/api/alembic\
 
 ```
 carry_over = []                # 최종 이월 목록 (PR body 에 쓰일 수 있음)
+accepted_findings = []         # 사용자가 수락해 고쳐진 항목의 **상세** (PR 리뷰 게시에 쓰인다)
 auto_fix_commits_total = []
 cycle = 1
 required_cycles = high_risk ? 2 : 1
@@ -99,6 +100,14 @@ carry_over_existing: {carry_over}
         while True:
             사용자에게 위 형식으로 user_confirmation_required 를 제시하고 응답을 기다린다
             user_responses = wait  # {finding_id, decision(수락|거부|대안), note?}
+
+            # 수락·대안으로 처리될 항목의 상세를 **여기서** 보관한다. reviewer 는 다음 호출에서
+            # 그것을 고쳐 auto_fix_commits 로만 돌려주고, 상세(file·line·severity·category·
+            # cause·risk_factor·suggestion)는 그 응답에 다시 담기지 않는다 — 지금 안 챙기면
+            # 영영 잃는다. /pr §6-D 가 "무엇을 잡아서 어떻게 고쳤나"를 남기려면 이 목록이 필요하다.
+            for r in user_responses where r.decision in ("수락", "대안"):
+                f = user_confirmation_required[r.finding_id]
+                accepted_findings.append({**f, decision: r.decision, note: r.note})
             result = Agent(subagent_type="reviewer", prompt=<동일 prompt + cycle_number 유지 + user_responses>)
             parse result → status, ... (재할당)
 
@@ -147,6 +156,7 @@ carry_over_existing: {carry_over}
         break
 
 output f"코드 리뷰 완료: 사이클 {cycle}/{required_cycles}, 확정 수정 commit {len(auto_fix_commits_total)}개, 이월 {len(carry_over)}건"
+output accepted_findings   # /pr §6-D 로 넘긴다 — 이 목록은 여기서만 만들어진다
 output f"  종료 사유: {termination_reason}"
 ```
 
@@ -161,6 +171,10 @@ output f"  종료 사유: {termination_reason}"
 - 그 외("리뷰 완료 (...)", "변경 없음")는 정상 종료. commit 해시·이월 목록을 보고한다.
 - 이월(`carry_over`) 목록은 `/pr`이 PR body 의 `## 코드리뷰` 섹션에 반영할 수 있도록 그대로
   넘겨준다(형식은 [pr.md](pr.md) §6-A 참고).
+- **수락된 항목의 상세(`accepted_findings`)도 함께 넘긴다** — `/pr`이 PR 리뷰로 게시한다
+  ([pr.md](pr.md) §6-D). reviewer 의 `REVIEW_RESULT` 는 고쳐진 항목을 `auto_fix_commits`(sha)
+  로만 돌려주므로 **상세는 이 오케스트레이터가 보관하지 않으면 사라진다.** 계약을 늘리지 않는
+  이유가 이것이다 — 수락 직전의 `user_confirmation_required` 에 이미 필요한 필드가 다 있다.
 - **마지막 사이클 자체가 새 자동수정 commit 을 만들었다면**, 그 commit 이 담긴 최종 HEAD 는
   아직 `cycles_for_head`가 1로 리셋된 상태다(위 「상태 기록」 참고) — 고위험(2사이클 필요)
   변경이었다면 `/pr`의 push 게이트가 여전히 막을 수 있다. 이건 버그가 아니라 "그 마지막 수정은

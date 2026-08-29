@@ -66,7 +66,12 @@ main 은 팀이 공유하는 브랜치이므로 직접 push 하지 않는다. �
   커밋되어 있다 — 여기서 다시 손대지 않는다.
 - `/review`의 최종 `carry_over` 목록을 받아서 아래 step 6 PR body 의 `## 코드리뷰` 섹션에 쓴다.
 - **finding 을 버리지 말고 들고 간다.** 확정 수정된 것과 이월된 것 **양쪽 다** step 6-D 에서
-  PR 리뷰로 게시한다. `file`·`line`·`cause`·`risk_factor`·`suggestion` 이 그때 필요하다.
+  PR 리뷰로 게시한다. 필요한 필드는 `file`·`line`·`severity`·`category`·`cause`·`risk_factor`·
+  `suggestion` 이다.
+  - 확정 수정된 것은 `/review` 가 `accepted_findings` 로 넘겨준다. reviewer 의 `REVIEW_RESULT`
+    는 고쳐진 항목을 `auto_fix_commits`(sha)로만 돌려주므로, 상세는 수락을 받는 그 순간에
+    보관해 두지 않으면 사라진다 — 그 보관을 [review.md](review.md) 가 한다.
+  - 이월된 것은 `carry_over` 에 그대로 있다.
 - **이 단계를 건너뛰고 push 하지 않는다.** `.claude/hooks/pr-review-gate.sh`가 **지금 push 하려는
   HEAD** 가 reviewer 로 충분히(고위험이면 2회) 검토됐는지 `.claude/.review-state.json` 으로
   대조해 강제한다 — 건너뛰거나 리뷰 이후 커밋을 더 쌓으면 다음 step 의 `git push`가 deny 된다.
@@ -78,7 +83,7 @@ main 은 팀이 공유하는 브랜치이므로 직접 push 하지 않는다. �
 - push 후 검증: `git rev-parse HEAD` 와 `git rev-parse origin/$BRANCH` 가 일치하고
   `git rev-list @{u}..HEAD` 가 0 인지 확인. 불일치 시 중단 + 보고.
 
-### 6. PR body 작성 (생성 또는 갱신)
+### 6. PR 반영 — body 작성 + 리뷰 게시
 
 PR body 본문 구성 (순서):
 1. **변경 요약** — 무엇을·왜 (bullet).
@@ -123,10 +128,14 @@ gh pr edit "$BRANCH" --body-file <본문파일>
 
 #### 6-D. 리뷰 결과를 PR 리뷰로 게시 (Reviews 탭에 남긴다)
 
+> **이 단계는 조건 없이 항상 돈다.** 6-A·6-C 를 건너뛰었더라도 — 오히려 그때가 더 중요하다.
+> 이월이 없어 body 에 쓸 것이 없는 PR 이야말로 Reviews 탭이 비기 쉬운 경우이고, 이 단계는
+> 그것을 막으려고 있다.
+
 step 4 의 reviewer 결과를 **PR 리뷰로 올린다.** 6-A 의 body 섹션과 둘 다 남긴다 — 하는 일이
-다르다. body 는 **머지 뒤에도 남는 기록**이고(`/pr-merge` 가 squash 메시지에 쓴다), 리뷰는
-**리뷰를 돌렸다는 사실 자체의 증거**다. body 에만 적으면 Reviews 탭이 비어 있어, 밖에서 보는
-사람에게는 아무도 검토하지 않고 머지한 PR 과 구별되지 않는다.
+다르다. body 는 **머지 뒤에도 PR 페이지에 남는 기록**이고, 리뷰는 **리뷰를 돌렸다는 사실
+자체의 증거**다. body 에만 적으면 Reviews 탭이 비어 있어, 밖에서 보는 사람에게는 아무도
+검토하지 않고 머지한 PR 과 구별되지 않는다.
 
 두 가지를 올린다.
 
@@ -134,11 +143,27 @@ step 4 의 reviewer 결과를 **PR 리뷰로 올린다.** 6-A 의 body 섹션과
 2. **파일·라인이 있는 항목을 인라인 코멘트로** — 확정 수정된 finding 과 이월 항목 **양쪽 다**.
    고친 것도 남긴다: 무엇을 잡아서 어떻게 고쳤는지가 리뷰의 값어치다.
 
+**줄 번호는 게시 직전에 다시 맞춘다.** reviewer 가 적은 `line` 은 **고치기 전** 파일 기준인데,
+수락된 수정이 커밋되면서 그 위로 줄이 밀린다. `gh api repos/{owner}/{repo}/pulls/$PR_NUM/files`
+로 지금 diff 를 읽어 대조하고, **맞출 수 없는 항목은 인라인에서 빼 본문 요약으로 내린다.**
+
+그래서 **확정 수정 항목의 기본은 본문 요약**이다 — 줄이 확실히 맞을 때만 인라인으로 올린다.
+아래 항목과 같은 이유다: 하나가 빗나가면 같은 요청의 나머지까지 잃을 수 있다.
+
+먼저 **PR 번호를 잡는다.** 6-B(새 PR)는 URL 만 출력하고 6-C 는 브랜치 이름으로 수정해서,
+여기까지 오는 어느 경로에서도 번호가 변수로 남아 있지 않다.
+
+```bash
+PR_NUM=$(gh pr view "$BRANCH" --json number -q .number)
+```
+
 한 번의 요청으로 올린다(코멘트를 따로 달면 Reviews 탭에 묶이지 않는다):
 
 ```bash
-gh api repos/SurvivorsStudio/ditter/pulls/<n>/reviews --method POST --input <리뷰파일.json>
+gh api "repos/{owner}/{repo}/pulls/$PR_NUM/reviews" --method POST --input <리뷰파일.json>
 ```
+
+`{owner}/{repo}` 는 `gh` 가 현재 저장소로 채운다 — 하드코딩하면 포크에서 엉뚱한 곳에 올라간다.
 
 `<리뷰파일.json>` 모양:
 
@@ -163,12 +188,17 @@ gh api repos/SurvivorsStudio/ditter/pulls/<n>/reviews --method POST --input <리
   (422 `Can not approve your own pull request`). 승인은 사람이 하는 일이고, 이 단계가 하려는
   것은 승인이 아니라 **검토 기록**이다.
 - **인라인 코멘트는 그 PR 의 diff 에 있는 줄에만 붙는다.** 건드리지 않은 줄이나 파일에 달면
-  422 로 **요청 전체가 실패**한다(일부만 올라가지 않는다). 그런 항목은 인라인에서 빼고 본문
-  요약으로 내린다 — 이월 항목이 특히 그렇다. PNG 같은 바이너리에도 달 수 없다.
+  **422 로 요청이 거부된다.** 공식 문서는 거기까지만 말하고 *일부라도 올라가는지*는 밝히지
+  않는다 — 그래서 하나가 빗나가면 **나머지도 못 올라간다고 보고** 다룬다(그래야 어느 쪽이든
+  안전하다). 맞출 수 없는 항목은 인라인에서 빼 본문 요약으로 내린다 — 이월 항목이 특히
+  그렇다. PNG 같은 바이너리에도 달 수 없다.
 - **삭제된 줄에 달려면 `"side": "LEFT"`** 를 쓴다. 기본은 `RIGHT`(추가·유지된 줄).
 - **실패해도 머지를 막지 않는다.** push 와 PR 은 이미 끝났다. 422 가 나면 원인(대개 diff 밖
   라인)을 줄여 한 번 더 시도하고, 그래도 안 되면 **실패 사실을 보고에 남기고 넘어간다** —
   게이트가 아니라 기록이다.
+  - 재시도 **전에** `gh api "repos/{owner}/{repo}/pulls/$PR_NUM/reviews"` 로 이미 올라간 것이
+    없는지 본다. "전부 실패한다"는 원자성은 공식 문서가 보장하지 않아, 일부가 올라간 상태였다면
+    재시도가 같은 리뷰를 두 번 남긴다.
 - reviewer 가 아무것도 못 찾았으면(`CLEAN`, finding 0건) **요약만 올린다.** "돌렸고 깨끗했다"도
   기록이다 — 이때 인라인 코멘트 배열은 비운다.
 
@@ -182,8 +212,13 @@ gh api repos/SurvivorsStudio/ditter/pulls/<n>/reviews --method POST --input <리
 - 한 브랜치/PR 에 커밋이 여러 개여도 된다. 되돌리기·리뷰 단위는 커밋.
 - 머지 전략은 **squash 고정**이며 실제 머지는 `/pr-merge` 가 담당한다.
 - Git 워크플로·커밋 단위 정책의 본문은 `docs/conventions/commit-convention.md` (SSOT).
-- **리뷰는 두 곳에 남긴다** — PR body 의 `## 코드리뷰`(머지 뒤에도 남는 기록)와 Reviews 탭의
-  리뷰 코멘트(검토했다는 증거). 한쪽만 남기면 각각이 하던 일 중 하나가 빈다.
+- **리뷰는 두 곳에 남긴다** — PR body 의 `## 코드리뷰`(머지 뒤에도 PR 페이지에 남는 기록)와
+  Reviews 탭의 리뷰 코멘트(검토했다는 증거). 한쪽만 남기면 각각이 하던 일 중 하나가 빈다.
+- **6-D 는 `/pr-merge` 를 돌 계정과 같은 `gh` 계정으로 올린다.** 6-D 가 다는 인라인 코멘트는
+  해결되지 않은 리뷰 스레드로 남는데, `/pr-merge` 의 미해결 스레드 게이트는 **`gh` 를 실행하는
+  그 계정**이 남긴 것만 제외한다. 계정이 갈리면 우리가 방금 올린 기록 때문에 머지마다 확인을
+  요구받고, 그것이 습관이 되면 진짜 사람의 지적까지 함께 넘기게 된다.
+  (`gh auth status` 로 활성 계정을 확인한다 — 이 환경에는 계정이 둘 등록돼 있다.)
 - step 4(코드 리뷰)는 `.claude/hooks/pr-review-gate.sh`가 기계적으로 강제한다 — reviewer 를
   건너뛰고 push 하면 hook 이 deny 한다. reviewer 의 절대 규칙·분류 모델은
   [.claude/agents/reviewer.md](../agents/reviewer.md) (SSOT).
