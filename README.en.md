@@ -218,7 +218,7 @@ cd apps/web && npm test && npm run lint && npm run build
 
 `<area>` is one of `connectors` · `api` · `worker` · `sap-connector`.
 
-**1,294 tests pass** (Python 1,006 · web 288). CI enforces tests, coverage floors, `ruff`,
+**1,297 tests pass** (Python 1,006 · web 291). CI enforces tests, coverage floors, `ruff`,
 `eslint`, and `tsc` on every pull request, and `main` is protected by that check.
 
 | Check | Status |
@@ -228,6 +228,16 @@ cd apps/web && npm test && npm run lint && npm run build
 | ruff | ✅ enforced by CI |
 | eslint · tsc (build) | ✅ enforced by CI |
 | mypy (strict) | ⚠️ **not yet** — 127 findings remain (`api` 123 · `connectors` 3 · `worker` 1) |
+
+To measure coverage locally — the same numbers CI gates on:
+
+```bash
+cd apps/<area> && uv run --extra dev pytest -q --cov
+```
+
+```bash
+cd apps/web && npm run test:coverage
+```
 
 Coverage is **53–79% for the Python apps** and split by layer on the web side
 (`src/store` 97% · `src/api` 59% · overall 19%, because UI components have no render tests yet).

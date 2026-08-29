@@ -248,7 +248,7 @@ cd apps/<영역> && uv run --extra dev pytest -q && uv run --extra dev ruff chec
 cd apps/web && npm test && npm run lint && npm run build
 ```
 
-**현재 상태 — 테스트 1,294개 통과** (Python 1,006 · 프론트 288).
+**현재 상태 — 테스트 1,297개 통과** (Python 1,006 · 프론트 291).
 
 | 검사 | 상태 |
 |---|---|
@@ -277,7 +277,7 @@ cd apps/web && npm run test:coverage
 | `connectors` | 59% | 56% | 170 |
 | `worker` | 54% | 51% | 211 |
 | `sap-connector` | 79% | 76% | 83 |
-| `web` 전체 | 19% | 15% | 288 |
+| `web` 전체 | 19% | 15% | 291 |
 | `web` `src/store` | 97% | 92% | |
 | `web` `src/api` | 59% | 55% | |
 
