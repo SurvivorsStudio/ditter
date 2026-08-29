@@ -49,8 +49,9 @@ auto_fix_commits_total = []
 # 서로 반대되는 코멘트가 두 개 올라간다. 그래서 넣고 빼는 것을 아래 둘로만 한다.
 #   promote(uid, f)          → accepted_findings 에 upsert 하고 carry_over 에서 뺀다
 #   record_carry(uid, f, r)  → carry_over 에 upsert 한다 (reason=r). accepted 에 있으면 뺀다
-# uid 는 수락 시점에 오케스트레이터가 붙이는 자체 일련번호이고, reviewer 가 직접 올린
-# carry_over_adds 는 (file, category, suggestion 앞 40자) 를 uid 로 쓴다.
+# uid 는 **한 갈래**다 — `uid_of(f)` = (file, category, suggestion 앞 40자). 오케스트레이터가
+# 붙잡아 둔 항목과 reviewer 가 올린 carry_over_adds 가 같은 키 공간을 써야 upsert 가 만난다.
+# 일련번호를 따로 매기면 같은 지적이 두 키로 갈려 「확정 수정」과 「미적용」에 동시에 남는다.
 cycle = 1
 required_cycles = high_risk ? 2 : 1
 termination_reason = None
@@ -112,35 +113,37 @@ carry_over_existing: {carry_over}
             # auto_fix_commits(sha)로만 돌려주고 상세(file·line·severity·category·cause·
             # risk_factor·suggestion)는 다시 담기지 않는다 — 지금 안 챙기면 영영 잃는다.
             #
-            # **자체 일련번호(uid)를 여기서 붙인다.** reviewer 의 finding_id 는 호출마다 1부터
-            # 다시 매겨져 같은 항목인지 못 가리고, (file, line, cause) 로 묶어도 line 은 수정이
-            # 반영되면 밀리고 cause 는 호출마다 새로 쓰인 문장이라 같은 지적이 다른 키로 잡힌다.
-            # file·line 은 이제 표시용이다.
+            # 동일성은 uid_of(f) 하나로 본다 — reviewer 의 finding_id 는 호출마다 1부터 다시
+            # 매겨져 같은 항목인지 못 가린다. file·line 은 표시용이다.
             by_id = {f.finding_id: f for f in user_confirmation_required}   # finding_id 는 1-based
+            pending = {}          # 이번 확인 라운드에서 수락·대안을 받은 항목. 판정 뒤 비운다.
             for r in user_responses if r.decision in ("수락", "대안"):
-                pending[new_uid()] = {**by_id[r.finding_id], decision: r.decision, note: r.note}
+                f = by_id[r.finding_id]
+                pending[uid_of(f)] = {**f, decision: r.decision, note: r.note}
 
             result = Agent(subagent_type="reviewer", prompt=<동일 prompt + cycle_number 유지 + user_responses>)
             parse result → status, ... (재할당)   # user_confirmation_required 도 새 값으로 재바인딩된다
 
-            # ── 수락 ≠ 반영. **항목마다** 판정한다 ─────────────────────────────
-            # "커밋이 하나라도 있으면 다 됐다"로 보면 안 된다. 여러 건을 한꺼번에 수락하면
-            # reviewer 가 일부만 고치는 일이 흔하고(민감 경로가 섞이면 특히), 못 고친 항목은
-            # 확인 요청 목록에도 안 돌아온다 — reviewer 는 "그 사실을 알린다"고만 되어 있고
-            # 그것을 담을 필드가 출력 계약에 없다(reviewer.md 절차 5). 그러면 손도 안 댄 지적이
-            # 「확정 수정」으로 공개 리뷰에 올라간다.
-            touched = {result.auto_fix_commits 의 각 sha 가 건드린 파일}   # git show --name-only
+            # ── 수락 ≠ 반영. 그런데 **추론하지 않는다** ────────────────────────
+            # 반영 여부는 오케스트레이터가 **직접 관찰한 사실**이다. 커밋이 어느 파일을
+            # 건드렸는지로 되짚으려 하면 같은 파일에 지적이 둘일 때 갈라내지 못하고,
+            # 그 추론을 떠받치려고 상태(touched·still_asking·pending 수명)가 늘어난다.
+            # 관찰한 것을 그대로 적으면 그 상태가 전부 필요 없다.
+            #
+            # applied 는 셋 중 하나로 정해진다. 매 라운드 오케스트레이터가 겪는 사실이다.
+            #   · reviewer 가 고쳤다 — 이 세션에서 그 커밋을 봤다        → true,  by: "reviewer"
+            #   · 민감 경로라 오케스트레이터가 직접 고쳤다               → true,  by: "orchestrator"
+            #   · 아무도 안 고쳤다 / reviewer 가 같은 항목을 다시 묻는다 → false + 사유
+            #
+            # 민감 경로를 무조건 false 로 두지 않는 이유: 실제로 고쳤는데 미적용으로 적으면
+            # 그것도 거짓이다. 누가 고쳤는지를 by 로 남기면 사실 그대로다.
             for uid, f in pending.items():
-                if f.file 이 sensitive_paths 에 걸리거나 f.category in ("security", "performance"):
-                    # reviewer 는 이 둘을 수락받아도 손대지 않는다 (reviewer.md 절차 5 · 매트릭스).
-                    # 사람이 손으로 고쳤더라도 코드가 알 방법이 없으므로 미적용으로 남긴다.
-                    record_carry(uid, f, "수락됐으나 reviewer 가 손댈 수 없는 자리다"
-                                         " — 민감 경로·자동수정 금지 카테고리. 사람이 직접 반영한다.")
-                elif f.file in touched:
-                    promote(uid, {**f, applied: true})
+                if 이 항목이 실제로 반영됐다(관찰):
+                    promote(uid, {**f, applied: true, by: "reviewer" | "orchestrator"})
                 else:
-                    record_carry(uid, f, "수락됐으나 이번 커밋이 그 파일을 건드리지 않았다"
-                                         " — reviewer 재질의 중이거나 적용 여부를 확인할 수 없다.")
+                    record_carry(uid, {**f, applied: false}, <왜 반영되지 않았는지>)
+            pending = {}          # 이번 라운드 판정 끝. 다음 라운드·사이클로 들고 가지 않는다 —
+                                  # 들고 가면 지난 항목이 다시 판정돼 결론이 뒤집힌다.
 
             if status != "NEEDS_USER":
                 break
@@ -206,10 +209,11 @@ output f"  종료 사유: {termination_reason}"
   ([pr.md](pr.md) §6-D). reviewer 의 `REVIEW_RESULT` 는 고쳐진 항목을 `auto_fix_commits`(sha)
   로만 돌려주므로 **상세는 이 오케스트레이터가 보관하지 않으면 사라진다.** 계약을 늘리지 않는
   이유가 이것이다 — 수락 직전의 `user_confirmation_required` 에 이미 필요한 필드가 다 있다.
-- **`accepted_findings` 에는 실제로 반영된 것만 들어간다.** 수락받고도 reviewer 가 고치지
-  못한 것(민감 경로·자동수정 금지 카테고리)은 `applied: false` 와 사유를 달아 `carry_over` 로
-  간다 — 사람이 손으로 반영했더라도 코드가 그것을 알 방법이 없으므로 **미적용으로 남긴다.**
-  거부가 아닌데 이월에도 없으면 미해결 지적이 「해결됨」으로 기록되고 추적에서 사라진다.
+- **`accepted_findings` 에는 실제로 반영된 것만 들어간다.** 반영 여부는 추론이 아니라
+  오케스트레이터가 관찰한 사실이고, **누가 고쳤는지(`by`)** 를 함께 남긴다 — 민감 경로는
+  reviewer 가 손대지 못해 오케스트레이터가 직접 고치는 일이 흔하다. 반영되지 않은 것은
+  `applied: false` 와 사유를 달아 `carry_over` 로 간다. 거부가 아닌데 이월에도 없으면
+  미해결 지적이 「해결됨」으로 기록되고 추적에서 사라진다.
 - **마지막 사이클 자체가 새 자동수정 commit 을 만들었다면**, 그 commit 이 담긴 최종 HEAD 는
   아직 `cycles_for_head`가 1로 리셋된 상태다(위 「상태 기록」 참고) — 고위험(2사이클 필요)
   변경이었다면 `/pr`의 push 게이트가 여전히 막을 수 있다. 이건 버그가 아니라 "그 마지막 수정은

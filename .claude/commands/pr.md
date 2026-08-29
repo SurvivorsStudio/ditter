@@ -72,8 +72,16 @@ main 은 팀이 공유하는 브랜치이므로 직접 push 하지 않는다. �
 - **finding 을 버리지 말고 들고 간다.** 확정 수정된 것과 이월된 것 **양쪽 다** step 6-D 에서
   PR 리뷰로 게시한다. 필요한 필드는 `file`·`line`·`severity`·`category`·`cause`·`risk_factor`·
   `suggestion`, 그리고 **무엇으로 처리됐는지**를 말하는 `decision`(수락|대안)·`note`(대안일 때
-  무엇을 다르게 했나)·`applied`(reviewer 가 실제로 고쳤나)·`reason`(이월이면 왜 미뤘나)이다.
-  뒤의 넷이 없으면 제안대로 고친 것과 다르게 고친 것, 아예 안 고친 것이 구별되지 않는다.
+  무엇을 다르게 했나)·`applied`(실제로 반영됐나)·`by`(reviewer 가 고쳤나 오케스트레이터가
+  고쳤나)·`reason`(이월이면 왜 미뤘나)이다. 이것들이 없으면 제안대로 고친 것과 다르게 고친 것,
+  아예 안 고친 것이 구별되지 않는다. 머리말 라벨은 이 값에서 정한다:
+
+  | `applied` | `decision` | 머리말 |
+  |---|---|---|
+  | true | 수락 | `확정 수정` |
+  | true | 대안 | `대안 반영` |
+  | false | 수락·대안 | `수락됐으나 미적용` |
+  | (없음) | — | `이월` (reviewer 가 직접 올린 carry_over) |
   - 확정 수정된 것은 `/review` 가 `accepted_findings` 로 넘겨준다. reviewer 의 `REVIEW_RESULT`
     는 고쳐진 항목을 `auto_fix_commits`(sha)로만 돌려주므로, 상세는 수락을 받는 그 순간에
     보관해 두지 않으면 사라진다 — 그 보관을 [review.md](review.md) 가 한다.
