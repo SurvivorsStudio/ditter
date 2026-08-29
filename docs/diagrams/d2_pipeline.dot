@@ -8,7 +8,10 @@
 // (services/events.py 도크스트링). 구독자가 없어 이벤트를 놓쳐도 UI 는 REST 로 같은
 // 상태를 복원한다. 둘을 뒤집으면 "이벤트를 놓치면 상태를 잃는다"는 잘못된 그림이 된다.
 //
-// Main (Orchestrator) 는 별도 프로세스가 아니라 **api 안**이다 (services/run_service.py).
+// Main (Orchestrator) 는 별도 프로세스가 아니다 (services/run_service.py). 다만 "api 안"으로
+// 뭉뚱그리지 않는다 — 수동·API 트리거는 api 프로세스가, Cron 은 스케줄러(beat) 프로세스가
+// 같은 run_service 코드를 돌려 직접 큐에 넣는다 (eai_worker/scheduler.py). beat 는 api 를
+// 부르지 않으므로 트리거 셋을 한 상자에 묶으면 그 차이가 선에서 지워진다.
 //
 // 다시 그리기: docs/diagrams/README.md
 
@@ -18,7 +21,8 @@ digraph G {
   edge [fontname="Noto Sans CJK KR,Apple SD Gothic Neo", fontsize=9, color="#5b6472"];
   graph [fontname="Noto Sans CJK KR,Apple SD Gothic Neo", fontsize=12, nodesep=0.45, ranksep=0.75];
 
-  trigger [label="트리거\nCron(beat) · 수동 · API 트리거", fillcolor="#ffedd5", color="#fdba74"];
+  trigger [label="트리거\n수동 · API 트리거", fillcolor="#ffedd5", color="#fdba74"];
+  beat    [label="스케줄러 (beat)\nCron — run_service 를 자기 프로세스에서", fillcolor="#ffedd5", color="#fdba74"];
 
   subgraph cluster_api {
     label="api 프로세스"; style="rounded,filled"; fillcolor="#ecfdf5"; color="#a7f3d0"; fontcolor="#065f46"; fontname="Noto Sans CJK KR,Apple SD Gothic Neo";
@@ -41,10 +45,11 @@ digraph G {
   // ── 실선: 잡이 흐르는 길 ──────────────────────────────────────────────
   trigger -> orch;
   orch -> redis [label="enqueue"];
+  beat -> redis [label="Run 생성 → enqueue (api 를 거치지 않는다)"];
   redis -> w1; redis -> w2; redis -> w3;
 
   // ── 파선: 상태를 쓰는 길. 여기가 진실의 원천이다 ──────────────────────
-  orch -> meta [style=dashed];
+  orch -> meta [style=dashed]; beat -> meta [style=dashed];
   w1 -> meta [style=dashed]; w2 -> meta [style=dashed]; w3 -> meta [style=dashed];
   meta -> ws  [style=dashed, constraint=false, label="REST 폴백 — 이벤트를 놓쳐도 복원된다"];
 

@@ -1,10 +1,13 @@
 // 전체 구조 — 계층과 **프로세스 경계**.
 //
-// 이 그림이 지켜야 하는 것 셋 (어긋나면 고친다):
+// 이 그림이 지켜야 하는 것 넷 (어긋나면 고친다):
 //   1. 없는 기능을 그리지 않는다. 인증은 JWT + RBAC 이다 — OAuth2 는 스키마만 있다.
 //   2. SQL 콘솔·연합 조회는 파이프라인과 나란한 제품의 절반이다. 빼면 그림이 거짓말을 한다.
-//   3. 무엇이 어느 프로세스에서 도는지 보여야 한다. 오케스트레이터는 api 안이고,
+//   3. 무엇이 어느 프로세스에서 도는지 보여야 한다. 오케스트레이터는 별도 컨테이너가 아니고,
 //      SAP SDK 는 사이드카에만 있고, DuckDB 는 api 프로세스의 메모리를 쓴다.
+//   4. 스케줄러(beat)에서 api 클러스터로 화살표를 긋지 않는다. beat 는 api 를 부르지 않는다 —
+//      run_service(오케스트레이터 코드)를 **자기 프로세스에서** 돌려 Run 을 만들고 큐에 넣는다
+//      (eai_worker/scheduler.py). 그으면 없는 호출을 그리는 것이 된다.
 //
 // 엣지를 늘리지 말 것. api 도 worker 도 같은 커넥터를 쓰는데 둘 다 선으로 이으면
 // 그림이 실타래가 된다 — 그건 커넥터 계층 라벨이 대신 말한다.
@@ -29,7 +32,7 @@ digraph G {
     gw   [label="API Gateway / BFF\nREST + WebSocket + MCP tool", fillcolor="#a7f3d0", color="#34d399"];
     auth [label="인증·인가\nJWT / RBAC / 시크릿(KMS·Fernet)", fillcolor="#d1fae5", color="#6ee7b7"];
     duck [label="연합 조회 허브 (DuckDB)\nREAD_ONLY ATTACH · 같은 프로세스", fillcolor="#d1fae5", color="#6ee7b7"];
-    orch [label="파이프라인 오케스트레이터\nDAG 파싱 · Run 생성 · enqueue", fillcolor="#d1fae5", color="#6ee7b7"];
+    orch [label="파이프라인 오케스트레이터\nDAG 파싱 · Run 생성 · enqueue\n(스케줄러 프로세스도 같은 코드를 돈다)", fillcolor="#d1fae5", color="#6ee7b7"];
   }
 
   subgraph cluster_exec {
@@ -71,7 +74,7 @@ digraph G {
   gw -> orch [style=dashed, arrowhead=none];
 
   // ── 파이프라인은 큐를 거쳐 워커로 ─────────────────────────────────────
-  sched -> orch [constraint=false];
+  sched -> queue [label="run_service 직접 호출\nRun 생성 → enqueue"];
   orch -> queue [label="send_task (이름만)"];
   queue -> worker;
 

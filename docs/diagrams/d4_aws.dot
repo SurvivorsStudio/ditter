@@ -4,10 +4,15 @@
 // 저장소에 없다 — 예전 그림이 "ECS on EC2"를 적어 두어 있는 것처럼 읽혔다.
 //
 // 컨테이너 목록은 docker-compose.yml 을 따른다. 예전 그림은 `orchestrator` 를 별도
-// 컨테이너로 그렸는데 그런 컨테이너는 없다 — 오케스트레이터는 api 안이다
-// (services/run_service.py). 빠져 있던 beat · sap-connector · cdc-sink 도 넣는다.
+// 컨테이너로 그렸는데 그런 컨테이너는 없다 — 오케스트레이터는 별도 프로세스가 아니라
+// api·beat 가 같은 코드(services/run_service.py)를 돈다. 빠져 있던 beat · sap-connector ·
+// cdc-sink 도 넣는다.
 //
-// 프로필로 갈린 것(--profile cdc / ai)은 점선 테두리로 구분한다. 기본 기동에는 뜨지 않는다.
+// beat 에서 api 로 화살표를 긋지 않는다. beat 는 api 를 부르지 않는다 — 메타DB 에서 cron 을
+// 읽어 Run 을 만들고 Redis 에 직접 넣는다 (eai_worker/scheduler.py, compose 의 beat 는
+// depends_on 도 postgres · redis 뿐이다). 컨테이너 그림의 화살표는 네트워크 호출 주장이다.
+//
+// 프로필로 갈린 것(--profile cdc / sync / ai)은 점선 테두리로 구분한다. 기본 기동에는 뜨지 않는다.
 //
 // 다시 그리기: docs/diagrams/README.md
 
@@ -71,13 +76,13 @@ digraph G {
   user -> alb;
   alb -> c_web; alb -> c_api;
   c_api -> c_redis [label="send_task"];
-  c_beat -> c_api;
+  c_beat -> c_redis [label="enqueue"];
   c_redis -> c_wk;
   c_wk -> c_sap [label="HTTP"];
   c_dbz -> c_kafka -> c_sink;
   c_api -> c_ol [style=dashed, label="AI"];
 
-  c_api -> rds [style=dashed]; c_wk -> rds [style=dashed];
+  c_api -> rds [style=dashed]; c_wk -> rds [style=dashed]; c_beat -> rds [style=dashed];
   c_wk -> s3;
   c_wk -> src [dir=both, constraint=false]; c_sap -> src [constraint=false];
   c_dbz -> src [constraint=false]; c_sym -> src [dir=both, constraint=false];
