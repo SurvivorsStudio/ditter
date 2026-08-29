@@ -20,12 +20,15 @@ ditter 가 어떻게 짜여 있고, **왜 그렇게 됐는지**. 코드를 읽�
   [연합 조회](#8-이기종-연합-조회--duckdb)까지 포함한다.
 - **파이프라인 캔버스** — 드래그앤드롭으로 수집·변환·적재를 엮어 배치/실시간으로 돌린다.
 
-![전체 구조 — 프레젠테이션 · API/BFF(FastMCP) · 오케스트레이션/실행 · 커넥터 · 소스/타깃 계층](diagrams/d1_overall.png)
+![전체 구조 — 화면 · api 프로세스(오케스트레이터·DuckDB 허브) · 실행(Redis·워커) · 공유 커넥터 계층 · 소스/타깃](diagrams/d1_overall.png)
 
-> 이 그림은 **파이프라인 쪽**을 담았다. SQL 콘솔·연합 조회·AI 어시스턴트는 여기 그려진 것과
-> 같은 API 계층 위에 얹힌다. 인증은 현재 **JWT + RBAC** 이고 그림의 `OAuth2` 는 아직
-> 스키마(`users.external_id`)만 준비된 상태다 — 그림 수정은
-> [#66](https://github.com/SurvivorsStudio/ditter/issues/66).
+> 계층보다 **프로세스 경계**를 먼저 본다. 오케스트레이터는 별도 컨테이너가 아니라 api 와
+> 스케줄러(beat)가 같은 코드([`services/run_service.py`](../apps/api/src/eai_api/services/run_service.py))를
+> 돌리고 — 수동·API 트리거는 api 가, 예약은 beat 가 api 를 거치지 않고 직접 큐에 넣는다 —
+> DuckDB 연합 조회 허브는 api 안에서 돈다(그래서 큰 조인이 api 메모리를 쓴다 — §8).
+> SAP SDK 는 사이드카에만 있고(§7), 동기화만 데이터가 워커를 지나지 않는다(§6).
+> 커넥터 계층은 api(조회)와 worker(적재)가 함께 쓰는 공유 라이브러리다 — 연합 조회만
+> 그 계층을 거치지 않고 DuckDB 확장이 직접 붙는다.
 
 ```
 apps/
@@ -77,14 +80,14 @@ api  <──────────────[worker 가 eai-api 패키지를
 ([`engine._build_stream`](../apps/worker/src/eai_worker/engine.py)). 중간 결과가 메모리에 쌓이지
 않아 대용량에서 메모리가 상수로 유지된다.
 
-![파이프라인 실행](diagrams/d2_pipeline.png)
+![파이프라인 실행 흐름 — 잡은 api→Redis→워커로 흐르고, 상태는 메타DB에, 진행률 이벤트는 Redis Pub/Sub를 거쳐 WebSocket으로](diagrams/d2_pipeline.png)
 
-> 이 그림은 **진행률이 화면에 닿는 경로가 실제와 다르다.** 그림은 메타DB 에서
-> WebSocket 으로 화살표를 그렸지만, 실제로는 워커가 Redis Pub/Sub 로 publish 하고
-> ([`services/events.py`](../apps/api/src/eai_api/services/events.py)) API 의 WebSocket 이 구독해
-> 밀어 준다. 그 구분이 중요하다 — **이벤트는 부가 채널이고 진실의 원천은 언제나 메타DB 다.**
-> 구독자가 없어 이벤트를 놓쳐도 UI 는 REST 폴백으로 같은 상태를 복원한다. 그림은 이 둘을 뒤집어
-> 놓았다. `Main (Orchestrator)` 도 별도 프로세스가 아니라 api 안이다.
+> 선의 종류가 이 그림의 요점이다. 실선은 잡이 흐르는 길, 파선은 상태를 쓰고 읽는 길, 점선은
+> 이벤트다. **진실의 원천은 언제나 메타DB 이고 이벤트는 부가 채널**이다
+> ([`services/events.py`](../apps/api/src/eai_api/services/events.py)) — 워커가 Redis 로
+> publish 하고 api 의 WebSocket 이 구독해 밀어 주되, 구독자가 없어 놓쳐도 UI 는 REST 로 같은
+> 상태를 복원한다. 오케스트레이터는 별도 프로세스가 아니라 **api 안**이다
+> ([`services/run_service.py`](../apps/api/src/eai_api/services/run_service.py)).
 
 ### 이 모델이 만드는 결과들
 
@@ -209,6 +212,13 @@ User         email · password_hash(Argon2id) · role · external_id
 
 **동기화만 데이터가 우리 프로세스를 지나지 않는다.** SymmetricDS 가 원본에서 타깃 DB 로 직접
 옮긴다. 그래서 변환·다중 타깃이 성립하지 않고, 캔버스와 검증 양쪽에서 그리지 못하게 막는다.
+
+![수집 경로 네 갈래 — 배치 · SAP · CDC · 동기화](diagrams/d3_ingestion.png)
+
+> **위 표의 셋(배치 · CDC · 동기화)에 SAP(§7)을 더한 넷**이다. SAP 만 기준이 하나 다르다 —
+> 나머지 셋이 "변경을 어떻게 잡는가"라면 SAP 은 "무엇에서 읽는가"라서 이 표에는 들어가지
+> 않는다. 그림에서 읽어야 할 것은 둘이다: ②의 SAP SDK 가 워커가 아니라 사이드카 안에 있고,
+> ④만 화살표가 워커를 건너뛴다.
 
 동기화 경로는 **구현은 끝났지만 실환경 검증 전이고, 트리거 기반이라 운영 적용 전 부하 테스트가
 게이트다.** 착수 점검(`sync_service.preflight`)이 그 게이트를 코드로 강제한다 — 다만 부하 테스트

@@ -161,7 +161,7 @@ all. Never load real company data into it — avoiding that is the whole point o
 
 ## Architecture at a glance
 
-![Data pipeline architecture — presentation · API/BFF (FastMCP) · orchestration · connectors · sources and targets](docs/diagrams/d1_overall.png)
+![Overall structure — UI, the api process (orchestrator and DuckDB hub), execution (Redis and workers), the shared connector layer, and sources/targets](docs/diagrams/d1_overall.png)
 
 ```
 apps/

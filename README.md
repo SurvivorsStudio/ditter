@@ -307,12 +307,13 @@ MSSQL 커넥터 테스트는 `pyodbc` 가 필요하다. macOS 에서 `libodbc` �
 
 ## 구조
 
-![데이터 파이프라인 아키텍처 — 프레젠테이션 · API/BFF(FastMCP) · 오케스트레이션/실행 · 커넥터 · 소스/타깃 계층](docs/diagrams/d1_overall.png)
+![전체 구조 — 화면 · api 프로세스(오케스트레이터·DuckDB 허브) · 실행(Redis·워커) · 공유 커넥터 계층 · 소스/타깃](docs/diagrams/d1_overall.png)
 
-> 이 그림이 담은 것은 **파이프라인 쪽**이다. SQL 콘솔 · 연합 조회 · AI 어시스턴트는 여기 그려진
-> 것과 **같은 API 계층 위에** 얹힌다 — 위 [「화면」](#화면) 절이 그쪽이다.
-> 인증은 현재 **JWT + RBAC** 이고, 그림의 `OAuth2` 는 아직 스키마(`users.external_id`)만
-> 준비된 상태다 (CLAUDE.md §15).
+> 무엇이 **어느 프로세스에서 도는지**를 담았다. 오케스트레이터는 **별도 컨테이너가 아니라**
+> api 와 스케줄러(beat)가 같은 코드를 돌리고(예약 실행은 beat 가 api 를 거치지 않고 직접
+> 큐에 넣는다), DuckDB 연합 조회 허브는 api 안에서 돌고, SAP SDK 는 사이드카에만 있고,
+> 동기화(SymmetricDS)만 데이터가 워커를 지나지 않는다. 인증은 **JWT + RBAC** 이다 —
+> OAuth2 는 스키마(`users.external_id`)만 준비된 상태라 그리지 않았다 (CLAUDE.md §15).
 
 ```
 apps/
@@ -340,9 +341,12 @@ docs/           설계 문서, UI 목업, 아키텍처 다이어그램·원본(.
 그래서 워커는 무상태이고 **수평으로 늘릴 수 있다.** 실행 상태·로그·체크포인트는 전부
 메타DB 에 있고, 진행 상황은 WebSocket 으로 화면에 밀어 준다.
 
-![파이프라인 실행 흐름 — 트리거에서 오케스트레이터·Redis 큐·워커 풀을 거쳐 메타DB 로](docs/diagrams/d2_pipeline.png)
+![파이프라인 실행 흐름 — 잡은 api→Redis→워커로 흐르고, 상태는 메타DB에, 진행률 이벤트는 Redis Pub/Sub를 거쳐 WebSocket으로](docs/diagrams/d2_pipeline.png)
 
-> 다이어그램 원본(`.dot`)은 [docs/diagrams/](docs/diagrams/) 에 있다 — 고쳐서 다시 그릴 수 있다.
+> 실선은 잡이 흐르는 길, 파선은 상태를 쓰고 읽는 길(**진실의 원천**), 점선은 이벤트다.
+> 이벤트는 부가 채널이라 놓쳐도 REST 폴백으로 같은 상태가 복원된다.
+>
+> 다이어그램 원본(`.dot`)과 다시 그리는 법은 [docs/diagrams/](docs/diagrams/) 에 있다.
 
 구조와 설계 결정의 전문은 **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** 에 있다 —
 실행 모델과 그 의도된 한계, 커넥터 계약, 새 것을 붙이는 법, 그리고 **택하지 않은 것과 그 이유**.
