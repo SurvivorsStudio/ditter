@@ -1,5 +1,7 @@
 # ditter
 
+**한국어** · [English](README.en.md)
+
 운영 중인 여러 이기종 데이터소스에 **읽기 전용으로** 붙어, 위험한 쿼리를 실행 전에 잡아내며
 안전하게 조회하는 **웹 SQL 콘솔**. 그렇게 확인한 안전한 조회를 반복 적재로 굳히는
 **데이터 파이프라인**이 그 위에 얹힌다.
@@ -246,17 +248,57 @@ cd apps/<영역> && uv run --extra dev pytest -q && uv run --extra dev ruff chec
 cd apps/web && npm test && npm run lint && npm run build
 ```
 
-**현재 상태 — 테스트 1,278개 통과** (Python 996 · 프론트 282).
+**현재 상태 — 테스트 1,297개 통과** (Python 1,006 · 프론트 291).
 
 | 검사 | 상태 |
 |---|---|
 | pytest · vitest | ✅ 통과 — CI 가 막는다 |
+| 커버리지 하한 | ✅ 통과 — CI 가 막는다 (아래 표) |
 | ruff | ✅ 통과 — CI 가 막는다 |
 | eslint · tsc(빌드) | ✅ 통과 — CI 가 막는다 |
-| mypy (strict) | ⚠️ **아직 아니다** — `src` 기준 127건 남음(대부분 `apps/api`) |
+| mypy (strict) | ⚠️ **아직 아니다** — `src` 기준 127건 남음(`api` 123 · `connectors` 3 · `worker` 1) |
 
 mypy 는 설정만 strict 이고 실제로는 통과하지 않는다. 상시 빨간 CI 를 만들지 않으려고
 게이트에서 빼 두었고, 줄여 나가는 중이다. 그 밖의 검사는 모두 CI 가 PR 마다 강제한다.
+
+### 커버리지
+
+```bash
+cd apps/<영역> && uv run --extra dev pytest -q --cov
+```
+
+```bash
+cd apps/web && npm run test:coverage
+```
+
+| 영역 | 현재 | 하한 | 테스트 |
+|---|---|---|---|
+| `api` | 53% | 50% | 542 |
+| `connectors` | 59% | 56% | 170 |
+| `worker` | 54% | 51% | 211 |
+| `sap-connector` | 79% | 76% | 83 |
+| `web` 전체 | 19% | 15% | 291 |
+| `web` `src/store` | 97% | 92% | |
+| `web` `src/api` | 59% | 55% | |
+
+**하한은 목표치가 아니라 바닥이다.** 실측보다 3~4%p 낮게 두어, 내려가면 CI 가 막고 올라가면
+그 숫자를 올린다(래칫). 실측과 같게 두면 무관한 리팩터링이 소수점 때문에 빨개진다.
+설정은 각 `pyproject.toml` 의 `[tool.coverage.report]` 와 `apps/web/vite.config.ts` 에 있다.
+
+숫자를 그대로 읽으면 안 되는 자리가 셋이다.
+
+- **`api` 의 53% 는 계층이 통째로 비어 있다는 뜻이다.** `routers/`·`main.py`·`mcp_server.py`·
+  `cli.py` 가 **0%** 다 — 테스트 542개가 전부 서비스·스키마를 직접 부르고 **HTTP 계층을 지나는
+  테스트가 하나도 없다**(`TestClient` 사용처 없음). 서비스 계층만 보면 훨씬 높지만, 그렇게
+  좁혀 재면 그 구멍이 숫자에서 사라진다. 그래서 측정 대상을 디렉터리로 두어 보이게 했다.
+- **`connectors` 는 실제보다 낮게 나온다.** 앱별로 따로 재기 때문이다 — 커넥터 코드는
+  `api`·`worker` 테스트에서도 돌지만 그 실행은 이 숫자에 들어오지 않는다.
+  `sql_base.py` 가 19% 인 것은 스트리밍 커서·방언별 MERGE 가 **실서버를 요구**해서다
+  (ARCHITECTURE [§13](docs/ARCHITECTURE.md) 의 미검증 목록과 같은 이유).
+- **`web` 전체 19% 는 화면 컴포넌트에 렌더 테스트가 없다는 뜻이다.** 그래서 한 숫자로
+  뭉치지 않고 층을 갈랐다 — 로직 계층(`src/store` 97% · `src/api` 59%)은 실제로 테스트가
+  있어 따로 높게 걸고, 컴포넌트는 전역 바닥만 적용된다. 뭉쳐 두면 `canvasStore` 가
+  무너져도 컴포넌트 몇 줄이 늘어난 것으로 가려진다.
 
 MSSQL 커넥터 테스트는 `pyodbc` 가 필요하다. macOS 에서 `libodbc` 를 못 찾아 실패하면
 `brew install unixodbc` 로 해결된다 (CI 는 `unixodbc-dev` 를 설치한다).
@@ -283,9 +325,14 @@ apps/
   sap-connector/ SAP RFC 전용 사이드카 — NW RFC SDK 격리, 목 백엔드 포함
   web/          React + React Flow — Login / Home / Canvas / Monitor / Connections
 cdc/debezium/   Debezium(Kafka Connect) 커넥터 설정 — MySQL·PostgreSQL·MSSQL 예시
-infra/          ECS task def, Terraform (예정)
-docs/           설계 문서, UI 목업, 아키텍처 다이어그램
+sync/symmetricds/
+                SymmetricDS 사이드카 구성 — 트리거 기반 실시간 동기화 (CDC 를 못 쓸 때)
+demo/           시연용 가상 DB 스택 — MySQL·MSSQL·PostgreSQL + 고정 시드
+docs/           설계 문서, UI 목업, 아키텍처 다이어그램·원본(.dot)
 ```
+
+> 배포 확장용 `infra/`(ECS task def · Terraform)는 **아직 없다** — Phase 5 범위다.
+> 지금 배포 경로는 루트 `docker-compose.yml` 하나다.
 
 의존 방향: `web → api → worker`는 없다. API와 Worker는 **Redis 큐로만** 통신하고
 (`send_task` 이름 호출), 모델·DAG 스펙·커넥터만 코드로 공유한다.

@@ -56,3 +56,22 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# 커버리지는 CI 에서 `--cov` 를 붙일 때만 켠다. `addopts` 에 넣지 않는 이유는 하나다 —
+# 테스트 한 파일만 돌릴 때(`pytest tests/test_x.py`) 커버리지는 당연히 떨어지고, 그때
+# `fail_under` 가 걸리면 멀쩡한 작업이 실패로 보인다. 게이트는 전체를 돌리는 CI 에만 있다.
+[tool.coverage.run]
+source = ["src/eai_sap"]
+branch = true
+
+[tool.coverage.report]
+# 하한은 실측(79%)보다 조금 낮게 둔다. 내려가면 CI 가 막고, 올라가면 이 숫자를 올린다 —
+# 래칫이라 한 방향으로만 움직인다. 목표치가 아니라 **되돌아가지 않기 위한 바닥**이다.
+fail_under = 76
+show_missing = true
+skip_covered = true
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  "^\\s*\\.\\.\\.$",
+]

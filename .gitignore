@@ -12,12 +12,17 @@ venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
 
 # ── Node / 프론트엔드 ────────────────────────────────────────────────────
 node_modules/
 apps/web/dist/
 dist/
 *.tsbuildinfo
+apps/web/coverage/
 
 # ── SymmetricDS 엔진 설정 (DB 비밀번호가 평문으로 들어간다) ─────────────
 # 예시(.example)만 커밋한다. 채운 파일은 절대 올리지 않는다.

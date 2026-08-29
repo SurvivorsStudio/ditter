@@ -8,6 +8,10 @@ on:
 
 # mypy(strict)는 아직 게이트가 아니다. src 기준 127건이 남아 있어(대부분 apps/api)
 # 지금 넣으면 CI 가 상시 빨갛다. 줄여 나가는 중이며 진행 상황은 이슈에서 추적한다.
+#
+# 커버리지는 게이트다. 다만 **목표치가 아니라 바닥**이다 — 하한(`fail_under` ·
+# vitest `thresholds`)을 실측보다 조금 낮게 두고, 내려가면 막고 올라가면 그 숫자를 올린다.
+# 하한을 실측과 같게 두면 무관한 리팩터링이 소수점 때문에 빨개진다.
 jobs:
   build-test:
     runs-on: ubuntu-latest
@@ -32,25 +36,25 @@ jobs:
         run: pip install uv
 
       - name: Test connectors
-        run: cd apps/connectors && uv run --extra dev pytest -q
+        run: cd apps/connectors && uv run --extra dev pytest -q --cov --cov-report=term-missing:skip-covered
 
       - name: Lint connectors (ruff)
         run: cd apps/connectors && uv run --extra dev ruff check .
 
       - name: Test sap-connector
-        run: cd apps/sap-connector && uv run --extra dev pytest -q
+        run: cd apps/sap-connector && uv run --extra dev pytest -q --cov --cov-report=term-missing:skip-covered
 
       - name: Lint sap-connector (ruff)
         run: cd apps/sap-connector && uv run --extra dev ruff check .
 
       - name: Test api
-        run: cd apps/api && uv run --extra dev pytest -q
+        run: cd apps/api && uv run --extra dev pytest -q --cov --cov-report=term-missing:skip-covered
 
       - name: Lint api (ruff)
         run: cd apps/api && uv run --extra dev ruff check .
 
       - name: Test worker
-        run: cd apps/worker && uv run --extra dev pytest -q
+        run: cd apps/worker && uv run --extra dev pytest -q --cov --cov-report=term-missing:skip-covered
 
       - name: Lint worker (ruff)
         run: cd apps/worker && uv run --extra dev ruff check .
@@ -64,7 +68,7 @@ jobs:
           cache-dependency-path: apps/web/package-lock.json
 
       - name: Test web
-        run: cd apps/web && npm ci && npm test
+        run: cd apps/web && npm ci && npm run test:coverage
 
       - name: Lint web (eslint)
         run: cd apps/web && npm run lint
