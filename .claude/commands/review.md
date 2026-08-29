@@ -99,6 +99,14 @@ carry_over_existing: {carry_over}
         while True:
             사용자에게 위 형식으로 user_confirmation_required 를 제시하고 응답을 기다린다
             user_responses = wait  # {finding_id, decision(수락|거부|대안), note?}
+
+            # **여기서** 수락·대안 항목의 상세를 챙긴다 — 다음 줄에서 result 가 재할당되면
+            # 지금 손에 있는 user_confirmation_required 는 덮어써지고, reviewer 는 고친
+            # 항목을 auto_fix_commits(sha)로만 돌려주므로 상세를 되살릴 방법이 없다.
+            # 챙길 것: file·line·severity·category·cause·risk_factor·suggestion·decision·note.
+            # 아래 한도 도달 항목(112-115행)이 같은 이유로 이미 그렇게 하고 있다.
+            # 이 목록은 §3 에서 /pr §6-D 로 넘어가 PR 리뷰로 게시된다.
+
             result = Agent(subagent_type="reviewer", prompt=<동일 prompt + cycle_number 유지 + user_responses>)
             parse result → status, ... (재할당)
 
@@ -161,6 +169,16 @@ output f"  종료 사유: {termination_reason}"
 - 그 외("리뷰 완료 (...)", "변경 없음")는 정상 종료. commit 해시·이월 목록을 보고한다.
 - 이월(`carry_over`) 목록은 `/pr`이 PR body 의 `## 코드리뷰` 섹션에 반영할 수 있도록 그대로
   넘겨준다(형식은 [pr.md](pr.md) §6-A 참고).
+- **수락된 항목의 상세도 함께 넘긴다** — `/pr`이 PR 리뷰로 게시한다([pr.md](pr.md) §6-D).
+  그 상세는 §2 의 확인 루프에서 챙겨 둔 것이다(거기 적힌 이유대로, 그 순간에 안 챙기면
+  사라진다). 실제로 반영됐는지도 함께 적는다 — 민감 경로와 security·performance 는
+  reviewer 가 수락받아도 고치지 않으므로(reviewer.md 절차 5·설계 원칙 4)
+  **수락 = 반영이 아니다.**
+- 반영 여부 판정과 중복 제거를 **기계적으로** 정하는 규칙은 여기 두지 않는다. reviewer 의
+  출력 계약에 "어느 항목을 고쳤는지"를 돌려주는 필드가 없어, 그것 없이 규칙만 정밀하게
+  쓰면 규칙끼리 어긋난다(그 시도로 리뷰 사이클 여섯을 썼다). 계약을 늘리는 것이 먼저이고,
+  그때까지는 **오케스트레이터가 관찰한 대로 적는다** — 고친 커밋을 읽어 확인했으면 반영,
+  아니면 미반영.
 - **마지막 사이클 자체가 새 자동수정 commit 을 만들었다면**, 그 commit 이 담긴 최종 HEAD 는
   아직 `cycles_for_head`가 1로 리셋된 상태다(위 「상태 기록」 참고) — 고위험(2사이클 필요)
   변경이었다면 `/pr`의 push 게이트가 여전히 막을 수 있다. 이건 버그가 아니라 "그 마지막 수정은
