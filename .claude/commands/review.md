@@ -129,9 +129,8 @@ carry_over_existing: {carry_over}
             # 자기 툴링을 고치는 PR 에서는 수락 항목이 거의 항상 여기 걸린다. 여기서 넘기면
             # 사용자가 수락한 수정이 아무도 손대지 않은 채 이월만 되고 끝난다.
             #
-            # **reviewer 를 부르기 전에** 고치는 것이 중요하다. 뒤에 두면 reviewer 는 고치기
-            # 전 트리를 보고 답하므로, "같은 항목을 다시 묻는다"가 "아직 안 고쳐졌다"가 아니라
-            # "고치기 전에 물어봤다"는 뜻이 되어 **판정 근거로 쓸 수 없게 된다.**
+            # **reviewer 를 부르기 전에** 고친다. 그래야 reviewer 가 다음 사이클에서 그 수정까지
+            # 포함한 트리를 검토하게 된다 — 뒤에 두면 그 수정만 아무에게도 검토되지 않는다.
             for uid, f in pending.items() if reviewer 가 손댈 수 없는 자리:
                 오케스트레이터가 f.proposal_primary(또는 대안 note)대로 직접 고치고,
                 commit-convention 의 영역 분할을 지켜 커밋한다.
@@ -144,8 +143,6 @@ carry_over_existing: {carry_over}
 
             result = Agent(subagent_type="reviewer", prompt=<동일 prompt + cycle_number 유지 + user_responses>)
             parse result → status, ... (재할당)   # user_confirmation_required 도 새 값으로 재바인딩된다
-            # reviewer 는 이제 **고쳐진 트리**를 본다 — "같은 항목을 다시 묻는다"가 비로소
-            # "아직 안 고쳐졌다"는 뜻이 된다.
 
             # ── 수락 ≠ 반영. 그런데 **추론하지 않는다** ────────────────────────
             # 반영 여부는 오케스트레이터가 **직접 관찰한 사실**이다. 커밋이 어느 파일을
@@ -179,6 +176,9 @@ carry_over_existing: {carry_over}
             # 미반영"을 따로 두었는데, 그러면 확인과 재질문이 동시에 참일 때 무엇이 이기는지를
             # 또 정해야 한다 — 그 우선순위를 정하고 뒤집는 데 네 사이클을 썼다. 필요도 없다:
             # 확인이 성립하지 않은 항목은 위 조건만으로 이미 미반영이다.
+            # 대신 **교차검증 하나를 잃었다** — 이제 판정하는 눈이 오케스트레이터 하나다.
+            # 커밋을 잘못 읽으면 바로잡아 줄 장치가 없다. 옛 재질문도 틀린 신호를 자주 줬으니
+            # 맞바꿀 만하다고 봤지만, 나중에 이 결정을 다시 볼 사람을 위해 적어 둔다.
             #
             # 특히 재질문은 트리 상태를 말해 주지 않는다. reviewer 는 민감 경로 수락 항목을
             # "고치지 않고 알린다"고만 되어 있고(reviewer.md 절차 5) 어느 필드로 알릴지가
@@ -194,7 +194,7 @@ carry_over_existing: {carry_over}
             # pending 은 매 라운드 위에서 새로 만든다 — 여기서 비울 필요가 없다.
             #
             # 아래에서 reviewer 의 carry_over_adds 를 기록할 때 promoted_this_round 는 건너뛴다.
-            # record_carry 는 accepted 에 있으면 빼므로(51행), reviewer 가 "못 고쳤다"고 올린
+            # record_carry 는 accepted 에 있으면 빼므로, reviewer 가 "못 고쳤다"고 올린
             # 같은 항목이 방금 promote 한 것을 도로 끌어내린다 — 위 재질문과 같은 뿌리이고,
             # 이쪽은 carry_over_adds 로 들어온다.
 
