@@ -309,10 +309,11 @@ MSSQL 커넥터 테스트는 `pyodbc` 가 필요하다. macOS 에서 `libodbc` �
 
 ![전체 구조 — 화면 · api 프로세스(오케스트레이터·DuckDB 허브) · 실행(Redis·워커) · 공유 커넥터 계층 · 소스/타깃](docs/diagrams/d1_overall.png)
 
-> 무엇이 **어느 프로세스에서 도는지**를 담았다. 오케스트레이터와 DuckDB 연합 조회 허브는
-> api 안에서 돌고, SAP SDK 는 사이드카에만 있고, 동기화(SymmetricDS)만 데이터가 워커를
-> 지나지 않는다. 인증은 **JWT + RBAC** 이다 — OAuth2 는 스키마(`users.external_id`)만
-> 준비된 상태라 그리지 않았다 (CLAUDE.md §15).
+> 무엇이 **어느 프로세스에서 도는지**를 담았다. 오케스트레이터는 **별도 컨테이너가 아니라**
+> api 와 스케줄러(beat)가 같은 코드를 돌리고(예약 실행은 beat 가 api 를 거치지 않고 직접
+> 큐에 넣는다), DuckDB 연합 조회 허브는 api 안에서 돌고, SAP SDK 는 사이드카에만 있고,
+> 동기화(SymmetricDS)만 데이터가 워커를 지나지 않는다. 인증은 **JWT + RBAC** 이다 —
+> OAuth2 는 스키마(`users.external_id`)만 준비된 상태라 그리지 않았다 (CLAUDE.md §15).
 
 ```
 apps/
