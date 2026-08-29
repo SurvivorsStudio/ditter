@@ -130,11 +130,16 @@ carry_over_existing: {carry_over}
             # 사용자가 수락한 수정이 아무도 손대지 않은 채 이월만 되고 끝난다.
             #
             # **reviewer 를 부르기 전에** 고치는 것이 중요하다. 뒤에 두면 reviewer 는 고치기
-            # 전 트리를 보고 답하므로 그 항목을 그대로 다시 묻고, 아래 ③이 ②를 이겨
-            # **방금 고쳐 이 PR 에 들어 있는 수정이 「수락됐으나 미적용」으로 공개된다.**
+            # 전 트리를 보고 답하므로, 아래 ③("같은 항목을 다시 묻는다")이 "아직 안 고쳐졌다"가
+            # 아니라 "고치기 전에 물어봤다"는 뜻이 되어 **판정 근거로 쓸 수 없게 된다.**
             for uid, f in pending.items() if reviewer 가 손댈 수 없는 자리:
                 오케스트레이터가 f.proposal_primary(또는 대안 note)대로 직접 고치고,
-                commit-convention 의 영역 분할을 지켜 커밋한다. pending[uid].by = "orchestrator"
+                commit-convention 의 영역 분할을 지켜 커밋한다.
+                # 커밋한 뒤 `git show <sha>` 로 **내용까지 읽어** 제안대로 들어갔는지 확인한다.
+                # 확인된 것에만 by 를 붙인다 — 실패했거나 일부만 반영했거나 (대안 note 가
+                # 불명확해) 건너뛴 항목에는 붙이지 않는다. 그래야 ②가 성립하지 않아 ③이
+                # 정상적으로 발동한다.
+                if 그 커밋 내용이 제안대로다: pending[uid].by = "orchestrator"
 
             result = Agent(subagent_type="reviewer", prompt=<동일 prompt + cycle_number 유지 + user_responses>)
             parse result → status, ... (재할당)   # user_confirmation_required 도 새 값으로 재바인딩된다
@@ -158,7 +163,13 @@ carry_over_existing: {carry_over}
             #   ③ reviewer 가 같은 항목을 다시 묻고 있다 (uid_of 로 대조) → **미반영**
             # ①②로 확인되지 않으면 미반영으로 둔다 — 넓히는 방향으로 실패하지 않는다.
             #
-            # **②는 ③을 이긴다.** reviewer 는 민감 경로 수락 항목을 "고치지 않고 알린다"고만
+            # **②는 ③을 이긴다 — 단, ②가 내용 확인까지 마친 관찰일 때만.** 확인 없이
+            # "고쳤다고 믿는 것"은 ②가 아니다. ①에는 내용을 읽으라는 요건이 붙어 있는데
+            # ②에만 없으면, 가장 센 주장에 가장 약한 근거가 붙는다 — 고치려다 실패한 것이
+            # 「확정 수정」으로 공개되고, 그 방향은 미적용으로 잘못 적히는 것보다 나쁘다
+            # (미적용은 추적에 남지만 확정 수정은 목록에서 사라진다).
+            #
+            # reviewer 는 민감 경로 수락 항목을 "고치지 않고 알린다"고만
             # 되어 있고(reviewer.md 절차 5) 어느 필드로 알릴지는 정해져 있지 않다 — 그것이
             # user_confirmation_required 로 나오면 ③이 발동해, 방금 고쳐 이 PR 에 들어 있는
             # 수정이 「수락됐으나 미적용」으로 공개된다. ②는 직접 관찰이고 ③은 남의 출력에서
