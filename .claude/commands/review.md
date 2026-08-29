@@ -50,9 +50,18 @@ promoted_this_round = set()    # 이번 라운드에 accepted 로 올린 uid. ca
 # 서로 반대되는 코멘트가 두 개 올라간다. 그래서 넣고 빼는 것을 아래 둘로만 한다.
 #   promote(uid, f)          → accepted_findings 에 upsert 하고 carry_over 에서 뺀다
 #   record_carry(uid, f, r)  → carry_over 에 upsert 한다 (reason=r). accepted 에 있으면 뺀다
-# uid 는 **한 갈래**다 — `uid_of(f)` = (file, category, suggestion 앞 40자). 오케스트레이터가
-# 붙잡아 둔 항목과 reviewer 가 올린 carry_over_adds 가 같은 키 공간을 써야 upsert 가 만난다.
-# 일련번호를 따로 매기면 같은 지적이 두 키로 갈려 「확정 수정」과 「미적용」에 동시에 남는다.
+# uid 는 **한 갈래**이고 **항목에 실려 왕복한다.**
+#   uid_of(f) = f.uid 가 있으면 그것, 없으면 새로 만들어 f.uid 에 박아 둔다.
+# 오케스트레이터가 붙잡아 둔 항목과 reviewer 가 올린 carry_over_adds 가 같은 키 공간을
+# 써야 upsert 가 만난다. 일련번호를 따로 매기면 같은 지적이 두 키로 갈려 「확정 수정」과
+# 「미적용」에 동시에 남는다.
+#
+# **생성 텍스트로 열쇠를 만들지 않는다.** 한때 (file, category, suggestion 앞 40자)로
+# 정했는데, `carry_over_existing` 으로 내보낼 때 suggestion 이 빠지면 다음 사이클에서
+# 열쇠를 아예 계산할 수 없다 — 그러면 같은 지적이 새 항목으로 또 쌓이고, 방금 확정한 것을
+# reviewer 의 이월 보고가 도로 끌어내리는 것도 못 막는다. line 도 쓸 수 없다(수정이
+# 반영되면 밀린다). 그래서 **한 번 만들어 항목에 저장하고 그대로 들고 다닌다** —
+# `carry_over_existing` 에 uid 를 반드시 함께 실어 다음 사이클이 같은 열쇠를 되받게 한다.
 cycle = 1
 required_cycles = high_risk ? 2 : 1
 termination_reason = None
@@ -67,7 +76,7 @@ review_base: origin/main
 in_scope_files: {in_scope_files}
 cycle_number: {cycle}
 sensitive_paths: (reviewer.md 기본값 사용)
-carry_over_existing: {carry_over}
+carry_over_existing: {carry_over}   # 각 항목의 uid 를 반드시 포함한다
 """
     })
     parse result 의 REVIEW_RESULT 블록 → status, fail_reason, cycle_findings,
