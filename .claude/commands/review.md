@@ -138,8 +138,8 @@ carry_over_existing: {carry_over}
                 # 커밋한 뒤 **그 항목을 고친 커밋 전부**를 `git show` 로 읽어 제안대로
                 # 들어갔는지 확인한다(영역 분할로 갈렸으면 sha 를 모두 본다).
                 # 확인된 것에만 by 를 붙인다 — 실패했거나 일부만 반영했거나 (대안 note 가
-                # 불명확해) 건너뛴 항목에는 붙이지 않는다. 그래야 ②가 성립하지 않아 ③이
-                # 정상적으로 발동한다.
+                # 불명확해) 건너뛴 항목에는 붙이지 않는다. by 는 **누가 고쳤는지를 남기는
+                # 기록**이고, 반영 여부는 아래 확인 조건이 정한다.
                 if 그 커밋 내용이 제안대로다: pending[uid].by = "orchestrator"
 
             result = Agent(subagent_type="reviewer", prompt=<동일 prompt + cycle_number 유지 + user_responses>)
@@ -175,11 +175,18 @@ carry_over_existing: {carry_over}
             # 한 항목의 수정이 영역 분할로 여러 커밋에 갈릴 수 있다 — **그 항목을 고친
             # 커밋을 전부** 읽는다. 하나만 보면 다 고쳤는데도 "일부만"으로 보인다.
             #
-            # reviewer 가 같은 항목을 다시 묻고 있으면(uid_of 로 대조) 그 자체로 미반영이다 —
-            # 확인이 성립했다면 애초에 다시 물을 것이 없다. 이 규칙은 위 조건과 다투지 않는다.
+            # **두 번째 규칙을 두지 않는다.** 한때 "reviewer 가 같은 항목을 다시 묻으면
+            # 미반영"을 따로 두었는데, 그러면 확인과 재질문이 동시에 참일 때 무엇이 이기는지를
+            # 또 정해야 한다 — 그 우선순위를 정하고 뒤집는 데 네 사이클을 썼다. 필요도 없다:
+            # 확인이 성립하지 않은 항목은 위 조건만으로 이미 미반영이다.
+            #
+            # 특히 재질문은 트리 상태를 말해 주지 않는다. reviewer 는 민감 경로 수락 항목을
+            # "고치지 않고 알린다"고만 되어 있고(reviewer.md 절차 5) 어느 필드로 알릴지가
+            # 정해져 있지 않아, **이미 고쳐 이 PR 에 들어 있는 항목이 다시 올라올 수 있다.**
+            # 그것을 미반영 근거로 쓰면 이 PR 안의 수정이 「수락됐으나 미적용」으로 공개된다.
             promoted_this_round = set()      # 라운드마다 새로 센다
             for uid, f in pending.items():
-                if 그 항목을 고친 커밋을 읽어 제안대로 들어간 것을 확인했다:
+                if 그 항목을 고친 커밋(들)을 읽어 제안대로 들어간 것을 확인했다:
                     promote(uid, {**f, applied: true, by: f.by or "reviewer"})
                     promoted_this_round.add(uid)
                 else:
@@ -188,7 +195,8 @@ carry_over_existing: {carry_over}
             #
             # 아래에서 reviewer 의 carry_over_adds 를 기록할 때 promoted_this_round 는 건너뛴다.
             # record_carry 는 accepted 에 있으면 빼므로(51행), reviewer 가 "못 고쳤다"고 올린
-            # 같은 항목이 방금 promote 한 것을 도로 끌어내린다 — ③과 같은 뿌리의 두 번째 경로다.
+            # 같은 항목이 방금 promote 한 것을 도로 끌어내린다 — 위 재질문과 같은 뿌리이고,
+            # 이쪽은 carry_over_adds 로 들어온다.
 
             if status != "NEEDS_USER":
                 break
