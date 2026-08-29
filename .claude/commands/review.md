@@ -157,9 +157,16 @@ carry_over_existing: {carry_over}
             #   ② 오케스트레이터 자신이 방금 고쳤다 (바로 위 단계)
             #   ③ reviewer 가 같은 항목을 다시 묻고 있다 (uid_of 로 대조) → **미반영**
             # ①②로 확인되지 않으면 미반영으로 둔다 — 넓히는 방향으로 실패하지 않는다.
+            #
+            # **②는 ③을 이긴다.** reviewer 는 민감 경로 수락 항목을 "고치지 않고 알린다"고만
+            # 되어 있고(reviewer.md 절차 5) 어느 필드로 알릴지는 정해져 있지 않다 — 그것이
+            # user_confirmation_required 로 나오면 ③이 발동해, 방금 고쳐 이 PR 에 들어 있는
+            # 수정이 「수락됐으나 미적용」으로 공개된다. ②는 직접 관찰이고 ③은 남의 출력에서
+            # 끌어낸 추론이다. 위 원칙(추론하지 않는다)대로 관찰이 이긴다.
+            # ③은 ①로만 확인됐거나 아무것으로도 확인되지 않은 항목에만 적용한다.
             promoted_this_round = set()      # 라운드마다 새로 센다
             for uid, f in pending.items():
-                if 이 항목이 실제로 반영됐다 (위 ①②로 확인, ③이면 아님):
+                if 이 항목이 실제로 반영됐다 (②면 확정, 아니면 ①이고 ③이 아닐 때):
                     promote(uid, {**f, applied: true, by: f.by or "reviewer"})
                     promoted_this_round.add(uid)
                 else:
