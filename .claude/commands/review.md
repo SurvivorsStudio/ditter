@@ -42,8 +42,15 @@ CORE_PATH_PATTERN='^(apps/connectors/|apps/[a-z-]+/migrations/|apps/api/alembic\
 
 ```
 carry_over = []                # 최종 이월 목록 (PR body 에 쓰일 수 있음)
-accepted_findings = []         # 사용자가 수락해 고쳐진 항목의 **상세** (PR 리뷰 게시에 쓰인다)
+accepted_findings = []         # 사용자가 수락해 **실제로 반영된** 항목의 상세 (PR 리뷰 게시에 쓰인다)
 auto_fix_commits_total = []
+
+# 두 목록은 **배타적**이다 — 같은 항목이 「확정 수정」과 「미적용」 양쪽에 남으면 PR 리뷰에
+# 서로 반대되는 코멘트가 두 개 올라간다. 그래서 넣고 빼는 것을 아래 둘로만 한다.
+#   promote(uid, f)          → accepted_findings 에 upsert 하고 carry_over 에서 뺀다
+#   record_carry(uid, f, r)  → carry_over 에 upsert 한다 (reason=r). accepted 에 있으면 뺀다
+# uid 는 수락 시점에 오케스트레이터가 붙이는 자체 일련번호이고, reviewer 가 직접 올린
+# carry_over_adds 는 (file, category, suggestion 앞 40자) 를 uid 로 쓴다.
 cycle = 1
 required_cycles = high_risk ? 2 : 1
 termination_reason = None
@@ -68,7 +75,7 @@ carry_over_existing: {carry_over}
 
     if status == "FAIL":
         termination_reason = f"reviewer FAIL (cycle {cycle}): {fail_reason}"
-        carry_over.extend(result.carry_over_adds)
+        for x in result.carry_over_adds: record_carry(uid_of(x), x, x.reason)
         break   # push 차단 — 아래 「종료」로
 
     if status == "NEEDS_USER":
@@ -101,36 +108,39 @@ carry_over_existing: {carry_over}
             사용자에게 위 형식으로 user_confirmation_required 를 제시하고 응답을 기다린다
             user_responses = wait  # {finding_id, decision(수락|거부|대안), note?}
 
-            # 수락·대안 항목의 **상세**를 여기서 붙잡아 둔다. reviewer 는 다음 호출에서 그것을
-            # 고쳐 auto_fix_commits(sha)로만 돌려주고 상세(file·line·severity·category·cause·
+            # 수락·대안 항목의 **상세**를 붙잡아 둔다. reviewer 는 다음 호출에서 그것을 고쳐
+            # auto_fix_commits(sha)로만 돌려주고 상세(file·line·severity·category·cause·
             # risk_factor·suggestion)는 다시 담기지 않는다 — 지금 안 챙기면 영영 잃는다.
             #
-            # 다만 **여기서 확정하지 않는다.** 수락은 "고쳐 달라"이지 "고쳐졌다"가 아니다 —
-            # reviewer 는 민감 경로와 security/performance 를 수락받아도 고치지 않는다
-            # (reviewer.md 절대 규칙 4 · 결정 매트릭스). 확정은 응답을 보고 아래에서 한다.
-            #
-            # id 로 자리를 찾지 않고 대응표를 만든다. finding_id 는 1-based 이고 reviewer 호출
-            # 마다 1부터 다시 매겨진다 — 리스트 인덱스로 쓰면 한 칸 밀리고, 같은 항목인지
-            # 판별하는 데도 못 쓴다. 동일성 판정은 key(f) = (file, line, cause) 로 한다.
-            by_id = {f.finding_id: f for f in user_confirmation_required}
-            pending = [{**by_id[r.finding_id], decision: r.decision, note: r.note}
-                       for r in user_responses if r.decision in ("수락", "대안")]
+            # **자체 일련번호(uid)를 여기서 붙인다.** reviewer 의 finding_id 는 호출마다 1부터
+            # 다시 매겨져 같은 항목인지 못 가리고, (file, line, cause) 로 묶어도 line 은 수정이
+            # 반영되면 밀리고 cause 는 호출마다 새로 쓰인 문장이라 같은 지적이 다른 키로 잡힌다.
+            # file·line 은 이제 표시용이다.
+            by_id = {f.finding_id: f for f in user_confirmation_required}   # finding_id 는 1-based
+            for r in user_responses if r.decision in ("수락", "대안"):
+                pending[new_uid()] = {**by_id[r.finding_id], decision: r.decision, note: r.note}
 
             result = Agent(subagent_type="reviewer", prompt=<동일 prompt + cycle_number 유지 + user_responses>)
             parse result → status, ... (재할당)   # user_confirmation_required 도 새 값으로 재바인딩된다
 
-            # 반영 여부를 **응답으로** 판정한다. 같은 항목이 또 확인 요청으로 돌아왔으면 아직
-            # 안 끝난 것이고, 커밋이 하나도 없으면 reviewer 가 손대지 못한 것이다.
-            still_open = {key(f) for f in result.user_confirmation_required}
-            for f in pending:
-                if len(result.auto_fix_commits) > 0 and key(f) not in still_open:
-                    upsert(accepted_findings, key(f), {**f, applied: true})
+            # ── 수락 ≠ 반영. **항목마다** 판정한다 ─────────────────────────────
+            # "커밋이 하나라도 있으면 다 됐다"로 보면 안 된다. 여러 건을 한꺼번에 수락하면
+            # reviewer 가 일부만 고치는 일이 흔하고(민감 경로가 섞이면 특히), 못 고친 항목은
+            # 확인 요청 목록에도 안 돌아온다 — reviewer 는 "그 사실을 알린다"고만 되어 있고
+            # 그것을 담을 필드가 출력 계약에 없다(reviewer.md 절차 5). 그러면 손도 안 댄 지적이
+            # 「확정 수정」으로 공개 리뷰에 올라간다.
+            touched = {result.auto_fix_commits 의 각 sha 가 건드린 파일}   # git show --name-only
+            for uid, f in pending.items():
+                if f.file 이 sensitive_paths 에 걸리거나 f.category in ("security", "performance"):
+                    # reviewer 는 이 둘을 수락받아도 손대지 않는다 (reviewer.md 절차 5 · 매트릭스).
+                    # 사람이 손으로 고쳤더라도 코드가 알 방법이 없으므로 미적용으로 남긴다.
+                    record_carry(uid, f, "수락됐으나 reviewer 가 손댈 수 없는 자리다"
+                                         " — 민감 경로·자동수정 금지 카테고리. 사람이 직접 반영한다.")
+                elif f.file in touched:
+                    promote(uid, {**f, applied: true})
                 else:
-                    upsert(carry_over, key(f), {**f, applied: false, reason:
-                        "수락됐으나 reviewer 가 적용하지 않았다 — 민감 경로이거나 자동수정 금지"
-                        " 카테고리다. 사람이 직접 반영해야 한다."})
-            # upsert 는 같은 key 가 있으면 덮어쓴다. 내부 루프가 두 번 돌면 같은 항목이 두 번
-            # 지나가는데, 그대로 append 하면 PR 리뷰에 같은 코멘트가 두 개 올라간다.
+                    record_carry(uid, f, "수락됐으나 이번 커밋이 그 파일을 건드리지 않았다"
+                                         " — reviewer 재질의 중이거나 적용 여부를 확인할 수 없다.")
 
             if status != "NEEDS_USER":
                 break
@@ -140,10 +150,10 @@ carry_over_existing: {carry_over}
                 critical = [f for f in unresolved if f.severity in ("P0","P1")]
                 minor = [f for f in unresolved if f.severity not in ("P0","P1")]
                 for f in minor:
-                    carry_over.append({severity: f.severity, file: f.file, line: f.line,
-                        reason: f"NEEDS_USER 재호출 {INNER_LOOP_LIMIT}회 후 미해결 — carry_over 강등",
-                        cause: f.cause, risk_factor: f.risk_factor, suggestion: f.suggestion})
-                carry_over.extend(result.carry_over_adds)
+                    # 이미 record_carry 로 들어간 것과 같은 항목이다 — upsert 라 사유만 갱신된다.
+                    record_carry(uid_of(f), f,
+                        f"NEEDS_USER 재호출 {INNER_LOOP_LIMIT}회 후 미해결 — carry_over 강등")
+                for x in result.carry_over_adds: record_carry(uid_of(x), x, x.reason)
                 if len(critical) > 0:
                     termination_reason = f"reviewer FAIL: NEEDS_USER 한도 도달 — P0/P1 잔여 {len(critical)}건"
                 else:
@@ -155,7 +165,7 @@ carry_over_existing: {carry_over}
             break  # critical 잔여 또는 한도 도달 — 종료로
 
     auto_fix_commits_total.extend(result.auto_fix_commits)
-    carry_over.extend(result.carry_over_adds)
+    for x in result.carry_over_adds: record_carry(uid_of(x), x, x.reason)
 
     if status == "FAIL":  # 위에서 이미 처리했지만 재확인
         break
@@ -177,7 +187,7 @@ carry_over_existing: {carry_over}
         break
 
 output f"코드 리뷰 완료: 사이클 {cycle}/{required_cycles}, 확정 수정 commit {len(auto_fix_commits_total)}개, 이월 {len(carry_over)}건"
-output accepted_findings   # /pr §6-D 로 넘긴다 — 이 목록은 여기서만 만들어진다
+output f"  반영 확인 {len(accepted_findings)}건"   # 목록 자체는 /pr §6-D 로 넘긴다
 output f"  종료 사유: {termination_reason}"
 ```
 

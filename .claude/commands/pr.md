@@ -16,6 +16,8 @@ main 은 팀이 공유하는 브랜치이므로 직접 push 하지 않는다. �
   `BRANCH=$(git rev-parse --abbrev-ref HEAD)` (feature 브랜치를 새로 만들면 그때 다시 잡는다).
   - **`main` 이면** (공유 브랜치라 직접 push 금지): 미커밋 변경을 새 feature 브랜치로 옮긴다.
     - `git fetch origin && git switch -c <branch> origin/main` (작업 트리의 변경은 그대로 따라온다).
+    - **만든 직후 `BRANCH=$(git rev-parse --abbrev-ref HEAD)` 를 다시 잡는다.** 안 그러면
+      변수에 `main` 이 남아 PR 이 main→main 으로 나가거나 push 뒤 검증이 어긋난다.
     - 브랜치명 prefix 는 **`feature/`·`bug/`·`fix/` 만** 사용한다(prefix 없는 맨 이름 금지 —
       `docs/conventions/commit-convention.md` §머지 정책). desc = 변경 요지를 소문자·하이픈 슬러그로.
       인자로 제목이 주어졌으면 그걸 슬러그화해 쓴다. 예: `feature/risk-detector`, `fix/explain-parser-cte`.
@@ -161,7 +163,7 @@ step 4 의 reviewer 결과를 **PR 리뷰로 올린다.** 6-A 의 body 섹션과
 여기까지 오는 어느 경로에서도 번호가 변수로 남아 있지 않다.
 
 ```bash
-PR_NUM=$(gh pr view "$BRANCH" --json number -q .number)
+PR_NUM=$(gh pr view "$BRANCH" --json number -q .number) && SHORT=$(git rev-parse --short HEAD)
 ```
 
 한 번의 요청으로 올린다(코멘트를 따로 달면 Reviews 탭에 묶이지 않는다):
@@ -177,7 +179,7 @@ gh api "repos/{owner}/{repo}/pulls/$PR_NUM/reviews" --method POST --input <리�
 ```json
 {
   "event": "COMMENT",
-  "body": "**리뷰 3사이클** — 확정 수정 6건, 이월 5건.\n\n<무엇을 잡았는지 요약>",
+  "body": "리뷰 · $SHORT — 3사이클, 확정 수정 6건, 이월 5건.\n\n<무엇을 잡았는지 요약>",
   "comments": [
     {
       "path": "docs/diagrams/d4_aws.dot",
