@@ -136,6 +136,9 @@ cd apps/web && npm run test:coverage
 닫을 때는 이유를 남긴다. **무엇이 맞았는지 · 왜 다른 것이 들어갔는지 · 다음에 무엇을 보면
 되는지** 셋이다. 첫 기여가 설명 없이 무효가 되면 두 번째는 오지 않는다.
 
+머지 규칙의 단일 출처는 [commit-convention.md](docs/conventions/commit-convention.md) §5 다 —
+타깃·squash·사전 게이트는 그쪽을 본다. 이 절은 그 규칙을 한 번 어겼던 기록이다.
+
 ## 도움이 필요하면
 
 - 사용법·설계 질문 → [이슈](https://github.com/SurvivorsStudio/ditter/issues/new/choose)를 연다
