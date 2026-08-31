@@ -17,11 +17,11 @@ import {
   EmptyState,
   Spinner,
   Stat,
-  TRIGGER_LABEL,
   Tag,
   formatDuration,
   formatNumber,
   formatTime,
+  triggerLabel,
 } from '../components/common'
 import { Icon } from '../components/icons'
 
@@ -241,7 +241,7 @@ function RunsPanel({
                     <td>
                       <Tag status={run.status} />
                     </td>
-                    <td style={{ color: '#5b6070' }}>{TRIGGER_LABEL[run.trigger] ?? run.trigger}</td>
+                    <td style={{ color: '#5b6070' }}>{triggerLabel(run.trigger)}</td>
                     <td className="mono">{formatNumber(run.records)}</td>
                     <td>
                       <span className="bar">

@@ -5,12 +5,12 @@ import { nodeStateSchema, type NodeState } from '../api/types'
 import {
   Banner,
   Spinner,
-  TRIGGER_LABEL,
   Tag,
   formatDateTime,
   formatDuration,
   formatNumber,
   formatTime,
+  triggerLabel,
 } from '../components/common'
 import { Icon } from '../components/icons'
 
@@ -74,7 +74,7 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose: () => vo
               {run.error && <Banner kind="error">{run.error}</Banner>}
 
               <div className="detail-grid">
-                <Field label="트리거" value={TRIGGER_LABEL[run.trigger] ?? run.trigger} />
+                <Field label="트리거" value={triggerLabel(run.trigger)} />
                 <Field label="파이프라인 버전" value={`v${run.pipeline_version}`} />
                 <Field label="처리 건수" value={formatNumber(run.records)} />
                 <Field label="진행률" value={`${run.progress}%`} />

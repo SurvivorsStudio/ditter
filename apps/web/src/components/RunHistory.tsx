@@ -1,5 +1,6 @@
 import { useRuns } from '../api/hooks'
-import { Tag, formatDateTime, formatDuration, formatNumber } from './common'
+import { useT } from '../i18n'
+import { Tag, formatDateTime, formatDuration, formatShortStamp } from './common'
 import type { PipelineSummary, RunListItem } from '../api/types'
 
 /** 트리가 한 번에 보여줄 실행 이력 건수. 더 필요하면 [모니터]가 제 자리다 —
@@ -19,9 +20,11 @@ export function RunHistory({
 }) {
   const { data, isLoading } = useRuns({ pipelineId: pipeline.id, limit: HISTORY_LIMIT })
   const items = data?.items ?? []
+  const t = useT()
 
-  if (isLoading && items.length === 0) return <div className="pl-hist-empty">불러오는 중…</div>
-  if (items.length === 0) return <div className="pl-hist-empty">아직 실행한 적이 없습니다.</div>
+  if (isLoading && items.length === 0)
+    return <div className="pl-hist-empty">{t('runs.loading')}</div>
+  if (items.length === 0) return <div className="pl-hist-empty">{t('runs.neverRan')}</div>
 
   return (
     <div className="pl-hist">
@@ -29,16 +32,16 @@ export function RunHistory({
         <button key={r.id} className="pl-hist-row" onClick={() => onOpenRun(pipeline, r.id)}>
           <Tag status={r.status} />
           <span className="pl-hist-time" title={formatDateTime(r.started_at)}>
-            {shortStamp(r.started_at)}
+            {formatShortStamp(r.started_at)}
           </span>
-          <span className="pl-hist-meta">{formatNumber(r.records)}건</span>
+          <span className="pl-hist-meta">{t('common.count', { n: r.records })}</span>
           <span className="pl-hist-meta">{formatDuration(r.duration_seconds)}</span>
           {isRunning(r) && <span className="pl-hist-pct">{r.progress}%</span>}
         </button>
       ))}
       {data && data.total > items.length && (
         <div className="pl-hist-empty">
-          최근 {items.length}건 / 전체 {formatNumber(data.total)}건 — 더 보려면 [모니터]
+          {t('runs.historyFooter', { shown: items.length, total: data.total })}
         </div>
       )}
     </div>
@@ -46,24 +49,3 @@ export function RunHistory({
 }
 
 const isRunning = (r: RunListItem) => r.status === 'running' || r.status === 'pending'
-
-/** 이력 줄은 좁다 — 오늘 것은 시:분:초, 그 전은 월/일 시:분. */
-function shortStamp(iso: string | null): string {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return '—'
-  const now = new Date()
-  const sameDay =
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate()
-  return sameDay
-    ? d.toLocaleTimeString('ko-KR', { hour12: false })
-    : d.toLocaleString('ko-KR', {
-        hour12: false,
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-}
