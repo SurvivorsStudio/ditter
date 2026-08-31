@@ -105,8 +105,9 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
   아니라 "읽지 못했다"이고, 여기서 통과로 읽으면 **아래 두 번째 명령은 아예 돌지 않는다.**
   (실측: 닫는 이슈가 없는 PR 은 `[]` + exit 0, **존재하지 않는 PR 번호**는 빈 출력 + exit 1 로
   갈린다.)
-- 그 이슈를 닫겠다고 선언한 **다른 열린 PR** 을 찾는다. `<이슈>` 에는 위 번호를 **대괄호 없이**
-  쉼표로, `<self>` 에는 대상 PR 번호를 넣는다 (예: `IN(66,86)` · `.number != 95`):
+- 그 이슈를 닫겠다고 선언한 **다른 열린 PR** 을 찾는다. 치환할 자리는 **둘**이고, 대괄호는 이미
+  명령에 있으니 번호만 쉼표로 넣는다 — `[<이슈>]` → `[66,86]` · `.number != <self>` →
+  `.number != 95`:
   ```bash
   gh pr list --state open --limit 100 --json number,title,headRefName,closingIssuesReferences --jq '[<이슈>] as $want | [.[] | . + {overlap: [.closingIssuesReferences[].number] | map(select(IN($want[])))}] | {want: $want, total: length, hits: [.[] | select(.number != <self> and (.overlap | length > 0)) | {number, title, headRefName, overlap}]}'
   ```
