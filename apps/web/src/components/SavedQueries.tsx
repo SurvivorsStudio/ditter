@@ -258,13 +258,20 @@ export function SavedQueriesPanel({
   useEffect(() => {
     if (addParent !== undefined) addInput.current?.select()
   }, [addParent])
-  /** 종류 버튼 — 가리키기만 해도 입력줄의 이름이 그 종류로 바뀐다. */
+  /** 종류 버튼 — 가리키기만 해도 입력줄의 이름이 그 종류로 바뀐다.
+   *
+   *  **벗어나면 되돌린다.** 되돌리지 않으면 입력줄은 「새 파이프라인」인데 그 자리에서
+   *  Enter 를 누르면 폴더가 생긴다 — 이름은 `submitAdd` 가 다시 계산해 맞지만 **종류가
+   *  갈린다.** 미리보기의 기본은 Enter 가 하는 일(=[폴더])이어야 화면과 결과가 어긋나지
+   *  않는다. 버튼 사이를 지나갈 때는 leave 다음에 enter 가 와서 새 종류가 이긴다. */
   const addKindButton = (kind: AddKind, label: string, icon: React.ReactNode, title: string) => (
     <button
       className={`btn sm ${kind === 'folder' ? 'primary' : ''}`}
       onClick={() => submitAdd(kind)}
       onPointerEnter={() => previewAdd(kind)}
+      onPointerLeave={() => previewAdd('folder')}
       onFocus={() => previewAdd(kind)}
+      onBlur={() => previewAdd('folder')}
       title={title}
     >
       {icon}

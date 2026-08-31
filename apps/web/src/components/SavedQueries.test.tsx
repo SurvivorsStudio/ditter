@@ -83,6 +83,17 @@ const hoverAdd = (text: string) =>
   act(() => {
     addButton(text)?.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
   })
+/** 종류 버튼에서 포인터가 벗어난다 — 미리보기는 [폴더](=Enter 가 하는 일)로 돌아가야 한다.
+ *  React 는 onPointerLeave 를 pointerout 에서 합성한다. */
+const leaveAdd = (text: string) =>
+  act(() => {
+    addButton(text)?.dispatchEvent(new PointerEvent('pointerout', { bubbles: true }))
+  })
+/** 입력줄에서 Enter — 언제나 [폴더] 를 만든다. */
+const enterAdd = () =>
+  act(() => {
+    addInput()?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+  })
 
 beforeEach(() => {
   container = document.createElement('div')
@@ -181,6 +192,50 @@ describe('SavedQueriesPanel', () => {
     expect(addInput()?.value).toBe('새 파이프라인')
     hoverAdd('쿼리')
     expect(addInput()?.value).toBe('새 쿼리')
+  })
+
+  it('Enter 는 [폴더] 를 만든다 — 채워진 이름 그대로', () => {
+    const onNewFolder = vi.fn()
+    render(
+      <SavedQueriesPanel
+        folders={[folder('f1', '일배치')]}
+        connections={[]}
+        pipelines={[]}
+        {...handlers}
+        onNewFolder={onNewFolder}
+      />,
+    )
+    act(() => {
+      container.querySelector<HTMLElement>('.sq-folder-row .sq-edit')?.click()
+    })
+    enterAdd()
+    expect(onNewFolder).toHaveBeenCalledWith('f1', '새 폴더')
+  })
+
+  it('가리키다 벗어나면 [폴더] 이름으로 되돌아온다 — Enter 가 만드는 것과 갈리면 안 된다', () => {
+    const onNewFolder = vi.fn()
+    const onNewPipeline = vi.fn()
+    render(
+      <SavedQueriesPanel
+        folders={[folder('f1', '일배치')]}
+        connections={[]}
+        pipelines={[]}
+        {...handlers}
+        onNewFolder={onNewFolder}
+        onNewPipeline={onNewPipeline}
+      />,
+    )
+    act(() => {
+      container.querySelector<HTMLElement>('.sq-folder-row .sq-edit')?.click()
+    })
+    hoverAdd('파이프라인')
+    expect(addInput()?.value).toBe('새 파이프라인')
+    leaveAdd('파이프라인')
+    // 화면이 「새 파이프라인」인 채로 Enter 를 받으면 폴더가 생겨 종류가 갈린다
+    expect(addInput()?.value).toBe('새 폴더')
+    enterAdd()
+    expect(onNewFolder).toHaveBeenCalledWith('f1', '새 폴더')
+    expect(onNewPipeline).not.toHaveBeenCalled()
   })
 
   it('직접 고친 이름은 다른 종류를 가리켜도 그대로 둔다', () => {
