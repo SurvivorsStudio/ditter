@@ -11,7 +11,7 @@ import logging
 import operator
 import re
 from collections.abc import Callable, Iterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from eai_api.schemas.dag import SWITCH_DEFAULT_HANDLE, NodeKind, PipelineNode
@@ -69,7 +69,7 @@ def _to_datetime(v: Any) -> Any:
         n /= 1_000_000
     elif abs(n) >= 1e11:    # 밀리초
         n /= 1_000
-    return datetime.fromtimestamp(n, tz=timezone.utc).replace(tzinfo=None)
+    return datetime.fromtimestamp(n, tz=UTC).replace(tzinfo=None)
 
 
 CASTS: dict[str, Callable[[Any], Any]] = {
