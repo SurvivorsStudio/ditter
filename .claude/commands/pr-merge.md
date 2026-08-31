@@ -35,10 +35,10 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
 ### 1. 사전 게이트 (모두 통과해야 함 — 첫 실패에서 종료)
 
 이 명령은 게이트 안에서 무엇도 고치지 않는다. 게이트가 실패하면 사용자의 다음 단계는 **대개**
-`/pr` 로 재준비다 — 1b·1c 와 1a 의 충돌 갈래가 그렇다. 예외 둘은 다음 단계가 아예 다르니
-`/pr` 로 안내하지 않는다: **1a** 가 "이미 머지됨"·"base 가 main 이 아님"으로 걸리면 이 명령의
-대상이 아니라 보고로 끝나고, **1d** 는 준비가 덜 된 것이 아니라 **다른 사람의 PR 과 조율**할
-일이 남은 것이다.
+`/pr` 로 재준비다 — **1b·1c** 가 그렇다(충돌은 1b 소관이고, 해소 후 재준비도 1b 다). 예외
+둘은 다음 단계가 아예 다르니 `/pr` 로 안내하지 않는다: **1a** 는 두 갈래 모두("이미 머지됨"·
+"base 가 main 이 아님") 이 명령의 대상이 아니라 보고로 끝나고, **1d** 는 준비가 덜 된 것이
+아니라 **다른 사람의 PR 과 조율**할 일이 남은 것이다.
 
 #### 1a. 상태 · 머지 대상
 - `state == OPEN`. 이미 머지됐으면(`MERGED`) 그 사실만 보고하고 종료.
@@ -99,16 +99,26 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
   ```bash
   gh pr view <n> --json closingIssuesReferences --jq '[.closingIssuesReferences[].number]'
   ```
-  빈 배열이면 이 게이트는 **판정할 것이 없다 — 통과**하고, 그 사실을 5번 보고에 한 줄 남긴다
-  (통과했다고 확인된 것이 아니라 확인할 근거가 없었다는 뜻이라 둘을 같게 보고하면 안 된다).
+  `[]` 가 **찍히면**(exit 0) 이 게이트는 **판정할 것이 없다 — 통과**하고, 그 사실을 5번 보고에
+  한 줄 남긴다(통과했다고 확인된 것이 아니라 확인할 근거가 없었다는 뜻이라 둘을 같게 보고하면
+  안 된다). **아무것도 출력되지 않거나 exit 이 0 이 아니면 실패다** — 그것은 "닫는 이슈가 없다"가
+  아니라 "읽지 못했다"이고, 여기서 통과로 읽으면 **아래 두 번째 명령은 아예 돌지 않는다.**
+  (실측: 닫는 이슈가 없는 PR 은 `[]` + exit 0, 없는 PR 은 빈 출력 + exit 1 로 갈린다.)
 - 그 이슈를 닫겠다고 선언한 **다른 열린 PR** 을 찾는다. `<이슈>` 에는 위 번호를 **대괄호 없이**
   쉼표로, `<self>` 에는 대상 PR 번호를 넣는다 (예: `IN(66,86)` · `.number != 95`):
   ```bash
-  gh pr list --state open --limit 100 --json number,title,headRefName,closingIssuesReferences --jq '[.[] | . + {overlap: [.closingIssuesReferences[].number] | map(select(IN(<이슈>)))}] | {total: length, hits: [.[] | select(.number != <self> and (.overlap | length > 0)) | {number, title, headRefName, overlap}]}'
+  gh pr list --state open --limit 100 --json number,title,headRefName,closingIssuesReferences --jq '[<이슈>] as $want | [.[] | . + {overlap: [.closingIssuesReferences[].number] | map(select(IN($want[])))}] | {want: $want, total: length, hits: [.[] | select(.number != <self> and (.overlap | length > 0)) | {number, title, headRefName, overlap}]}'
   ```
   (한 줄로 붙여 쓴다 — 0번의 `gh pr view` 와 같은 이유다.)
-- **출력이 아예 없으면 통과가 아니라 실패다.** 통과는 `{"hits":[],"total":N}` 처럼 **무언가
-  출력된 것**으로만 정의한다. 빈 화면은 "겹치는 PR 이 없다"와 `gh` 인증 실패·명령 오타를 구별해
+- **`want` 가 첫 명령의 출력과 같은지 먼저 본다.** 앞 명령이 돌려주는 것은 대괄호가 붙은
+  `[66,86]` 이고 여기 넣을 것은 대괄호를 벗긴 `66,86` 이라, **그대로 붙여 넣기 쉽다.** 그러면
+  `want` 가 `[[66,86]]` 이 되어 아무것도 걸러내지 못하는데 **오류는 나지 않고 `hits: []` 통과
+  화면이 그대로 나온다**(실측: 사고 재현 조건에서 올바른 치환은 PR #93 을 잡고, 대괄호를 남긴
+  치환은 `{"hits":[],"total":86}` exit 0). 이 실수를 드러내는 것은 `want` 뿐이다 — `want` 가
+  첫 명령의 목록과 다르거나 비어 있으면 그 `hits: []` 는 통과가 아니다.
+- **출력이 아예 없으면 통과가 아니라 실패다.** 이 명령의 통과는
+  `{"hits":[],"total":N,"want":[…]}` 처럼 **무언가 출력된 것**으로만 정의한다(첫 명령의 통과
+  조건은 위 항목이다). 빈 화면은 "겹치는 PR 이 없다"와 `gh` 인증 실패·명령 오타를 구별해
   주지 않는다 — 확인이 안 된 것을 통과로 읽는 것이 바로 이 게이트가 막으려는 사고의 모양이다.
   그래서 `total` 을 함께 낸다. 표준 `jq` 로 파이프하지 않는 이유도 같다(도구가 없으면 exit 127
   로 역시 빈 화면이 된다). `gh --jq` 는 `--argjson` 을 받지 않으므로 번호를 필터에 직접 박는다.
