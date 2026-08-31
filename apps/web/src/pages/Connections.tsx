@@ -16,10 +16,10 @@ import { auth } from '../api/auth'
 import { api } from '../api/client'
 import type { FieldSpec, ConnectorCategory } from '../api/connectorFields'
 import {
-  CATEGORY_META,
+  categoryMeta,
   CATEGORY_ORDER,
   CONNECTOR_SPECS,
-  ROLE_LABEL,
+  roleLabel,
   defaultsFor,
   groupByCategory,
   specFor,
@@ -28,8 +28,8 @@ import {
 import type { SqlStatement } from '../api/statements'
 import {
   SQL_STATEMENTS,
-  STATEMENT_DETAIL,
-  STATEMENT_HINT,
+  statementDetail,
+  statementHint,
   parseStatements,
   riskOf,
   statementsOf,
@@ -116,7 +116,7 @@ export function Connections() {
             AI 모델을 최상단으로 — 타입 선택 화면(CATEGORY_ORDER)과 달리 이 목록만의 순서다. */}
         {(['ai', ...CATEGORY_ORDER.filter((c) => c !== 'ai')] as ConnectorCategory[]).map((cat) => {
           const items = (connections ?? []).filter((c) => specFor(c.type).category === cat)
-          const meta = CATEGORY_META[cat]
+          const meta = categoryMeta(cat)
           return (
             <div className="conn-cat" key={cat}>
               <div className="conn-cat-h">
@@ -318,7 +318,7 @@ function ConnectionForm({
           <h3>
             {type === null
               ? initialCategory
-                ? `${CATEGORY_META[initialCategory].label} — 타입 선택`
+                ? `${categoryMeta(initialCategory).label} — 타입 선택`
                 : '커넥터 타입 선택'
               : isEdit
                 ? `${connection.name} 편집`
@@ -544,11 +544,11 @@ function StatementChecks({
         <label
           key={s}
           className={`stmt-check risk-${riskOf(s)} ${picked.includes(s) ? 'on' : ''}`}
-          title={STATEMENT_DETAIL[s]}
+          title={statementDetail(s)}
         >
           <input type="checkbox" checked={picked.includes(s)} onChange={() => toggle(s)} />
           <b>{s.toUpperCase()}</b>
-          <span>{STATEMENT_HINT[s]}</span>
+          <span>{statementHint(s)}</span>
         </label>
       ))}
     </div>
@@ -595,7 +595,7 @@ function TypePicker({ types, onPick }: { types: string[]; onPick: (type: string)
       </p>
 
       {groups.map(({ category, types: members }) => {
-        const meta = CATEGORY_META[category]
+        const meta = categoryMeta(category)
         return (
           <section className="type-group" key={category}>
             <h4 className="type-group-head">
@@ -614,7 +614,7 @@ function TypePicker({ types, onPick }: { types: string[]; onPick: (type: string)
                       <span className="type-name">{spec.label}</span>
                       <span className="type-desc">{spec.description}</span>
                     </span>
-                    <span className={`type-role role-${spec.role}`}>{ROLE_LABEL[spec.role]}</span>
+                    <span className={`type-role role-${spec.role}`}>{roleLabel(spec.role)}</span>
                   </button>
                 )
               })}
@@ -807,7 +807,7 @@ function ConnectorSettings({
             <b>{spec.label}</b>
             <span className="type-desc"> · {spec.description}</span>
           </span>
-          <span className={`type-role role-${spec.role}`}>{ROLE_LABEL[spec.role]}</span>
+          <span className={`type-role role-${spec.role}`}>{roleLabel(spec.role)}</span>
         </div>
 
         {error && (

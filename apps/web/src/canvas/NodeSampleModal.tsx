@@ -1,4 +1,5 @@
 import { SPEC_BY_KIND } from './nodeCatalog'
+import { t } from '../i18n'
 import { useCanvasStore } from '../store/canvasStore'
 
 /** 노드 실행 결과 샘플을 표로 보여준다 (엣지의 결과 칩에서 연다). */
@@ -20,7 +21,7 @@ export function NodeSampleModal({ nodeId, onClose }: { nodeId: string; onClose: 
           <span className="sample-badge" style={{ background: spec?.color ?? 'var(--muted)' }}>
             {IconComp ? <IconComp /> : null}
           </span>
-          <h3>{node.data.label || spec?.title || node.id} · 실행 결과</h3>
+          <h3>{node.data.label || (spec ? t(spec.titleKey) : node.id)} · 실행 결과</h3>
           <button className="x" onClick={onClose} aria-label="닫기">
             ×
           </button>

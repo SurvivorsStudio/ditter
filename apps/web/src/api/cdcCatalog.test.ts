@@ -45,13 +45,13 @@ describe('팔레트 — CDC 소스 노드', () => {
       const spec = SPEC_BY_KIND[`source.cdc.${type}`]
       expect(spec, `source.cdc.${type} 노드 스펙이 없음`).toBeDefined()
       expect(spec.connectorType).toBe(type)
-      expect(spec.group).toBe('실시간 (CDC)')
+      expect(spec.groupKey).toBe('nodeGroup.cdc')
     }
   })
 
   it('MSSQL (CDC) 노드가 존재하고 mssql 연결을 요구한다', () => {
     const spec = SPEC_BY_KIND['source.cdc.mssql']
-    expect(spec.title).toBe('MSSQL (CDC)')
+    expect(spec.titleKey).toBe('node.source.cdc.mssql.title')
     expect(spec.connectorType).toBe('mssql')
     expect(spec.defaultParams).toMatchObject({ snapshot: 'initial', delete_mode: 'soft' })
   })

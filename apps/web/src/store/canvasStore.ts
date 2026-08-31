@@ -5,6 +5,7 @@ import { create } from 'zustand'
 import type { NodeSample, NodeState, PipelineDefinition } from '../api/types'
 import {
   SPEC_BY_KIND,
+  defaultParamsFor,
   isFrame,
   isNote,
   isSource,
@@ -13,6 +14,7 @@ import {
   isTrigger,
   nodeTypeForKind,
 } from '../canvas/nodeCatalog'
+import { t } from '../i18n'
 
 export type EaiNodeData = {
   kind: string
@@ -233,7 +235,7 @@ export function isLabelTaken(nodes: EaiNode[], label: string, exceptId?: string)
  * ("MySQL 소스" → "MySQL 소스 2" → "MySQL 소스 3"). 번호를 무조건 덧붙이면
  * "MySQL 소스 2 2" 처럼 길어지기만 한다. */
 export function uniqueLabel(nodes: EaiNode[], desired: string, exceptId?: string): string {
-  const base = desired.trim() || '노드'
+  const base = desired.trim() || t('node.defaultLabel')
   if (!isLabelTaken(nodes, base, exceptId)) return base
 
   const numbered = /^(.*\S)\s+(\d+)$/.exec(base)
@@ -276,7 +278,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       nodes: definition.nodes.reduce<EaiNode[]>((acc, n) => {
         const frame = isFrame(n.kind)
         const p = n.params as Record<string, unknown>
-        const desired = n.label || SPEC_BY_KIND[n.kind]?.title || n.kind
+        const spec = SPEC_BY_KIND[n.kind]
+        const desired = n.label || (spec ? t(spec.titleKey) : n.kind)
         acc.push({
           id: n.id,
           type: nodeTypeForKind(n.kind),
@@ -473,8 +476,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         // 같은 종류를 여러 개 놓으면 이름이 겹친다 — 뒤에 번호를 붙여 유일하게 만든다
         data: {
           kind,
-          label: isNote(kind) ? spec.title : uniqueLabel(state.nodes, spec.title),
-          params: { ...spec.defaultParams },
+          label: isNote(kind) ? t(spec.titleKey) : uniqueLabel(state.nodes, t(spec.titleKey)),
+          params: defaultParamsFor(spec),
         },
       }
       return { ...recordHistory(state), nodes: [...state.nodes, node], selectedId: id, dirty: true }

@@ -8,6 +8,8 @@
  *  가리키기만 한다**(`SavedPipeline`). 그래서 삭제의 뜻도 갈린다: 쿼리 ×는 쿼리를 지우고,
  *  파이프라인 ×는 트리에서 빼기만 한다. */
 
+import { t } from '../i18n'
+
 export type SavedQuery = {
   id: string
   name: string
@@ -298,7 +300,7 @@ export function flattenFolders(
  *  대소문자를 무시한다. */
 export function uniqueName(desired: string, taken: Iterable<string>): string {
   const used = new Set([...taken].map((s) => s.trim().toLowerCase()))
-  const base = desired.trim() || '무제'
+  const base = desired.trim() || t('common.untitled')
   if (!used.has(base.toLowerCase())) return base
 
   const numbered = /^(.*\S)\s+(\d+)$/.exec(base)

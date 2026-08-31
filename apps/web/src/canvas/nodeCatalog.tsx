@@ -1,8 +1,20 @@
 import type { JSX } from 'react'
 import { Icon } from '../components/icons'
+import { t, type MsgKey } from '../i18n'
+import { nodes as NODE_MESSAGES } from '../i18n/messages/nodes'
 import type { NodeKind } from '../api/types'
 
+/** 카테고리 id — 팔레트 그룹핑·비교에 쓰이는 **내부 값**이라 한글 그대로 둔다.
+ *  화면에 그릴 때만 CATEGORY_KEY 를 거쳐 번역한다. */
 export type NodeCategory = '트리거' | '소스' | '변환' | '타깃' | '주석'
+
+export const CATEGORY_KEY: Record<NodeCategory, MsgKey> = {
+  트리거: 'nodeCategory.trigger',
+  소스: 'nodeCategory.source',
+  변환: 'nodeCategory.transform',
+  타깃: 'nodeCategory.target',
+  주석: 'nodeCategory.note',
+}
 
 /** 스위치에서 아무 case 에도 안 맞은 행이 가는 기본(그 외) 출력 핸들 id. 백엔드와 짝. */
 export const SWITCH_DEFAULT_HANDLE = '__default__'
@@ -15,42 +27,43 @@ export function newCaseId(): string {
 export type SwitchCase = { id?: string; label?: string; match?: string; conditions?: unknown[] }
 export type SwitchOutput = { id: string; label: string }
 
-/** 스위치 노드의 출력 포트 목록 — case 들 + 기본(그 외). 핸들·엣지가 이 id 를 쓴다. */
+/** 스위치 노드의 출력 포트 목록 — case 들 + 기본(그 외). 핸들·엣지가 이 id 를 쓴다.
+ *  라벨은 그릴 때마다 현재 언어로 만든다 — id 는 언어와 무관하게 안정적이다. */
 export function switchOutputs(params: Record<string, unknown>): SwitchOutput[] {
   const cases = Array.isArray(params.cases) ? (params.cases as SwitchCase[]) : []
   const outs = cases.map((c, i) => ({
     id: String(c.id ?? `case_${i}`),
-    label: String(c.label || `분기 ${i + 1}`),
+    label: String(c.label || t('node.switch.case', { n: i + 1 })),
   }))
-  outs.push({ id: SWITCH_DEFAULT_HANDLE, label: '그 외' })
+  outs.push({ id: SWITCH_DEFAULT_HANDLE, label: t('node.switch.default') })
   return outs
 }
 
-/** Python 전처리 노드 — 행 단위 골격. 각 레코드(row)를 받아 변환해 돌려준다. */
-export const DEFAULT_PYCODE = `# 각 레코드(row: dict)를 받아 변환해 돌려줍니다.
-# None 을 반환하면 그 행은 제외됩니다.
-# pandas 사용 가능: import pandas as pd
-# 그 외: datetime, re, json, math, hashlib, decimal, base64, uuid 등 (표준 모듈 일부)
-def transform(row):
-    return row
-`
+/** Python 전처리 골격 — **생성 시점의 언어**로 코드에 박힌다. 이미 만든 노드의 코드는
+ *  사용자 데이터라 언어를 바꿔도 따라가지 않는다. */
+export function defaultPycode(target: 'row' | 'batch' = 'row'): string {
+  return t(target === 'batch' ? 'node.pycode.batch' : 'node.pycode.row')
+}
 
-/** Python 전처리 노드 — 배치 단위 골격. 전체 행을 DataFrame 으로 한 번에 처리한다. */
-export const DEFAULT_PYCODE_BATCH = `# 전체 행을 pandas DataFrame(df)으로 한 번에 받아 처리합니다.
-# DataFrame 을 반환하세요 (groupby·정렬·중복제거 등).
-import pandas as pd
+/** 어느 언어·모드로 만들어졌든 기본 골격 그대로인가 — 덮어쓰기 확인을 건너뛸 판단에 쓴다.
+ *  현재 언어만 보면 ko 로 만든 노드를 en 화면에서 커스텀 코드로 오판한다. */
+const PYCODE_TEMPLATES: readonly string[] = [
+  ...NODE_MESSAGES['node.pycode.row'],
+  ...NODE_MESSAGES['node.pycode.batch'],
+].map((s) => s.trim())
 
-def transform_batch(df):
-    return df
-`
+export function isDefaultPycode(code: string): boolean {
+  return PYCODE_TEMPLATES.includes(code.trim())
+}
 
 export type NodeSpec = {
   kind: NodeKind
-  title: string
-  hint: string
+  /** 팔레트 표시이자 새 노드 기본 이름의 시드 — 그릴 때 t() 를 거친다. */
+  titleKey: MsgKey
+  hintKey: MsgKey
   category: NodeCategory
   /** 카테고리 안의 소분류. 팔레트에서 작은 구분선으로 묶는다 (예: 소스 > 실시간(CDC)). */
-  group?: string
+  groupKey?: MsgKey
   /** 노드 타입별 컬러 (설계 문서 §8) */
   color: string
   icon: () => JSX.Element
@@ -59,11 +72,23 @@ export type NodeSpec = {
   defaultParams: Record<string, unknown>
 }
 
+/** 새 노드에 넣을 파라미터 — 언어 의존 시드(스위치 분기 이름·Python 골격)는 여기서
+ *  생성 시점 언어로 만든다. 스위치 case 배열도 매번 새로 만들어, 노드끼리 같은 배열을
+ *  공유하는 일이 없다. */
+export function defaultParamsFor(spec: NodeSpec): Record<string, unknown> {
+  if (spec.kind === 'logic.switch')
+    return {
+      cases: [{ id: newCaseId(), label: t('node.switch.case', { n: 1 }), match: 'all', conditions: [] }],
+    }
+  if (spec.kind === 'transform.python') return { code: defaultPycode('row') }
+  return { ...spec.defaultParams }
+}
+
 export const NODE_SPECS: NodeSpec[] = [
   {
     kind: 'trigger.schedule',
-    title: '스케줄 (Cron)',
-    hint: '주기 실행',
+    titleKey: 'node.trigger.schedule.title',
+    hintKey: 'node.trigger.schedule.hint',
     category: '트리거',
     color: 'var(--trig)',
     icon: Icon.clock,
@@ -71,8 +96,8 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'trigger.manual',
-    title: '수동 실행',
-    hint: '버튼 트리거',
+    titleKey: 'node.trigger.manual.title',
+    hintKey: 'node.trigger.manual.hint',
     category: '트리거',
     color: 'var(--trig)',
     icon: Icon.bolt,
@@ -80,8 +105,8 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'trigger.api',
-    title: 'API 호출',
-    hint: '외부에서 값 받아 실행',
+    titleKey: 'node.trigger.api.title',
+    hintKey: 'node.trigger.api.hint',
     category: '트리거',
     color: 'var(--trig)',
     icon: Icon.bolt,
@@ -94,8 +119,8 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'trigger.cdc',
-    title: 'CDC 스트림',
-    hint: '상시 실시간 수집',
+    titleKey: 'node.trigger.cdc.title',
+    hintKey: 'node.trigger.cdc.hint',
     category: '트리거',
     color: 'var(--trig)',
     icon: Icon.broadcast,
@@ -103,8 +128,8 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'trigger.sync',
-    title: '실시간 동기화',
-    hint: '원본 트리거로 상시 복제',
+    titleKey: 'node.trigger.sync.title',
+    hintKey: 'node.trigger.sync.hint',
     category: '트리거',
     color: 'var(--trig)',
     icon: Icon.broadcast,
@@ -112,8 +137,8 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'source.mysql',
-    title: 'MySQL',
-    hint: '테이블 조회',
+    titleKey: 'node.source.mysql.title',
+    hintKey: 'node.source.mysql.hint',
     category: '소스',
     color: 'var(--src)',
     icon: Icon.db,
@@ -122,8 +147,8 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'source.postgres',
-    title: 'PostgreSQL',
-    hint: '테이블/쿼리',
+    titleKey: 'node.source.postgres.title',
+    hintKey: 'node.source.postgres.hint',
     category: '소스',
     color: 'var(--src)',
     icon: Icon.db,
@@ -132,8 +157,8 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'source.mssql',
-    title: 'MSSQL',
-    hint: '테이블/쿼리',
+    titleKey: 'node.source.mssql.title',
+    hintKey: 'node.source.mssql.hint',
     category: '소스',
     color: 'var(--src)',
     icon: Icon.db,
@@ -142,8 +167,8 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'source.mongo',
-    title: 'MongoDB',
-    hint: '컬렉션',
+    titleKey: 'node.source.mongo.title',
+    hintKey: 'node.source.mongo.hint',
     category: '소스',
     color: 'var(--src)',
     icon: Icon.leaf,
@@ -152,8 +177,8 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'source.sap',
-    title: 'SAP (RFC)',
-    hint: 'BAPI / RFC_READ',
+    titleKey: 'node.source.sap.title',
+    hintKey: 'node.source.sap.hint',
     category: '소스',
     color: 'var(--sap)',
     icon: Icon.sap,
@@ -162,10 +187,10 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'source.cdc.mysql',
-    title: 'MySQL (CDC)',
-    hint: 'binlog 실시간 변경',
+    titleKey: 'node.source.cdc.mysql.title',
+    hintKey: 'node.source.cdc.mysql.hint',
     category: '소스',
-    group: '실시간 (CDC)',
+    groupKey: 'nodeGroup.cdc',
     color: 'var(--src)',
     icon: Icon.broadcast,
     connectorType: 'mysql',
@@ -173,10 +198,10 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'source.cdc.postgres',
-    title: 'PostgreSQL (CDC)',
-    hint: 'WAL 논리복제',
+    titleKey: 'node.source.cdc.postgres.title',
+    hintKey: 'node.source.cdc.postgres.hint',
     category: '소스',
-    group: '실시간 (CDC)',
+    groupKey: 'nodeGroup.cdc',
     color: 'var(--src)',
     icon: Icon.broadcast,
     connectorType: 'postgres',
@@ -184,10 +209,10 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'source.cdc.mssql',
-    title: 'MSSQL (CDC)',
-    hint: 'SQL Server CDC',
+    titleKey: 'node.source.cdc.mssql.title',
+    hintKey: 'node.source.cdc.mssql.hint',
     category: '소스',
-    group: '실시간 (CDC)',
+    groupKey: 'nodeGroup.cdc',
     color: 'var(--src)',
     icon: Icon.broadcast,
     connectorType: 'mssql',
@@ -195,10 +220,10 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'source.sync.mssql',
-    title: 'MSSQL (실시간 동기화)',
-    hint: '트리거 기반 · CDC 불필요',
+    titleKey: 'node.source.sync.mssql.title',
+    hintKey: 'node.source.sync.mssql.hint',
     category: '소스',
-    group: '실시간 동기화',
+    groupKey: 'nodeGroup.sync',
     color: 'var(--src)',
     icon: Icon.broadcast,
     connectorType: 'mssql',
@@ -214,8 +239,8 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'transform.filter',
-    title: '필터',
-    hint: '조건 필터링',
+    titleKey: 'node.transform.filter.title',
+    hintKey: 'node.transform.filter.hint',
     category: '변환',
     color: 'var(--tr)',
     icon: Icon.filter,
@@ -223,8 +248,8 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'transform.map',
-    title: '필드 매핑',
-    hint: '컬럼 변환',
+    titleKey: 'node.transform.map.title',
+    hintKey: 'node.transform.map.hint',
     category: '변환',
     color: 'var(--tr)',
     icon: Icon.map,
@@ -232,28 +257,28 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'transform.python',
-    title: 'Python 코드',
-    hint: '전처리 스크립트',
+    titleKey: 'node.transform.python.title',
+    hintKey: 'node.transform.python.hint',
     category: '변환',
     color: 'var(--tr)',
     icon: Icon.code,
-    defaultParams: { code: DEFAULT_PYCODE },
+    // 실제 골격 코드는 defaultParamsFor 가 생성 시점 언어로 채운다
+    defaultParams: { code: '' },
   },
   {
     kind: 'logic.switch',
-    title: '스위치',
-    hint: '조건 분기',
+    titleKey: 'node.logic.switch.title',
+    hintKey: 'node.logic.switch.hint',
     category: '변환',
     color: 'var(--tr)',
     icon: Icon.branch,
-    defaultParams: {
-      cases: [{ id: newCaseId(), label: '분기 1', match: 'all', conditions: [] }],
-    },
+    // 실제 case 시드는 defaultParamsFor 가 생성 시점 언어로 채운다
+    defaultParams: { cases: [] },
   },
   {
     kind: 'target.db',
-    title: 'Target DB',
-    hint: 'Upsert 적재',
+    titleKey: 'node.target.db.title',
+    hintKey: 'node.target.db.hint',
     category: '타깃',
     color: 'var(--tg)',
     icon: Icon.db,
@@ -261,8 +286,8 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'target.mongo',
-    title: 'MongoDB',
-    hint: '컬렉션 적재',
+    titleKey: 'node.target.mongo.title',
+    hintKey: 'node.target.mongo.hint',
     category: '타깃',
     color: 'var(--tg)',
     icon: Icon.leaf,
@@ -271,8 +296,8 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'target.s3',
-    title: 'Amazon S3',
-    hint: 'Parquet 적재',
+    titleKey: 'node.target.s3.title',
+    hintKey: 'node.target.s3.hint',
     category: '타깃',
     color: 'var(--amber)',
     icon: Icon.cloud,
@@ -281,8 +306,8 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'target.file',
-    title: '로컬 파일',
-    hint: '테스트용 파일 저장',
+    titleKey: 'node.target.file.title',
+    hintKey: 'node.target.file.hint',
     category: '타깃',
     color: 'var(--amber)',
     icon: Icon.file,
@@ -291,8 +316,8 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'target.response',
-    title: 'API 응답',
-    hint: '호출자에게 결과 반환',
+    titleKey: 'node.target.response.title',
+    hintKey: 'node.target.response.hint',
     category: '타깃',
     color: 'var(--tg)',
     icon: Icon.bolt,
@@ -302,10 +327,10 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'target.sync.db',
-    title: '동기화 타깃 DB',
-    hint: 'SymmetricDS 직송',
+    titleKey: 'node.target.sync.db.title',
+    hintKey: 'node.target.sync.db.hint',
     category: '타깃',
-    group: '실시간 동기화',
+    groupKey: 'nodeGroup.sync',
     color: 'var(--tg)',
     icon: Icon.broadcast,
     connectorType: 'postgres',
@@ -313,8 +338,8 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'note.memo',
-    title: '메모',
-    hint: '캔버스 주석 (실행 안 함)',
+    titleKey: 'node.note.memo.title',
+    hintKey: 'node.note.memo.hint',
     category: '주석',
     color: 'var(--memo, #f4b740)',
     icon: Icon.note,
@@ -322,8 +347,8 @@ export const NODE_SPECS: NodeSpec[] = [
   },
   {
     kind: 'note.group',
-    title: '그룹 영역',
-    hint: '노드를 사각형으로 묶어 구분',
+    titleKey: 'node.note.group.title',
+    hintKey: 'node.note.group.hint',
     category: '주석',
     color: '#5b8ee0',
     icon: Icon.frame,

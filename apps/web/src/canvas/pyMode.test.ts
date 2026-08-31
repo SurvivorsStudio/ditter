@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { detectPyMode, isReplaceablePyCode } from './ConfigPanel'
-import { DEFAULT_PYCODE, DEFAULT_PYCODE_BATCH } from './nodeCatalog'
+import { defaultPycode } from './nodeCatalog'
 
 describe('detectPyMode', () => {
   it('transform 정의는 행 단위', () => {
@@ -18,8 +18,8 @@ describe('detectPyMode', () => {
     expect(detectPyMode('')).toBeNull()
   })
   it('기본 골격들이 각각 올바르게 감지된다', () => {
-    expect(detectPyMode(DEFAULT_PYCODE)).toBe('row')
-    expect(detectPyMode(DEFAULT_PYCODE_BATCH)).toBe('batch')
+    expect(detectPyMode(defaultPycode('row'))).toBe('row')
+    expect(detectPyMode(defaultPycode('batch'))).toBe('batch')
   })
 })
 
@@ -28,8 +28,8 @@ describe('isReplaceablePyCode', () => {
     expect(isReplaceablePyCode('   \n')).toBe(true)
   })
   it('기본 골격은 교체 가능', () => {
-    expect(isReplaceablePyCode(DEFAULT_PYCODE)).toBe(true)
-    expect(isReplaceablePyCode(DEFAULT_PYCODE_BATCH)).toBe(true)
+    expect(isReplaceablePyCode(defaultPycode('row'))).toBe(true)
+    expect(isReplaceablePyCode(defaultPycode('batch'))).toBe(true)
   })
   it('def 없는 주석뿐이면 교체 가능', () => {
     expect(isReplaceablePyCode('# 메모\n# 메모2')).toBe(true)

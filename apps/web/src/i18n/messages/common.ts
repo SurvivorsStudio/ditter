@@ -14,6 +14,7 @@ export const common = {
   'common.logoutTitle': ['{who} — 클릭하면 로그아웃', '{who} — click to log out'],
   'common.statusDot': ['로컬 환경 · 연결됨', 'Local environment · connected'],
   'common.langToggle': ['English 로 보기', '한국어로 보기'],
+  'common.untitled': ['무제', 'Untitled'],
   'common.rowCount': ['{n}행', '{n} row{n||s}'],
   'common.count': ['{n}건', '{n} record{n||s}'],
   'common.pipelineNamePlaceholder': ['고객 마스터 → S3 (일배치)', 'Customer master → S3 (daily batch)'],

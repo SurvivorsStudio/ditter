@@ -13,6 +13,7 @@ import {
 import { SYNC_CHANNELS, SYNC_PURPOSES } from '../api/types'
 import type { TriggerCreated, TriggerVariable } from '../api/types'
 import { Banner, formatDateTime } from '../components/common'
+import { t } from '../i18n'
 import { Icon } from '../components/icons'
 import { SchemaTableTree } from '../components/SchemaTableTree'
 import { SearchSelect, type SelectOption } from '../components/SearchSelect'
@@ -27,9 +28,9 @@ const SqlEditor = lazy(() => import('./SqlEditor').then((m) => ({ default: m.Sql
 const SqlModal = lazy(() => import('./SqlEditor').then((m) => ({ default: m.SqlModal })))
 import type { EditorVariable } from './SqlEditor'
 import {
-  DEFAULT_PYCODE,
-  DEFAULT_PYCODE_BATCH,
   SPEC_BY_KIND,
+  defaultPycode,
+  isDefaultPycode,
   type SwitchCase,
   allowedConnectorTypes,
   isCdcSource,
@@ -215,7 +216,7 @@ function NodeConfig({ node }: { node: EaiNode }) {
           {IconComp ? <IconComp /> : null}
         </div>
         <div style={{ minWidth: 0 }}>
-          <div className="ct">{spec?.title ?? node.data.kind}</div>
+          <div className="ct">{spec ? t(spec.titleKey) : node.data.kind}</div>
           <div className="csub">{node.id}</div>
         </div>
       </div>
@@ -1128,7 +1129,7 @@ function SyncSourceFields({ params, set, connectionId }: FieldProps & { connecti
             >
               {SYNC_CHANNELS.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.label}
+                  {t(`sync.channel.${c.id}.label`)}
                 </option>
               ))}
             </select>
@@ -1175,7 +1176,7 @@ function SyncSourceFields({ params, set, connectionId }: FieldProps & { connecti
         <select value={purpose} onChange={(e) => set({ purpose: e.target.value })}>
           {SYNC_PURPOSES.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.label}
+              {t(`sync.purpose.${p.id}`)}
             </option>
           ))}
         </select>
@@ -1562,16 +1563,16 @@ export function detectPyMode(code: string): 'row' | 'batch' | null {
 
 /** 커스텀 코드를 덮어써도 안전한가 — 비어 있거나 기본 골격 그대로면 확인 없이 교체한다. */
 export function isReplaceablePyCode(code: string): boolean {
-  const t = code.trim()
-  if (!t) return true
-  if (t === DEFAULT_PYCODE.trim() || t === DEFAULT_PYCODE_BATCH.trim()) return true
+  const trimmed = code.trim()
+  if (!trimmed) return true
+  if (isDefaultPycode(code)) return true // 어느 언어로 만들어졌든 기본 골격이면 안전
   return !/^\s*def\s+/m.test(code) // def 가 없으면 주석·빈 골격뿐 → 안전
 }
 
 const MODE_LABEL: Record<'row' | 'batch', string> = { row: '행 단위', batch: '배치 단위' }
 
 function scaffoldFor(target: 'row' | 'batch'): string {
-  return target === 'batch' ? DEFAULT_PYCODE_BATCH : DEFAULT_PYCODE
+  return defaultPycode(target)
 }
 
 function PyCodeFields({ params, set }: FieldProps) {

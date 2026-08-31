@@ -1,4 +1,5 @@
-import { CATEGORIES, NODE_SPECS, type NodeSpec } from './nodeCatalog'
+import { t, useT } from '../i18n'
+import { CATEGORIES, CATEGORY_KEY, NODE_SPECS, type NodeSpec } from './nodeCatalog'
 
 /** 노드 카드 크기 (px). 드래그 고스트·드롭 위치 보정에서 공유한다 —
  *  고스트 중앙이 커서를 따라오고, 놓은 지점에 노드 중앙이 오도록 맞춘다. */
@@ -19,11 +20,11 @@ function makeDragGhost(spec: NodeSpec, iconSvg: SVGElement | null): HTMLElement 
     <div class="nhd">
       <div class="nic" style="background:${spec.color}"></div>
       <div style="min-width:0">
-        <div class="ntt">${spec.title}</div>
-        <div class="nsub">${spec.hint}</div>
+        <div class="ntt">${t(spec.titleKey)}</div>
+        <div class="nsub">${t(spec.hintKey)}</div>
       </div>
     </div>
-    <div class="nfoot"><span class="st idle"></span><span>${spec.category}</span></div>`
+    <div class="nfoot"><span class="st idle"></span><span>${t(CATEGORY_KEY[spec.category])}</span></div>`
   if (iconSvg) ghost.querySelector('.nic')?.appendChild(iconSvg.cloneNode(true))
   document.body.appendChild(ghost)
   return ghost
@@ -31,19 +32,20 @@ function makeDragGhost(spec: NodeSpec, iconSvg: SVGElement | null): HTMLElement 
 
 /** 좌측 노드 팔레트 — 캔버스로 드래그해 노드를 추가한다 (설계 문서 §8) */
 export function Palette() {
+  const t = useT()
   return (
     <div className="palette">
-      <div className="ph">노드</div>
+      <div className="ph">{t('node.paletteHeader')}</div>
       {CATEGORIES.map((category) => (
         <div className="pcat" key={category}>
-          <div className="ct">{category}</div>
+          <div className="ct">{t(CATEGORY_KEY[category])}</div>
           {NODE_SPECS.filter((s) => s.category === category).map((spec, index, list) => {
             const IconComp = spec.icon
             // 소분류가 처음 나오는 자리에 작은 구분 라벨을 끼운다 (예: 실시간(CDC))
-            const showGroup = spec.group && list[index - 1]?.group !== spec.group
+            const showGroup = spec.groupKey && list[index - 1]?.groupKey !== spec.groupKey
             return (
               <div key={spec.kind}>
-                {showGroup && <div className="pgroup">{spec.group}</div>}
+                {showGroup && spec.groupKey && <div className="pgroup">{t(spec.groupKey)}</div>}
                 <div
                   className="node-item"
                   draggable
@@ -57,14 +59,14 @@ export function Palette() {
                   // 스냅샷은 이 시점에 이미 떠졌으니 다음 프레임에 정리한다
                   requestAnimationFrame(() => ghost.remove())
                 }}
-                title={`${spec.title} — 캔버스로 드래그하세요`}
+                title={t('node.paletteDrag', { title: t(spec.titleKey) })}
               >
                   <div className="ni-ic" style={{ background: spec.color }}>
                     <IconComp />
                   </div>
                   <div>
-                    <div className="nt">{spec.title}</div>
-                    <div className="nd">{spec.hint}</div>
+                    <div className="nt">{t(spec.titleKey)}</div>
+                    <div className="nd">{t(spec.hintKey)}</div>
                   </div>
                 </div>
               </div>

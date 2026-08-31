@@ -14,10 +14,14 @@
  *  번역된 문자열을 모듈 상수에 담아 두면 언어 전환을 따라오지 못한다 — 라벨 맵은
  *  `Record<X, MsgKey>` 로 두고 조회 함수에서 t() 를 부른다.
  */
+import { canvas } from './messages/canvas'
 import { common } from './messages/common'
+import { connectors } from './messages/connectors'
 import { login } from './messages/login'
 import { nav } from './messages/nav'
+import { nodes } from './messages/nodes'
 import { runs } from './messages/runs'
+import { statements } from './messages/statements'
 import { status } from './messages/status'
 import { getLocale, localeTag, useLocale, type Locale } from './locale'
 
@@ -27,6 +31,10 @@ const MESSAGES = {
   ...status,
   ...login,
   ...runs,
+  ...nodes,
+  ...connectors,
+  ...statements,
+  ...canvas,
 } as const
 
 export type MsgKey = keyof typeof MESSAGES
