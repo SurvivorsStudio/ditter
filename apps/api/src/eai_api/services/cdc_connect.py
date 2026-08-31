@@ -161,6 +161,11 @@ def build_connector_config(
         "key.converter.schemas.enable": "false",
         "value.converter": "org.apache.kafka.connect.json.JsonConverter",
         "value.converter.schemas.enable": "false",
+        # DECIMAL/NUMERIC 을 숫자로 받는다. 기본값 precise 는 바이트를 base64 문자열로 싣는데,
+        # 스키마를 끈 JSON 에서는 그 문자열이 그대로 sink 까지 흘러가 숫자 컬럼 적재가 깨진다
+        # (`'Ar6q0A=='` → numeric). 배정밀도로 표현 못 할 만큼 큰 값은 정밀도를 잃지만,
+        # 조용히 문자열이 되는 것보다 낫다.
+        "decimal.handling.mode": "double",
         "database.hostname": str(connection.get("host", "")),
         "database.port": str(connection.get("port", _DEFAULT_PORT[source_type])),
         "database.user": str(connection.get("user", "")),

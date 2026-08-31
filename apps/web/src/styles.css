@@ -509,6 +509,14 @@ textarea {
   color: #fff;
   font-weight: 600;
 }
+/* 문장별 연결(`-- @conn`)로 나간 실행. 기본 연결과 다른 곳에서 온 결과라는 표시라
+   결과 바로 위에 둔다 — 한 탭에 여러 DB 가 섞이면 이게 없으면 무엇을 보는지 모른다. */
+.sql-ran-on {
+  background: #f2f7ff;
+}
+.srw-tag.conn {
+  background: var(--blue, #3b82f6);
+}
 .sql-ran-with code {
   min-width: 0;
   overflow: hidden;
@@ -7050,10 +7058,17 @@ tbody tr:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 힌트(타입·설명)는 **라벨보다 먼저 줄어든다** — 무엇을 고르는지는 라벨이 말한다.
+   `flex-shrink: 0` 이면 좁은 패널에서 라벨이 「기본 연결」→「기」로 잘린다. */
 .ss-opt-hint {
   font-size: 11px;
   color: var(--muted);
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .ss-opt svg {
   width: 14px;
@@ -7706,6 +7721,96 @@ tbody tr:hover {
 }
 .nb-collapsed:hover .nb-collapsed-dots {
   color: var(--purple);
+}
+/* ── 셀 머리의 연결 칩 ─────────────────────────────────────────
+   "이 셀은 어디로 나가는가". 부품은 툴바의 연결 드롭다운(`SearchSelect`)과 같지만,
+   **폼 필드가 아니라 알약**으로 눌러 둔다 — 셀마다 하나씩 붙는 것이라 입력칸처럼
+   보이면 코드보다 그쪽이 먼저 눈에 들어온다.
+
+   기본 연결을 따르는 셀은 흐리게 두어 **지정한 셀만** 또렷하게 남긴다. 회색+취소선은
+   §21 에서 "꺼 둠"의 뜻으로 쓰고 있어 여기서는 쓰지 않는다(투명도로만 가른다). */
+.nb-cell-connbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0 0 3px;
+}
+.nb-conn-pick {
+  min-width: 0;
+  max-width: 260px;
+}
+.nb-conn-pick .ss-trigger {
+  width: auto;
+  max-width: 100%;
+  min-height: 0;
+  height: 21px;
+  gap: 5px;
+  padding: 0 4px 0 5px;
+  border-radius: 999px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  opacity: 0.5;
+  transition:
+    opacity 0.12s,
+    background 0.12s,
+    border-color 0.12s;
+}
+.nb-cell:hover .nb-conn-pick .ss-trigger,
+.nb-conn-pick .ss-trigger:focus-visible,
+.nb-conn-pick .ss-trigger.open {
+  opacity: 1;
+}
+.nb-conn-pick .ss-trigger:hover:not(:disabled) {
+  background: #f1f2f8;
+  border-color: transparent;
+}
+/* 지정된 셀은 언제나 또렷하다 — 스크롤만 해도 어느 DB 인지 읽혀야 한다. */
+.nb-conn-pick.on .ss-trigger {
+  opacity: 1;
+  color: var(--ink);
+  background: #fff;
+  border-color: var(--line2);
+}
+.nb-conn-pick.broken .ss-trigger {
+  opacity: 1;
+  color: #c0392b;
+  background: #fff5f5;
+  border-color: #f0b4b0;
+}
+/* 배지·글자·caret 을 알약 크기에 맞춰 줄인다 (툴바 것은 36px 필드 기준이다). */
+.nb-conn-pick .ss-badge {
+  min-width: 17px;
+  height: 13px;
+  padding: 0 3px;
+  border-radius: 3px;
+  font-size: 7.5px;
+}
+.nb-conn-pick .ss-badge.broken {
+  background: #c0392b;
+}
+.nb-conn-pick .ss-badge.duck svg {
+  width: 9px;
+  height: 9px;
+}
+.nb-conn-pick .ss-trigger svg {
+  width: 12px;
+  height: 12px;
+}
+.nb-conn-pick .ss-lead {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.nb-cell-connerr {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: #c0392b;
 }
 .nb-cell-tools {
   position: absolute;

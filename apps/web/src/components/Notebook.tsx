@@ -3,7 +3,7 @@ import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { json } from '@codemirror/lang-json'
 import { EditorView } from '@codemirror/view'
 import { SqlEditor, sqlStatementRanges, type CompletionTable } from '../canvas/SqlEditor'
-import { useRunQuery, useRunMongo, useRunDuck, useConnections } from '../api/hooks'
+import { useRunQuery, useRunMongo, useRunDuck, useConnections, useConnectionSchema } from '../api/hooks'
 import { ApiError } from '../api/client'
 import { Icon } from './icons'
 import { FavoritePickerModal } from './Favorites'
@@ -12,12 +12,24 @@ import { CellAiChat } from './NotebookAi'
 import { AiFixPanel } from './AiFixPanel'
 import { useAiConn } from '../api/aiDefault'
 import { specFor } from '../api/connectorFields'
-import type { SelectOption } from './SearchSelect'
+import { SearchSelect, type SelectOption } from './SearchSelect'
 import type { Favorite } from '../api/favoritesStore'
 import type { DuckTable } from '../canvas/duckRefs'
 import type { QueryResult } from '../api/types'
 import type { SqlStatement } from '../api/statements'
 import { mutedRunMessage } from '../api/statements'
+import {
+  DUCK_MARKER_NAME,
+  connName,
+  endsInLineComment,
+  findMarkers,
+  mergeBody,
+  resolveConn,
+  stripMarkers,
+  targetFor,
+  upsertMarker,
+  type ConnLike,
+} from '../canvas/connMarker'
 
 /** 노트북 셀 하나. `md` 는 설명용 마크다운, `sql` 은 실행 셀. */
 export type Cell = { id: string; type: 'sql' | 'md'; src: string }
@@ -44,6 +56,15 @@ type CachedResult = {
   colFilters: Record<string, string>
   error: string | null
   query: string
+  /** 이 결과가 **실제로 나간 목적지**. 셀의 연결은 본문 마커(`-- @conn`)라 실행한 뒤에도
+   *  바뀔 수 있어, 되살린 결과의 「더 보기」·정렬도 그 결과가 나왔던 곳으로 가야 한다.
+   *  없으면 지금 셀이 가리키는 곳으로 떨어져 한 표에 두 DB 의 행이 섞인다.
+   *
+   *  **옵셔널인 이유**: 이 필드가 생기기 전에 쓰인 캐시가 그대로 살아 있다. 키 버전
+   *  (`NB_CACHE_KEY`)을 올리면 기존 사용자의 결과 캐시가 통째로 버려지므로 올리지 않고,
+   *  없으면 예전처럼 지금 값으로 떨어뜨린다(`ranTarget`). */
+  mode?: 'sql' | 'mongo' | 'duck'
+  connId?: string
   viewMode?: 'table' | 'chart' | 'json'
   chart?: ChartConfig | null
   ts: number
@@ -103,18 +124,18 @@ export function dropCellCache(id: string) {
 }
 
 /** 노트북 셀들을 하나의 SQL 텍스트로 합친다 (노트북 → 편집기).
- *  SQL 셀은 `;` 로 구분, 메모 셀은 `/*md … *​/` 주석으로 보존해 왕복(편집기 → 노트북)에서 복원된다. */
+ *  SQL 셀은 `;` 로 구분, 메모 셀은 `/*md … *​/` 주석으로 보존해 왕복(편집기 → 노트북)에서 복원된다.
+ *
+ *  연결 마커(`-- @conn`)는 셀 본문의 일부라 여기서 따로 다룰 것이 없다 —
+ *  마커를 주석으로 둔 이유가 바로 이 왕복이다. */
 export function cellsToText(cells: Cell[]): string {
   return cells
-    .map((c) =>
-      c.type === 'md'
-        ? c.src.trim()
-          ? `/*md\n${c.src.trim()}\n*/`
-          : ''
-        : c.src.trim()
-          ? c.src.trim().replace(/;+\s*$/, '') + ';'
-          : '',
-    )
+    .map((c) => {
+      if (c.type === 'md') return c.src.trim() ? `/*md\n${c.src.trim()}\n*/` : ''
+      const body = c.src.trim().replace(/;+\s*$/, '')
+      if (!body) return ''
+      return body + (endsInLineComment(body) ? '\n;' : ';')
+    })
     .filter(Boolean)
     .join('\n\n')
 }
@@ -228,6 +249,93 @@ function useCellKeys(actions: {
   }
 }
 
+/** 셀 머리의 연결 칩.
+ *
+ *  **마커가 단일 출처이고 이건 그 뷰다** — 여기서 고르면 본문의 `-- @conn` 이 바뀌고,
+ *  본문 주석을 손으로 고치면 칩이 따라온다. 값을 셀에 따로 들고 있으면 둘이 어긋난다.
+ *
+ *  생김새는 툴바의 연결 드롭다운과 **같은 부품**(`SearchSelect` + 타입 배지)을 쓴다.
+ *  네이티브 `<select>` 는 OS 위젯이라 앱 안에서 혼자 겉돌고, 연결이 늘면 검색도 없다.
+ *  대신 폼 필드가 아니라 **알약(pill)** 으로 눌러 두었다 — 셀마다 하나씩 붙는 것이라
+ *  입력칸처럼 보이면 코드보다 그쪽이 먼저 눈에 들어온다. */
+function CellConnPicker({
+  src,
+  conns,
+  fallback,
+  broken,
+  onPick,
+}: {
+  src: string
+  conns: ConnLike[]
+  /** 마커가 없을 때 실제로 나가는 곳 — 무엇을 따르는지 안 보이면 고를 수가 없다. */
+  fallback: { label: string; type?: string }
+  /** 마커를 해석하지 못했다(이름이 바뀌었거나 중복). 색으로 드러낸다. */
+  broken: boolean
+  onPick: (name: string | null) => void
+}) {
+  const raw = findMarkers(src)[0]?.name ?? ''
+  const norm = (v: string) => v.trim().toLowerCase()
+  // 저장된 표기가 아니라 **목록에 있는 그대로의 이름**을 골라야 값이 맞물린다.
+  const hit = raw ? conns.find((c) => norm(c.name) === norm(raw)) : undefined
+  const isDuck = Boolean(raw) && !hit && norm(raw) === norm(DUCK_MARKER_NAME)
+  const value = hit ? hit.name : isDuck ? DUCK_MARKER_NAME : raw
+  const unknown = Boolean(raw) && !hit && !isDuck
+
+  const options: SelectOption[] = [
+    { value: '', label: '기본 연결', hint: fallback.label || '탭 설정' },
+    { value: DUCK_MARKER_NAME, label: DUCK_MARKER_NAME, hint: '여러 연결', accent: true },
+    ...conns.map((c) => ({ value: c.name, label: c.name, hint: specFor(c.type).label })),
+    // 이름이 바뀌었거나 지워진 연결 — 값을 조용히 갈아치우지 않고 그대로 보여준다.
+    // 기본값으로 되돌리면 사용자가 무엇을 잃었는지 모른 채 다른 DB 로 나간다.
+    ...(unknown ? [{ value: raw, label: raw, hint: '없는 연결' }] : []),
+  ]
+
+  // 배지는 연결 **타입**의 색을 쓴다 — 툴바·연결 관리와 같은 어휘라 따로 배울 것이 없다.
+  const badgeFor = (type?: string) => {
+    if (!type) return null
+    const spec = specFor(type)
+    return (
+      <span className="ss-badge" style={{ background: spec.color }}>
+        {spec.abbr}
+      </span>
+    )
+  }
+  const leading = isDuck ? (
+    <span className="ss-badge duck">
+      <Icon.merge />
+    </span>
+  ) : unknown ? (
+    <span className="ss-badge broken">!</span>
+  ) : (
+    badgeFor(hit?.type ?? fallback.type)
+  )
+
+  return (
+    <div
+      className={`nb-conn-pick ${raw ? 'on' : ''} ${broken ? 'broken' : ''}`}
+      title={
+        raw
+          ? `이 셀은 「${raw}」 으로 실행됩니다`
+          : `기본 연결(${fallback.label || '탭 설정'})을 따릅니다`
+      }
+    >
+      {/* 「기본 연결」도 값이 `''` 인 **항목으로** 목록에 있으므로, 그때도 배지가 그려진다
+          (`leading` 은 고른 항목이 있을 때만 나온다). */}
+      <SearchSelect
+        value={value}
+        onChange={(v) => onPick(v || null)}
+        options={options}
+        placeholder="기본 연결"
+        leading={leading}
+      />
+    </div>
+  )
+}
+
+/** 한 번의 실행이 나가는 곳. `mode` 가 진실이고 `connId` 는 연합 조회(`duck`)에서
+ *  정상적으로 비어 있다 — "연결이 없다"와 "아직 모른다"를 `connId` 로 가르면 안 되는 이유다. */
+type ExecTarget = { mode: 'sql' | 'mongo' | 'duck'; connId?: string }
+
 /** SQL 실행 셀 — 미니 에디터 + 실행 + 개별 결과. 각 셀이 자체 실행 훅을 갖는다(독립 실행). */
 function SqlCell({
   cell,
@@ -238,13 +346,16 @@ function SqlCell({
   duckTables,
   favorites,
   muted,
+  markerConns,
+  mutedOf,
+  defaultConn,
   nextExecCount,
   onChangeSrc,
   aiAvailable,
   aiConnId,
   aiOptions,
   onAiModelChange,
-  aiDbConnId,
+  aiDbConnId,  // 탭 기본값. 셀이 마커로 다른 연결을 가리키면 아래 effAiDbConnId 가 이긴다.
   onInsertAiSqlBelow,
   onAiEscalate,
   selected,
@@ -269,6 +380,12 @@ function SqlCell({
   favorites: Favorite[]
   /** 툴바 태그로 잠시 꺼 둔 명령 — 셀 실행도 같은 연결로 나가므로 여기서도 막는다. */
   muted: SqlStatement[]
+  /** 이 셀만 다른 연결로 보낼 수 있는 후보들 (`-- @conn` 마커). 비면 그 기능이 꺼진다. */
+  markerConns: ConnLike[]
+  /** 그 연결에서 꺼 둔 명령 — 셀이 다른 연결로 나가면 **그쪽 기준**으로 막아야 한다. */
+  mutedOf?: (connId: string) => SqlStatement[]
+  /** 마커가 없을 때 나가는 곳 — 칩이 「기본 연결」 옆에 이름을, 배지에 타입 색을 쓴다. */
+  defaultConn: { label: string; type?: string }
   nextExecCount: () => number
   onChangeSrc: (src: string) => void
   /** 셀별 AI 챗 — `/` 명령으로 이 블럭만 켠다. 모델은 노트북 공용. */
@@ -276,6 +393,7 @@ function SqlCell({
   aiConnId: string
   aiOptions: SelectOption[]
   onAiModelChange: (v: string) => void
+  /** 탭의 기본 연결(스키마 문맥용). 셀에 `-- @conn` 이 있으면 그쪽이 우선한다. */
   aiDbConnId?: string
   onInsertAiSqlBelow: (src: string) => void
   onAiEscalate?: (payload: { sql: string; error?: string; explain?: string; assistant: string; dbConnId?: string }) => void
@@ -344,11 +462,21 @@ function SqlCell({
   )
   const [chartCfg, setChartCfg] = useState<ChartConfig | null>(hydrated?.chart ?? null)
   const filterTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // loadMore·정렬·필터 재조회가 참조할 "실제 실행된" 쿼리와 정렬·필터.
+  // loadMore·정렬·필터 재조회가 참조할 "실제 실행된" 쿼리·정렬·필터, 그리고 **그것이 나간 곳**.
+  //
+  // 목적지를 여기 담는 것이 핵심이다. 셀의 연결은 본문 마커(`-- @conn`)라 실행한 **뒤에도** 바뀔 수
+  // 있는데, 다음 페이지·정렬을 그때그때 다시 계산하면 같은 표에 다른 DB 의 행이 이어 붙고
+  // 정렬 한 번이 옛 쿼리를 새 DB 로 던진다. 편집기(`SqlWorkbench.execFirst`)가 `connId` 를
+  // 들고 있는 이유와 같다.
   const executedRef = useRef<{
     query: string
     sort: { col: string; dir: 'asc' | 'desc' } | null
     filters: { col: string; value: string }[]
+    /** 이 결과가 실제로 나간 목적지. 캐시에 함께 저장하므로 **새로고침으로 복원된 결과에도
+     *  남는다.** 이 필드가 생기기 전에 쓰인 옛 캐시에서만 비고, 그때만 `ranTarget()` 이
+     *  지금 값으로 떨어진다. */
+    mode?: 'sql' | 'mongo' | 'duck'
+    connId?: string
   }>({
     query: hydrated?.query ?? '',
     sort: hydrated?.sort ?? null,
@@ -357,9 +485,64 @@ function SqlCell({
           .map(([col, value]) => ({ col, value: value.trim() }))
           .filter((f) => f.value !== '')
       : [],
+    // 되살린 결과가 나갔던 곳. 옛 캐시에는 없어 undefined 로 남는다(위 주석).
+    mode: hydrated?.mode,
+    connId: hydrated?.connId,
   })
 
-  const canRun = (mode === 'duck' || Boolean(connectionId)) && cell.src.trim().length > 0
+  /* ── 이 셀이 어디로 나가는가 ──────────────────────────────────
+     셀 하나가 곧 문장 하나라, 본문 앞의 `-- @conn "이름"` 이 이 셀 전체의 목적지다.
+     아래 도구바의 연결 칩은 **이 마커를 읽고 쓰는 뷰일 뿐**이다 — `Cell` 에 연결
+     필드를 두지 않는 이유가 이것이고, 그래서 편집기와 왕복해도 정보가 새지 않는다. */
+  const resolved = useMemo(() => resolveConn(cell.src, markerConns), [cell.src, markerConns])
+  const target = useMemo(
+    () => targetFor(resolved, { mode, connId: connectionId }),
+    [resolved, mode, connectionId],
+  )
+  const effMode = target.mode
+  const effConn = target.connId
+  // 마커가 가리키는 연결의 스키마를 따로 받는다. 탭 연결의 테이블 목록을 그대로 쓰면
+  // **다른 DB 의 테이블 이름을 자동완성해 준다** — 없는 테이블을 확신 있게 추천하는 셈이다.
+  // (React Query 가 키로 묶으므로 같은 연결을 가리키는 셀이 여럿이어도 요청은 한 번이다.)
+  const overrideSchema = useConnectionSchema(
+    target.overridden && effMode === 'sql' ? effConn : undefined,
+    false,
+  )
+  // AI 도 이 셀이 실제로 나갈 연결의 스키마를 봐야 한다 — 자동완성과 같은 이유로,
+  // 다른 DB 의 테이블을 근거로 만든 SQL 은 그럴듯한 만큼 더 나쁘다.
+  const effAiDbConnId = effMode === 'sql' ? (target.overridden ? effConn : aiDbConnId) : undefined
+  const effTables: CompletionTable[] = target.overridden
+    ? effMode === 'sql'
+      ? (overrideSchema.data?.tables ?? [])
+      : []
+    : tables
+
+  /* ── 편집기는 마커 줄을 보여주지 않는다 ────────────────────────
+     칩이 이미 「창고 WMS」라고 말하는데 본문 1행에 `-- @conn "창고 WMS"` 가 또 있으면
+     같은 말이 두 번이고, 셀마다 한 줄씩 길어진다.
+
+     **진실은 여전히 `cell.src` 다.** 여기서는 그 앞머리를 접어 두는 것뿐이라
+     편집기 뷰로 넘어가면 주석이 그대로 보이고, 왕복도 그대로다.
+     본문에 손으로 마커를 써 넣으면 그쪽이 이겨 칩이 따라온다. */
+  // 칩이 없으면(mongo 탭) 감추지 않는다 — 감추기만 하고 보여줄 곳이 없으면
+  // 마커가 어디에도 안 보인 채 실행에만 영향을 준다.
+  const hideMarker = markerConns.length > 0
+  const body = useMemo(
+    () => (hideMarker ? stripMarkers(cell.src) : cell.src),
+    [cell.src, hideMarker],
+  )
+  const setBody = (v: string) => onChangeSrc(hideMarker ? mergeBody(cell.src, v) : v)
+
+  /** 아래에 새로 만드는 셀에 **이 셀의 연결을 물려준다.** 물려줄 수 있을 때만 붙는다 —
+   *  `connName` 은 해석된 목적지(실재하는 연결·연합 조회)에만 이름을 주므로, 마커가 없거나
+   *  이름이 깨진 셀은 그대로 지나가 새 셀이 탭 기본 연결을 따른다. */
+  const withCellMarker = (sql: string): string => {
+    const name = connName(resolved)
+    return name ? upsertMarker(sql, name).text : sql
+  }
+
+  const canRun =
+    (effMode === 'duck' || Boolean(effConn)) && stripMarkers(cell.src).trim().length > 0
 
   // 내용을 고치면 이전 오류는 즉시 지운다(옛 오류가 계속 남지 않게). 성공 결과는 재실행 전까지 유지.
   // 완전히 비우면 결과·오류를 모두 지운다. 마운트 시(하이드레이션 직후)에는 건드리지 않는다.
@@ -400,6 +583,9 @@ function SqlCell({
       colFilters: cf,
       error: err,
       query: ex.query,
+      // 이 결과가 나간 곳까지 담는다 — 새로고침 뒤의 「더 보기」·정렬도 여기로 가야 한다.
+      mode: ex.mode,
+      connId: ex.connId,
       viewMode: resultView,
       chart: chartCfg,
       ts: Date.now(),
@@ -412,18 +598,34 @@ function SqlCell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resultView, chartCfg])
 
-  // 첫 페이지 실행(신규 실행·정렬·필터 변경 공용). 정렬·필터를 executedRef 에 저장해 loadMore 가 잇는다.
+  /** 이 셀이 **지금** 나갈 곳 — 새 실행이 쓴다. */
+  const liveTarget = (): ExecTarget => ({ mode: effMode, connId: effConn })
+  /** 화면의 결과가 **나왔던** 곳 — 다음 페이지·정렬·필터가 쓴다. 목적지는 캐시에도 담기므로
+   *  새로고침으로 복원된 결과에도 남는다.
+   *
+   *  **폴백은 그래도 남긴다.** 이 필드가 생기기 전에 쓰인 캐시(`eai_nb_cache_v1` 는 버전을
+   *  올리지 않았다 — 올리면 기존 결과가 통째로 버려진다)에는 목적지가 없고, 그때는 예전처럼
+   *  지금 값으로 떨어진다. `connId` 는 연합 조회에서 정상적으로 비므로 `mode` 로 가른다. */
+  const ranTarget = (): ExecTarget => {
+    const ex = executedRef.current
+    return ex.mode ? { mode: ex.mode, connId: ex.connId } : liveTarget()
+  }
+
+  // 첫 페이지 실행(신규 실행·정렬·필터 변경 공용). 정렬·필터·목적지를 executedRef 에 저장해
+  // loadMore 가 잇는다. **목적지는 기본값을 두지 않고 호출부가 반드시 넘긴다** — 새 실행은
+  // 지금 값, 정렬·필터 재조회는 결과가 나왔던 값으로 갈려야 하기 때문이다.
   const execFirst = (
     q: string,
     s: { col: string; dir: 'asc' | 'desc' } | null,
     cf: Record<string, string>,
+    tgt: ExecTarget,
   ) => {
     if (!q) return
-    if (mode !== 'duck' && !connectionId) return
+    if (tgt.mode !== 'duck' && !tgt.connId) return
     const filters = buildFilters(cf)
     const sortCol = s?.col ?? null
     const sortDir = s?.dir ?? 'asc'
-    executedRef.current = { query: q, sort: s, filters }
+    executedRef.current = { query: q, sort: s, filters, mode: tgt.mode, connId: tgt.connId }
     setError(null)
     setShowFix(false) // 새 실행이면 이전 오류의 AI 수정 패널을 접는다
     setPending(true)
@@ -446,17 +648,26 @@ function SqlCell({
       setExecCount(ec)
       persist(null, msg, ec)
     }
-    if (mode === 'duck') runDuck.mutate({ query: q, offset: 0, sortCol, sortDir, filters, signal }, { onSuccess, onError })
-    else if (mode === 'mongo') runMongo.mutate({ id: connectionId!, command: q, namespace, offset: 0, sortCol, sortDir, filters, signal }, { onSuccess, onError })
-    else runQuery.mutate({ id: connectionId!, query: q, offset: 0, sortCol, sortDir, filters, signal }, { onSuccess, onError })
+    if (tgt.mode === 'duck') runDuck.mutate({ query: q, offset: 0, sortCol, sortDir, filters, signal }, { onSuccess, onError })
+    else if (tgt.mode === 'mongo') runMongo.mutate({ id: tgt.connId!, command: q, namespace, offset: 0, sortCol, sortDir, filters, signal }, { onSuccess, onError })
+    else runQuery.mutate({ id: tgt.connId!, query: q, offset: 0, sortCol, sortDir, filters, signal }, { onSuccess, onError })
   }
 
   const run = () => {
     if (pending) return
-    const q = cell.src.trim()
-    // 꺼 둔 명령이면 보내지 않는다 (편집기 툴바의 태그). 노트북도 같은 연결로 나가므로
-    // 여기서 막지 않으면 셀로 실행하는 길이 그대로 열려 있다.
-    const blocked = mutedRunMessage(q, muted)
+    // 마커를 못 읽으면 기본 연결로 조용히 떨어뜨리지 않고 세운다 — 칩이 가리키는 곳과
+    // 실제로 나가는 곳이 다르면 그 사실을 알 방법이 없다.
+    if (target.error) {
+      setData(null)
+      setError(target.error)
+      return
+    }
+    // 마커는 서버로 보내지 않는다 (변수 치환이 주석을 가리지 않는다).
+    const q = stripMarkers(cell.src).trim()
+    // 꺼 둔 명령이면 보내지 않는다 (편집기 툴바의 태그). 셀이 기본과 다른 연결로 나가면
+    // **그 연결 기준**으로 봐야 한다 — 탭 연결의 목록으로 보면 엉뚱한 것을 막는다.
+    const scopedMuted = target.overridden && effConn && mutedOf ? mutedOf(effConn) : muted
+    const blocked = mutedRunMessage(q, scopedMuted)
     if (blocked) {
       setData(null)
       setError(blocked)
@@ -471,7 +682,7 @@ function SqlCell({
     // 새 실행이므로 정렬·필터는 초기화 (컬럼 구성이 달라질 수 있으므로).
     setSort(null)
     setColFilters({})
-    execFirst(q, null, {})
+    execFirst(q, null, {}, liveTarget())
   }
 
   // 결과 그리드를 아래로 끌면 다음 페이지를 이어 붙인다(무한 스크롤). 정렬·필터는 실행된 값 유지.
@@ -479,7 +690,10 @@ function SqlCell({
     if (!data || !data.truncated || pending || loadingMore) return
     const ex = executedRef.current
     if (!ex.query) return
-    if (mode !== 'duck' && !connectionId) return
+    // **이어 붙일 행은 그 결과가 나온 곳에서 와야 한다.** 실행 뒤에 셀의 연결을 바꿨다면
+    // 지금 값은 다른 DB 를 가리킨다 — 그대로 쓰면 한 표에 두 DB 의 행이 섞인다.
+    const tgt = ranTarget()
+    if (tgt.mode !== 'duck' && !tgt.connId) return
     setLoadingMore(true)
     const signal = (abortRef.current = new AbortController()).signal
     const onSuccess = (r: QueryResult) => {
@@ -500,9 +714,9 @@ function SqlCell({
     const sortCol = ex.sort?.col ?? null
     const sortDir = ex.sort?.dir ?? 'asc'
     const filters = ex.filters
-    if (mode === 'duck') runDuck.mutate({ query: ex.query, offset, sortCol, sortDir, filters, signal }, { onSuccess, onError })
-    else if (mode === 'mongo') runMongo.mutate({ id: connectionId!, command: ex.query, namespace, offset, sortCol, sortDir, filters, signal }, { onSuccess, onError })
-    else runQuery.mutate({ id: connectionId!, query: ex.query, offset, sortCol, sortDir, filters, signal }, { onSuccess, onError })
+    if (tgt.mode === 'duck') runDuck.mutate({ query: ex.query, offset, sortCol, sortDir, filters, signal }, { onSuccess, onError })
+    else if (tgt.mode === 'mongo') runMongo.mutate({ id: tgt.connId!, command: ex.query, namespace, offset, sortCol, sortDir, filters, signal }, { onSuccess, onError })
+    else runQuery.mutate({ id: tgt.connId!, query: ex.query, offset, sortCol, sortDir, filters, signal }, { onSuccess, onError })
   }
 
   // 한 페이지를 promise 로 받는다(loadAll 루프용). loadMore 와 같은 파라미터.
@@ -511,10 +725,11 @@ function SqlCell({
     const sortCol = ex.sort?.col ?? null
     const sortDir = ex.sort?.dir ?? 'asc'
     const filters = ex.filters
-    if (mode === 'duck') return runDuck.mutateAsync({ query: ex.query, offset, sortCol, sortDir, filters, signal })
-    if (mode === 'mongo')
-      return runMongo.mutateAsync({ id: connectionId!, command: ex.query, namespace, offset, sortCol, sortDir, filters, signal })
-    return runQuery.mutateAsync({ id: connectionId!, query: ex.query, offset, sortCol, sortDir, filters, signal })
+    const tgt = ranTarget()
+    if (tgt.mode === 'duck') return runDuck.mutateAsync({ query: ex.query, offset, sortCol, sortDir, filters, signal })
+    if (tgt.mode === 'mongo')
+      return runMongo.mutateAsync({ id: tgt.connId!, command: ex.query, namespace, offset, sortCol, sortDir, filters, signal })
+    return runQuery.mutateAsync({ id: tgt.connId!, query: ex.query, offset, sortCol, sortDir, filters, signal })
   }
 
   // "전체 로드" — truncated 가 false 가 될 때까지 페이지를 이어 받아 다 채운다.
@@ -526,7 +741,8 @@ function SqlCell({
     }
     if (!data || !data.truncated || pending || loadingMore) return
     if (!executedRef.current.query) return
-    if (mode !== 'duck' && !connectionId) return
+    const at = ranTarget()
+    if (at.mode !== 'duck' && !at.connId) return
     setLoadingAll(true)
     const signal = (abortRef.current = new AbortController()).signal
     try {
@@ -592,7 +808,8 @@ function SqlCell({
     cf: Record<string, string>,
   ) => {
     if (!executedRef.current.query || pending) return
-    execFirst(executedRef.current.query, s, cf)
+    // 같은 쿼리를 정렬만 바꿔 다시 보내는 것이라, **그 결과가 나왔던 연결**로 가야 한다.
+    execFirst(executedRef.current.query, s, cf, ranTarget())
   }
 
   // 헤더 클릭 → 정렬 순환(없음 → 오름 → 내림 → 없음)
@@ -682,28 +899,55 @@ function SqlCell({
         <div className={`nb-cell-editor ${collapsed ? 'collapsed' : ''}`}>
           {collapsed ? (
             <button type="button" className="nb-collapsed" onClick={() => setCollapsed(false)} title="펼치기">
-              <span className="nb-collapsed-code">{firstLine(cell.src)}</span>
+              {/* 마커 줄이 아니라 SQL 첫 줄을 보여준다 — `-- @conn "…"` 만 보이면
+                  접어 둔 셀이 무엇을 하는 셀인지 알 수 없다. */}
+              <span className="nb-collapsed-code">{firstLine(stripMarkers(cell.src))}</span>
               <span className="nb-collapsed-dots">•••</span>
             </button>
           ) : (
           <>
+          {/* 이 셀이 어디로 나가는가. **도구바에 두면 안 된다** — 거기는 hover 때만
+              보이는데, 어느 셀이 어느 DB 인지는 스크롤만 해도 읽혀야 한다.
+              마커가 없는 셀은 흐리게 두어(CSS) 지정한 셀만 눈에 들어오게 한다. */}
+          {markerConns.length > 0 && (
+            <div className="nb-cell-connbar">
+              <CellConnPicker
+                src={cell.src}
+                conns={markerConns}
+                fallback={defaultConn}
+                broken={Boolean(target.error)}
+                onPick={(name) => onChangeSrc(upsertMarker(cell.src, name).text)}
+              />
+              {target.error && <span className="nb-cell-connerr">{target.error}</span>}
+            </div>
+          )}
           {/* 스크롤·높이조절은 이 안쪽 래퍼가 담당 — 도구(실행 등)는 바깥에 고정 */}
           <div className="nb-cell-scroll">
             <SqlEditor
               cmRef={cmRef}
-              value={cell.src}
-              onChange={onChangeSrc}
+              value={body}
+              onChange={setBody}
               height="auto"
-              language={mode === 'mongo' ? 'javascript' : 'sql'}
-              completion={mode === 'duck' ? undefined : tables}
-              duckCompletion={mode === 'duck' ? duckTables : undefined}
+              language={effMode === 'mongo' ? 'javascript' : 'sql'}
+              completion={effMode === 'duck' ? undefined : effTables}
+              duckCompletion={effMode === 'duck' ? duckTables : undefined}
               favorites={favorites}
+              markerConns={markerConns}
+              // 셀 하나가 곧 문장 하나다 — `/conn` 이 `;` 로 갈라 두 문장을 만들면
+              // 그 셀은 실행이 막힌다(다중문). 여기서는 이 셀의 연결을 정하기만 한다.
+              markerSplit={false}
               onOpenLoadModal={(r) => setLoadModal(r)}
               // `/aiQuery` 는 기존 슬래시 명령 목록에서 함께 뜬다 — 고르면 이 블럭 AI 챗을 켠다.
               // AI 모델이 있을 때만 넘긴다(없으면 목록에서 자동으로 숨겨진다). SQL 을 만드는 기능이라
               // mongo 모드에는 붙이지 않는다.
-              onAiCommand={aiAvailable && mode !== 'mongo' ? () => setAiActive(true) : undefined}
-              placeholder={mode === 'mongo' ? 'collection.find({ })' : 'SELECT * FROM ...'}
+              onAiCommand={aiAvailable && effMode !== 'mongo' ? () => setAiActive(true) : undefined}
+              placeholder={
+                effMode === 'mongo'
+                  ? 'collection.find({ })'
+                  : effMode === 'duck'
+                    ? 'SELECT * FROM 연결이름.데이터베이스.테이블 …'
+                    : 'SELECT * FROM ...'
+              }
             />
           </div>
           <div className="nb-cell-tools">
@@ -860,13 +1104,15 @@ function SqlCell({
                       <AiFixPanel
                         sql={executedRef.current.query}
                         error={error}
-                        dbConnId={aiDbConnId}
+                        dbConnId={effAiDbConnId}
+                        // 본문만 갈아 끼운다 — `onChangeSrc` 로 통째로 덮으면 감춰 둔
+                        // `-- @conn` 이 사라져, 저 DB 의 스키마로 만든 SQL 이 기본 연결로 나간다.
                         onApply={(fixed) => {
-                          onChangeSrc(fixed)
+                          setBody(fixed)
                           setShowFix(false)
                         }}
                         onEscalate={(p) => {
-                          onAiEscalate?.({ ...p, dbConnId: aiDbConnId })
+                          onAiEscalate?.({ ...p, dbConnId: effAiDbConnId })
                           setShowFix(false)
                         }}
                         onClose={() => setShowFix(false)}
@@ -937,13 +1183,15 @@ function SqlCell({
         {aiActive && aiConnId && (
           <CellAiChat
             cellSrc={cell.src}
-            dbConnId={aiDbConnId}
+            dbConnId={effAiDbConnId}
             aiConnId={aiConnId}
             modelOptions={aiOptions}
             onModelChange={onAiModelChange}
             onClose={() => setAiActive(false)}
-            onInsert={(sql) => onChangeSrc(sql)}
-            onInsertBelow={onInsertAiSqlBelow}
+            onInsert={(sql) => setBody(sql)}
+            // 아래 새 셀에도 **이 셀의 연결을 물려준다.** AI 가 그 연결의 스키마를 보고 만든
+            // SQL 인데 새 셀이 탭 기본 연결로 나가면, 이 기능이 막으려던 상황이 그대로 생긴다.
+            onInsertBelow={(sql) => onInsertAiSqlBelow(withCellMarker(sql))}
           />
         )}
       </div>
@@ -1076,6 +1324,8 @@ export function Notebook({
   duckTables,
   favorites,
   muted = [],
+  markerConns = [],
+  mutedOf,
   toolbarLeft,
   viewToggle,
   onSave,
@@ -1091,6 +1341,10 @@ export function Notebook({
   favorites: Favorite[]
   /** 편집기 툴바에서 꺼 둔 명령 (연결별). 실행 전에 셀에서도 막는다. */
   muted?: SqlStatement[]
+  /** 셀별 연결(`-- @conn`)로 고를 수 있는 연결 목록. 비면 셀 연결 칩이 뜨지 않는다. */
+  markerConns?: ConnLike[]
+  /** 그 연결에서 꺼 둔 명령 — 셀이 기본과 다른 연결로 나갈 때 쓴다. */
+  mutedOf?: (connId: string) => SqlStatement[]
   toolbarLeft?: React.ReactNode
   viewToggle?: React.ReactNode
   /** ⌘/Ctrl+S·저장 버튼 — 셀을 하나의 SQL 로 합쳐 저장한다(저장됨 탭). */
@@ -1120,6 +1374,12 @@ export function Notebook({
   }))
   // 스키마 문맥은 SQL 모드에서만(대상 DB 가 sql 계열일 때). mongo·duck 은 붙이지 않는다.
   const aiDbConnId = mode === 'sql' ? connectionId : undefined
+  // 셀 칩의 「기본 연결 (…)」에 적을 이름 — 무엇을 따르는지 안 보이면 고를 수가 없다.
+  const defaultConn = useMemo(() => {
+    if (mode === 'duck') return { label: DUCK_MARKER_NAME, type: undefined }
+    const c = allConns.find((x) => x.id === connectionId)
+    return { label: c?.name ?? '', type: c?.type }
+  }, [mode, allConns, connectionId])
 
   const apiRef = useRef(new Map<string, CellApi>())
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -1378,6 +1638,9 @@ export function Notebook({
               duckTables={duckTables}
               favorites={favorites}
               muted={muted}
+              markerConns={mode === 'mongo' ? [] : markerConns}
+              mutedOf={mutedOf}
+              defaultConn={defaultConn}
               nextExecCount={nextExecCount}
               onChangeSrc={(src) => setCell(cell.id, src)}
               aiAvailable={aiConns.length > 0}

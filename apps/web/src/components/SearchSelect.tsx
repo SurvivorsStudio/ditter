@@ -10,6 +10,29 @@ export type SelectOption = { value: string; label: string; hint?: string; accent
  * 네이티브 <select> 는 옵션이 수백 개면 스크롤만 길고 검색이 안 된다. 이 컴포넌트는
  * 타이핑으로 필터하고, 목록을 body 로 포탈해 설정 패널의 overflow 에 잘리지 않게 띄운다.
  */
+/** 패널이 트리거보다 좁아지지 않는 하한. 트리거 너비를 그대로 쓰면, 좁은 트리거
+ *  (노트북 셀의 연결 알약처럼)에서 항목 이름이 전부 잘려 무엇을 고르는지 알 수 없다. */
+const MIN_PANEL_WIDTH = 240
+/** 화면 가장자리에서 띄울 여백. */
+const EDGE_GAP = 8
+
+/** 드롭다운 패널을 놓을 자리. 트리거의 사각형과 뷰포트만 보는 순수 함수다.
+ *
+ *  - 너비는 **트리거와 하한 중 큰 쪽** — 좁은 트리거에서 항목이 잘리지 않게.
+ *  - 그래서 패널이 트리거보다 넓어질 수 있으므로 **오른쪽으로 넘치지 않게 가둔다.**
+ *  - 아래 공간이 모자라고 위가 더 넓으면 위로 띄운다. */
+export function panelPlacement(
+  rect: { left: number; top: number; bottom: number; width: number },
+  viewport: { width: number; height: number },
+): { left: number; top: number; width: number; above: boolean } {
+  const width = Math.max(rect.width, MIN_PANEL_WIDTH)
+  const below = viewport.height - rect.bottom
+  const above = below < 280 && rect.top > below
+  const maxLeft = viewport.width - width - EDGE_GAP
+  const left = Math.max(EDGE_GAP, Math.min(rect.left, maxLeft))
+  return { left, top: above ? rect.top : rect.bottom, width, above }
+}
+
 export function SearchSelect({
   value,
   onChange,
@@ -49,9 +72,7 @@ export function SearchSelect({
     const el = triggerRef.current
     if (!el) return
     const r = el.getBoundingClientRect()
-    const below = window.innerHeight - r.bottom
-    const above = below < 280 && r.top > below
-    setPos({ left: r.left, top: above ? r.top : r.bottom, width: r.width, above })
+    setPos(panelPlacement(r, { width: window.innerWidth, height: window.innerHeight }))
   }
 
   useLayoutEffect(() => {

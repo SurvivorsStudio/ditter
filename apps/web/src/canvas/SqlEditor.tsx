@@ -23,6 +23,15 @@ import { ExplainModal, type ExplainTarget } from './ExplainModal'
 import { ApiError, api } from '../api/client'
 import { VariableError, substitute as substituteVars } from './variables'
 import type { DuckTable } from './duckRefs'
+import {
+  DUCK_MARKER_NAME,
+  connName,
+  placeMarker,
+  resolveConn,
+  stripMarkers,
+  targetFor,
+  type ConnLike,
+} from './connMarker'
 import type { Favorite } from '../api/favoritesStore'
 import type { SqlStatement } from '../api/statements'
 import { mutedRunMessage } from '../api/statements'
@@ -74,21 +83,87 @@ function parseFromRefs(doc: string): FromRef[] {
 /** 편집기 슬래시 명령. 괄호를 쓰지 않는다(자동완성 괄호와 충돌하던 문제 회피).
  *  - loadQuery: `/loadQuery.` 를 넣고 인라인 즐겨찾기 드롭다운을 띄운다(이름으로 바로).
  *  - loadQueryList: 큰 모달 피커를 연다(전체 목록 + SQL 미리보기). */
-const SLASH_COMMANDS: { name: string; desc: string; kind: 'inline' | 'modal' | 'ai' }[] = [
+const SLASH_COMMANDS: { name: string; desc: string; kind: 'inline' | 'modal' | 'ai' | 'conn' }[] = [
   { name: 'loadQuery', desc: '즐겨찾기 바로 불러오기 (이름)', kind: 'inline' },
   { name: 'loadQueryList', desc: '즐겨찾기 목록 팝업', kind: 'modal' },
   { name: 'aiQuery', desc: 'AI 로 SQL 생성', kind: 'ai' },
+  { name: 'conn', desc: '이 문장만 다른 연결로 (-- @conn)', kind: 'conn' },
 ]
 
-/** 인라인 자동완성 — `/` 명령 목록과 `/loadQuery.이름` 직접 필터를 담당한다.
- *  `/loadQueryList` 는 여기서 모달을 연다. openModal 로 큰 피커를 띄운다. */
-function makeLoadQueryCompletion(
+/** `/conn.…` 트리거를 지우고, **그 문장 맨 앞에** 연결 마커를 놓는다 (`name === null` 이면 지운다).
+ *
+ *  커서 자리에 그대로 끼우면 안 된다 — `-- @conn` 은 줄 끝까지 주석이라 뒤에 오는 SQL 을
+ *  통째로 먹는다. 그래서 트리거를 지운 문서에서 **실행이 고르는 것과 같은 규칙으로**
+ *  현재 문장을 찾고(`pickRunText` 와 같은 `pos <= r.to`), 그 문장을 통째로 갈아 끼운다.
+ *  규칙이 갈리면 칩이 붙은 문장과 실제로 나가는 문장이 달라진다.
+ *
+ *  커서는 원래 편집하던 자리로 되돌린다 — 마커는 위에 한 줄 생겼을 뿐이다. */
+function applyConnMarker(
+  view: EditorView,
+  from: number,
+  to: number,
+  name: string | null,
+  allowSplit: boolean,
+) {
+  const doc = view.state.doc.toString()
+  // 문장 분할은 **트리거를 지운 문서** 기준이다 — 이름에 `;` 가 들어 있어도 흔들리지 않게.
+  const ranges = sqlStatementRanges(doc.slice(0, from) + doc.slice(to))
+  const { from: f, to: t, insert, anchor } = placeMarker(doc, from, to, name, ranges, allowSplit)
+  view.dispatch({ changes: { from: f, to: t, insert }, selection: { anchor } })
+  closeCompletion(view)
+  view.focus()
+}
+
+/** 인라인 자동완성 — `/` 명령 목록과 `/loadQuery.이름`·`/conn.이름` 직접 필터를 담당한다.
+ *  `/loadQueryList` 는 여기서 모달을 연다. openModal 로 큰 피커를 띄운다.
+ *  (`makeTableCompletion` 과 같이 테스트에서 직접 부를 수 있도록 내보낸다.) */
+export function makeLoadQueryCompletion(
   getFavs: () => Favorite[],
   openModal: (range: { from: number; to: number }) => void,
   /** AI 명령 실행기(range → 프롬프트). 없으면(mongo·연합조회) `/aiQuery` 를 목록에서 숨긴다. */
   getOpenAi: () => ((range: { from: number; to: number }) => void) | undefined,
+  /** 문장별 연결로 고를 수 있는 연결 목록. 비어 있으면 `/conn` 을 목록에서 숨긴다
+   *  — mongo 는 `--` 가 주석이 아니라 마커 자체를 쓸 수 없다. */
+  getConns: () => ConnLike[],
+  /** `/conn` 이 문장을 갈라도 되는가. 편집기는 `true`, 노트북 셀은 `false`(셀=문장). */
+  allowSplit = true,
 ): CompletionSource {
   return (ctx) => {
+    // 연결 직접 필터: '/conn.<이름조각>' — 고르면 그 자리가 아니라 **문장 맨 앞**에 마커가 놓인다.
+    const connMatch = ctx.matchBefore(/\/conn\.[^\n]*/i)
+    // 나눗셈·경로 문맥에서 뜨지 않게 — 명령 단계와 같은 기준(앞이 시작이거나 공백).
+    const connPrev =
+      connMatch && connMatch.from > 0 ? ctx.state.sliceDoc(connMatch.from - 1, connMatch.from) : ''
+    if (connMatch && (!connPrev || /\s/.test(connPrev))) {
+      const triggerFrom = connMatch.from
+      const anchor = connMatch.from + connMatch.text.indexOf('.') + 1
+      const frag = connMatch.text.slice(connMatch.text.indexOf('.') + 1).trim().toLowerCase()
+      const conns = getConns()
+      const entries: { name: string | null; label: string; detail: string; type: string }[] = [
+        { name: null, label: '기본 연결 따르기', detail: '마커 제거', type: 'keyword' },
+        { name: DUCK_MARKER_NAME, label: DUCK_MARKER_NAME, detail: '여러 연결', type: 'keyword' },
+        ...conns.map((c) => ({ name: c.name, label: c.name, detail: c.type, type: 'class' })),
+      ]
+      const matched = entries.filter((e) => !frag || e.label.toLowerCase().includes(frag))
+      if (matched.length === 0) {
+        return {
+          from: anchor,
+          options: [{ label: '일치하는 연결 없음', type: 'text', apply: () => {} }],
+          filter: false,
+        }
+      }
+      return {
+        from: anchor,
+        filter: false,
+        options: matched.map((e) => ({
+          label: e.label,
+          detail: e.detail,
+          type: e.type,
+          apply: (view: EditorView, _c: unknown, _from: number, to: number) =>
+            applyConnMarker(view, triggerFrom, to, e.name, allowSplit),
+        })),
+      }
+    }
     // 즐겨찾기 직접 필터: '/loadQuery.<이름조각>' — 인라인 드롭다운으로 바로 고른다. (대소문자 무시)
     const favMatch = ctx.matchBefore(/\/loadquery\.[^\s()]*/i)
     if (!favMatch) {
@@ -100,7 +175,11 @@ function makeLoadQueryCompletion(
       if (prev && !/\s/.test(prev)) return null
       const frag = cmd.text.slice(1).toLowerCase()
       const options = SLASH_COMMANDS.filter(
-        (c) => (c.kind !== 'ai' || getOpenAi()) && c.name.toLowerCase().startsWith(frag),
+        (c) =>
+          (c.kind !== 'ai' || getOpenAi()) &&
+          // 고를 연결이 없으면(mongo 탭) `/conn` 은 뜻이 없다 — 목록에서 숨긴다.
+          (c.kind !== 'conn' || getConns().length > 0) &&
+          c.name.toLowerCase().startsWith(frag),
       ).map((c) => ({
         label: '/' + c.name,
         detail: '명령',
@@ -116,8 +195,8 @@ function makeLoadQueryCompletion(
             const open = c.kind === 'ai' ? getOpenAi() : openModal
             if (open) setTimeout(() => open({ from: cmd.from, to: cmd.from }), 0)
           } else {
-            // '/loadQuery.' 로 만들어 인라인 즐겨찾기 드롭다운을 잇는다.
-            const insert = '/loadQuery.'
+            // '/loadQuery.' · '/conn.' 으로 만들어 인라인 드롭다운(즐겨찾기·연결)을 잇는다.
+            const insert = c.kind === 'conn' ? '/conn.' : '/loadQuery.'
             view.dispatch({ changes: { from: cmd.from, to: ctx.pos, insert }, selection: { anchor: cmd.from + insert.length } })
             startCompletion(view)
           }
@@ -485,6 +564,8 @@ export function SqlEditor({
   completion,
   duckCompletion,
   favorites,
+  markerConns,
+  markerSplit = true,
   onOpenLoadModal,
   onAiCommand,
   onRun,
@@ -504,6 +585,11 @@ export function SqlEditor({
   duckCompletion?: DuckTable[]
   /** 즐겨찾기 목록 — `/loadQuery` 자동완성 소스가 참조한다. */
   favorites?: Favorite[]
+  /** `/conn` 으로 고를 수 있는 연결 목록 (문장별 연결 마커). 비면 `/conn` 이 숨는다. */
+  markerConns?: ConnLike[]
+  /** `/conn` 이 커서 아래로 **새 문장**을 열어도 되는가. 노트북 셀은 하나가 곧 문장
+   *  하나라 가를 자리가 없으므로 `false` 로 준다(그 셀의 연결을 정하기만 한다). */
+  markerSplit?: boolean
   /** `/loadQuery()` (빈 괄호)를 감지하면 큰 모달 피커를 연다. 넘긴 범위를 선택 SQL 로 교체한다. */
   onOpenLoadModal?: (range: { from: number; to: number }) => void
   /** `/aiQuery` 를 감지하면 AI 인라인 프롬프트를 연다. 넘긴 범위에 생성 SQL 이 들어간다. */
@@ -514,6 +600,8 @@ export function SqlEditor({
   // 즐겨찾기·모달 콜백은 ref 로 읽어 에디터를 재구성하지 않고도 최신 값을 쓴다.
   const favRef = useRef<Favorite[]>(favorites ?? [])
   favRef.current = favorites ?? []
+  const connRef = useRef<ConnLike[]>(markerConns ?? [])
+  connRef.current = markerConns ?? []
   const openModalRef = useRef(onOpenLoadModal)
   openModalRef.current = onOpenLoadModal
   const onAiRef = useRef(onAiCommand)
@@ -593,7 +681,13 @@ export function SqlEditor({
     })
     // 슬래시(`/`) 문맥이면 즐겨찾기/명령만 배타적으로 보이고, 아니면 언어 자동완성으로 넘긴다.
     // override 로 언어의 기본 소스(SQL 키워드 등)를 대체해, 슬래시 문맥에 키워드가 섞이지 않게 한다.
-    const loadQuery = makeLoadQueryCompletion(() => favRef.current, openModal, () => onAiRef.current)
+    const loadQuery = makeLoadQueryCompletion(
+      () => favRef.current,
+      openModal,
+      () => onAiRef.current,
+      () => connRef.current,
+      markerSplit,
+    )
     const asResult = (r: ReturnType<CompletionSource>): CompletionResult | null =>
       r && !(r instanceof Promise) ? r : null
     if (language === 'javascript') {
@@ -616,7 +710,7 @@ export function SqlEditor({
       return mergeCompletions(asResult(kwSrc(ctx)), tableSrc ? asResult(tableSrc(ctx)) : null)
     }
     return [acceptKeys, autoTrigger, modalTrigger, aiTrigger, base, autocompletion({ override: [src] })]
-  }, [completion, duckCompletion, language])
+  }, [completion, duckCompletion, language, markerSplit])
 
   return (
     <CodeMirror
@@ -820,11 +914,18 @@ export function SqlWorkbench({
   onAddFavorite,
   viewToggle,
   muted = [],
+  markerConns = [],
+  mutedOf,
   onAiEscalate,
 }: {
   value: string
   onChange: (value: string) => void
   connectionId?: string
+  /** 문장별 연결(`-- @conn`)로 고를 수 있는 연결 목록. 비면 그 기능이 통째로 꺼진다. */
+  markerConns?: ConnLike[]
+  /** 그 연결에서 사용자가 잠시 꺼 둔 명령. 문장이 다른 연결로 나갈 때 **그쪽 기준**으로
+   *  막아야 한다 — 탭 연결의 목록으로 판정하면 엉뚱한 것을 막거나 통과시킨다. */
+  mutedOf?: (connId: string) => SqlStatement[]
   tables?: CompletionTable[]
   /** 즐겨찾기 목록 — 에디터의 `/loadQuery` 자동완성으로 넘긴다. */
   favorites?: Favorite[]
@@ -869,6 +970,9 @@ export function SqlWorkbench({
   // 꽂는 대신 "값이 없습니다"로 끊긴다.
   /** 변수가 치환되어 실제로 나간 쿼리. 원문과 같으면 null (보여줄 게 없다). */
   const [ranWith, setRanWith] = useState<string | null>(null)
+  /** 기본 연결이 아닌 곳으로 나갔을 때 그 이름. 결과가 어디서 왔는지 안 보이면
+   *  한 탭에 여러 DB 를 섞는 순간 무엇을 보고 있는지 알 수 없다. */
+  const [ranOn, setRanOn] = useState<string | null>(null)
   const variableValues = useMemo(
     () =>
       Object.fromEntries(
@@ -884,7 +988,11 @@ export function SqlWorkbench({
     sortCol: string | null
     sortDir: 'asc' | 'desc'
     filters: { col: string; value: string }[]
-  }>({ mode: 'sql', query: '', sortCol: null, sortDir: 'asc', filters: [] })
+    /** **이 결과가 실제로 나간 연결.** 탭 연결이 아니라 문장 마커가 정한 값일 수 있다.
+     *  다음 페이지·정렬·내보내기가 여기를 봐야 한다 — 탭 연결을 다시 보면
+     *  이어 붙는 행이 다른 DB 에서 온다. */
+    connId?: string
+  }>({ mode: 'sql', query: '', sortCol: null, sortDir: 'asc', filters: [], connId: undefined })
   const runQuery = useRunQuery()
   const runMongo = useRunMongo()
   const runDuck = useRunDuck()
@@ -1169,12 +1277,14 @@ export function SqlWorkbench({
     ns: string | null | undefined,
     s: { col: string; dir: 'asc' | 'desc' } | null,
     cf: Record<string, string>,
+    /** 이 실행이 나갈 연결. 생략하면 탭의 기본 연결. (문장 마커가 정한 값이 들어온다) */
+    cid: string | undefined = connectionId,
   ) => {
-    if (!ready) return
+    if (m !== 'duck' && !cid) return
     const filters = buildFilters(cf)
     const sortCol = s?.col ?? null
     const sortDir = s?.dir ?? 'asc'
-    executed.current = { mode: m, query: q, namespace: ns, sortCol, sortDir, filters }
+    executed.current = { mode: m, query: q, namespace: ns, sortCol, sortDir, filters, connId: cid }
     setError(null)
     setShowFix(false) // 새 실행이면 이전 오류의 AI 수정 패널을 접는다
     setCancelled(false)
@@ -1187,18 +1297,15 @@ export function SqlWorkbench({
     }
     if (m === 'duck') {
       runDuck.mutate({ query: q, offset: 0, sortCol, sortDir, filters, signal }, handlers)
-    } else if (!connectionId) {
-      return // 연합 조회가 아니면 연결이 있어야 한다 (ready 가 이미 걸렀지만 타입을 좁힌다)
+    } else if (!cid) {
+      return // 연합 조회가 아니면 연결이 있어야 한다 (위에서 이미 걸렀지만 타입을 좁힌다)
     } else if (m === 'mongo') {
       runMongo.mutate(
-        { id: connectionId, command: q, namespace: ns, offset: 0, sortCol, sortDir, filters, signal },
+        { id: cid, command: q, namespace: ns, offset: 0, sortCol, sortDir, filters, signal },
         handlers,
       )
     } else {
-      runQuery.mutate(
-        { id: connectionId, query: q, offset: 0, sortCol, sortDir, filters, signal },
-        handlers,
-      )
+      runQuery.mutate({ id: cid, query: q, offset: 0, sortCol, sortDir, filters, signal }, handlers)
     }
   }
 
@@ -1256,6 +1363,22 @@ export function SqlWorkbench({
     const raw = pickRunText().trim()
     if (!raw) return
 
+    // 문장 앞의 `-- @conn "이름"` 이 있으면 **이 문장만** 그 연결로 나간다.
+    // 못 읽으면 기본 연결로 조용히 떨어뜨리지 않고 세운다 — 사용자가 보고 있는 것과
+    // 다른 DB 로 쿼리가 나가는 것이 이 기능에서 가장 나쁜 결과다.
+    const resolved = resolveConn(raw, markerConns)
+    const target = targetFor(resolved, { mode, connId: connectionId })
+    if (target.error) {
+      setError(target.error)
+      setRanWith(null)
+      setRanOn(null)
+      return
+    }
+    // 마커는 서버로 보내지 않는다. 주석이라 보내도 무해하지만, 변수 치환이 주석을
+    // 가리지 않아 이름에 `$` 가 든 연결이면 "값이 없습니다"로 막힌다.
+    const body = stripMarkers(raw).trim()
+    if (!body) return
+
     // `$변수` 를 지금 값으로 바꿔서 보낸다.
     //
     // 이 실행은 파이프라인 엔진이 아니라 커넥션으로 쿼리를 **직접** 보내는 경로라,
@@ -1264,26 +1387,35 @@ export function SqlWorkbench({
     // 실제 실행을 예측한다.
     let q: string
     try {
-      q = substituteVars(raw, variableValues, { contextKey: 'query' })
+      q = substituteVars(body, variableValues, { contextKey: 'query' })
     } catch (e) {
       setError(e instanceof VariableError ? e.message : '변수 치환에 실패했습니다.')
       setRanWith(null)
+      setRanOn(null)
       return
     }
     // 꺼 둔 명령이면 보내지 않는다. 치환까지 끝난 뒤에 보는 이유는 변수 치환이 문장을
     // 바꿀 수 있어서다 — 실제로 나갈 SQL 을 봐야 판정이 어긋나지 않는다.
-    const blocked = mutedRunMessage(q, muted)
+    //
+    // **판정 기준은 실제로 나갈 연결이다.** 문장이 다른 연결로 가는데 탭 연결의 목록으로
+    // 보면, 저쪽에서 꺼 둔 것을 통과시키고 이쪽에서 꺼 둔 것을 엉뚱하게 막는다.
+    const scopedMuted =
+      target.overridden && target.connId && mutedOf ? mutedOf(target.connId) : muted
+    const blocked = mutedRunMessage(q, scopedMuted)
     if (blocked) {
       setError(blocked)
       setRanWith(null)
+      setRanOn(null)
       return
     }
     // 무엇이 실제로 나갔는지 보여준다 — 치환된 줄을 못 보면 결과가 0행일 때 원인을 못 찾는다
-    setRanWith(q === raw ? null : q)
+    setRanWith(q === body ? null : q)
+    // 기본 연결이 아닌 곳으로 나갔으면 어디로 갔는지도 보여준다.
+    setRanOn(target.overridden ? connName(resolved) : null)
     // 새 실행이므로 정렬·필터는 초기화 (컬럼 구성이 달라질 수 있으므로).
     setSort(null)
     setColFilters({})
-    execFirst(mode, q, namespace, null, {})
+    execFirst(target.mode, q, namespace, null, {}, target.connId)
   }
 
   // 실행 계획 — EXPLAIN(analyze=false) / EXPLAIN ANALYZE(analyze=true). PostgreSQL·MySQL 만.
@@ -1293,9 +1425,20 @@ export function SqlWorkbench({
     if (!canExplain || !connectionId || explaining) return
     const trimmed = raw.trim()
     if (!trimmed) return
+    // 실행 계획도 **그 문장이 실제로 나갈 연결**에서 떠야 한다. 기본 연결에서 뜬 계획은
+    // 테이블조차 없을 수 있고, 그 오류는 SQL 탓으로 읽힌다.
+    const target = targetFor(resolveConn(trimmed, markerConns), { mode, connId: connectionId })
+    if (target.error) {
+      setError(target.error)
+      return
+    }
+    if (target.mode !== 'sql' || !target.connId) {
+      setError('연합 조회 문장은 실행 계획을 볼 수 없습니다.')
+      return
+    }
     let q: string
     try {
-      q = substituteVars(trimmed, variableValues, { contextKey: 'query' })
+      q = substituteVars(stripMarkers(trimmed).trim(), variableValues, { contextKey: 'query' })
     } catch (e) {
       setError(e instanceof VariableError ? e.message : '변수 치환에 실패했습니다.')
       return
@@ -1303,7 +1446,7 @@ export function SqlWorkbench({
     setError(null)
     setExplaining(analyze ? 'analyze' : 'plain')
     explainMut.mutate(
-      { id: connectionId, query: q, analyze },
+      { id: target.connId, query: q, analyze },
       {
         onSuccess: (r) => {
           setExplainResult({ plan: r.plan, analyzed: r.analyzed, sql: q })
@@ -1324,7 +1467,8 @@ export function SqlWorkbench({
   ) => {
     const ex = executed.current
     if (!ex.query || !ready) return
-    execFirst(ex.mode, ex.query, ex.namespace, s, cf)
+    // 정렬·필터 재조회도 **그 결과가 나온 연결**로 가야 한다 (탭 연결이 아니다).
+    execFirst(ex.mode, ex.query, ex.namespace, s, cf, ex.connId)
   }
 
   // 헤더 클릭 → 정렬 순환 (없음 → 오름 → 내림 → 없음)
@@ -1375,7 +1519,7 @@ export function SqlWorkbench({
         ex.mode === 'duck'
           ? ['/duckdb/export', { query: ex.query }]
           : [
-              `/connections/${connectionId}/export`,
+              `/connections/${ex.connId}/export`,
               {
                 mode: ex.mode,
                 query: ex.mode === 'sql' ? ex.query : undefined,
@@ -1447,12 +1591,12 @@ export function SqlWorkbench({
         },
         { onSuccess, onError, onSettled },
       )
-    } else if (!connectionId) {
+    } else if (!ex.connId) {
       setLoadingMore(false)
     } else if (ex.mode === 'mongo') {
       runMongo.mutate(
         {
-          id: connectionId,
+          id: ex.connId,
           command: ex.query,
           namespace: ex.namespace,
           offset: data.rows.length,
@@ -1466,7 +1610,7 @@ export function SqlWorkbench({
     } else {
       runQuery.mutate(
         {
-          id: connectionId,
+          id: ex.connId,
           query: ex.query,
           offset: data.rows.length,
           sortCol: ex.sortCol,
@@ -1678,6 +1822,7 @@ export function SqlWorkbench({
             completion={isDuck ? undefined : tables}
             duckCompletion={isDuck ? duckTables : undefined}
             favorites={favorites}
+            markerConns={mode === 'mongo' ? [] : markerConns}
             onRun={run}
             onOpenLoadModal={(r) => setLoadModal(r)}
             onAiCommand={mode === 'sql' ? (r) => setAiPrompt(r) : undefined}
@@ -1741,6 +1886,12 @@ export function SqlWorkbench({
               <button className="sql-find-x" onClick={closeFind} aria-label="닫기">
                 ×
               </button>
+            </div>
+          )}
+          {ranOn && (
+            <div className="sql-ran-with sql-ran-on" title={`이 문장은 「${ranOn}」 으로 실행되었습니다`}>
+              <span className="srw-tag conn">문장별 연결</span>
+              <code>{ranOn}</code>
             </div>
           )}
           {ranWith && !error && (
