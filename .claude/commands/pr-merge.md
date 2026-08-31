@@ -6,7 +6,7 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
 `/pr` 가 준비해 둔 PR 을 main 으로 **squash 머지**하는 **마지막 얇은 단계**다. 준비(feature 브랜치
 확보·영역별 커밋·변경 영역 테스트·코드 리뷰·push·PR 생성)는 모두 `/pr` 에서 끝나 있어야 한다. 이
 명령은 스스로 무엇도 고치지 않는다 — 사전 게이트가 하나라도 실패하면 **즉시 멈추고 무엇을 먼저
-해야 하는지** 안내한다(대개 `/pr` 로 재준비, 1d 만 다른 PR 과의 조율).
+해야 하는지** 안내한다(대개 `/pr` 로 재준비 — 예외는 1번 머리말).
 
 원격은 **GitHub** ([SurvivorsStudio/ditter](https://github.com/SurvivorsStudio/ditter))이라 `gh` 를 쓴다.
 
@@ -34,9 +34,11 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
 
 ### 1. 사전 게이트 (모두 통과해야 함 — 첫 실패에서 종료)
 
-이 명령은 게이트 안에서 무엇도 고치지 않는다. 1a~1c 가 실패하면 사용자의 다음 단계는 `/pr` 다.
-**1d 만 예외** — 그 실패는 준비가 덜 된 것이 아니라 다른 사람의 PR 과 조율할 일이 남은 것이라,
-다음 단계가 `/pr` 이 아니다.
+이 명령은 게이트 안에서 무엇도 고치지 않는다. 게이트가 실패하면 사용자의 다음 단계는 **대개**
+`/pr` 로 재준비다 — 1b·1c 와 1a 의 충돌 갈래가 그렇다. 예외 둘은 다음 단계가 아예 다르니
+`/pr` 로 안내하지 않는다: **1a** 가 "이미 머지됨"·"base 가 main 이 아님"으로 걸리면 이 명령의
+대상이 아니라 보고로 끝나고, **1d** 는 준비가 덜 된 것이 아니라 **다른 사람의 PR 과 조율**할
+일이 남은 것이다.
 
 #### 1a. 상태 · 머지 대상
 - `state == OPEN`. 이미 머지됐으면(`MERGED`) 그 사실만 보고하고 종료.
@@ -99,14 +101,25 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
   ```
   빈 배열이면 이 게이트는 **판정할 것이 없다 — 통과**하고, 그 사실을 5번 보고에 한 줄 남긴다
   (통과했다고 확인된 것이 아니라 확인할 근거가 없었다는 뜻이라 둘을 같게 보고하면 안 된다).
-- 그 이슈를 닫겠다고 선언한 **다른 열린 PR** 을 찾는다(`<이슈>` 에 위 배열을, `<self>` 에 대상 PR
-  번호를 넣는다):
+- 그 이슈를 닫겠다고 선언한 **다른 열린 PR** 을 찾는다. `<이슈>` 에는 위 번호를 **대괄호 없이**
+  쉼표로, `<self>` 에는 대상 PR 번호를 넣는다 (예: `IN(66,86)` · `.number != 95`):
   ```bash
-  gh pr list --state open --limit 100 --json number,title,headRefName,closingIssuesReferences | jq -c --argjson issues '<이슈>' --argjson self <self> 'map(. + {overlap: [.closingIssuesReferences[].number] | map(select(IN($issues[])))}) | map(select(.number != $self and (.overlap | length > 0))) | .[] | {number, title, headRefName, overlap}'
+  gh pr list --state open --limit 100 --json number,title,headRefName,closingIssuesReferences --jq '[.[] | . + {overlap: [.closingIssuesReferences[].number] | map(select(IN(<이슈>)))}] | {total: length, hits: [.[] | select(.number != <self> and (.overlap | length > 0)) | {number, title, headRefName, overlap}]}'
   ```
-  (`jq` 로 파이프한다 — `gh --jq` 는 `--argjson` 을 받지 않는다. 열린 PR 이 100건을 넘는다면
-  `--limit` 을 올린다. **잘린 목록으로 "없다"고 판정하면 안 된다** — 목록이 정확히 한도만큼
-  돌아왔으면 한도를 올려 다시 읽는다.)
+  (한 줄로 붙여 쓴다 — 0번의 `gh pr view` 와 같은 이유다.)
+- **출력이 아예 없으면 통과가 아니라 실패다.** 통과는 `{"hits":[],"total":N}` 처럼 **무언가
+  출력된 것**으로만 정의한다. 빈 화면은 "겹치는 PR 이 없다"와 `gh` 인증 실패·명령 오타를 구별해
+  주지 않는다 — 확인이 안 된 것을 통과로 읽는 것이 바로 이 게이트가 막으려는 사고의 모양이다.
+  그래서 `total` 을 함께 낸다. 표준 `jq` 로 파이프하지 않는 이유도 같다(도구가 없으면 exit 127
+  로 역시 빈 화면이 된다). `gh --jq` 는 `--argjson` 을 받지 않으므로 번호를 필터에 직접 박는다.
+- **`total` 이 `--limit` 과 같으면 목록이 잘린 것이다** — 한도를 올려 다시 읽는다. 잘린 목록으로
+  "없다"고 판정하면 안 된다.
+- **초안(draft) PR 도 대상이다.** 초안이어도 누군가 그 이슈를 이미 고치고 있다는 뜻이라 알려야
+  할 상대는 같다. `--state open` 이 초안을 함께 가져오는 것은 의도한 동작이다.
+- 비교는 **이슈 번호로만** 한다. 다른 저장소의 이슈를 닫겠다고 선언한 PR 이 있으면 번호가 우연히
+  겹쳐 잡힐 수 있으니, 걸린 PR 이 정말 그 이슈를 닫는지 보고 전에 눈으로 확인한다. 저장소까지
+  비교하도록 필터를 늘리지 않은 이유는 이 실패가 **오탐(멀쩡한 머지가 한 번 멈춘다)** 쪽이고,
+  걸린 PR 이 함께 출력되므로 사람이 즉시 가릴 수 있기 때문이다.
 - 한 건이라도 나오면 **종료한다.** 되묻지 않는다 — 여기서 필요한 것은 사용자의 허락이 아니라
   **그 PR 에 알리는 일**이고, 그건 이 명령 밖에서 사람이 하는 일이다. 확인 창을 하나 두면 그것부터
   습관적으로 넘기게 되고, 그러면 이 게이트는 없는 것과 같다.
