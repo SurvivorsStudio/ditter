@@ -5,8 +5,8 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
 
 `/pr` 가 준비해 둔 PR 을 main 으로 **squash 머지**하는 **마지막 얇은 단계**다. 준비(feature 브랜치
 확보·영역별 커밋·변경 영역 테스트·코드 리뷰·push·PR 생성)는 모두 `/pr` 에서 끝나 있어야 한다. 이
-명령은 스스로 무엇도 고치지 않는다 — 사전 게이트가 하나라도 실패하면 **즉시 멈추고 `/pr` 로 다시
-준비**하라고 안내한다.
+명령은 스스로 무엇도 고치지 않는다 — 사전 게이트가 하나라도 실패하면 **즉시 멈추고 무엇을 먼저
+해야 하는지** 안내한다(대개 `/pr` 로 재준비, 1d 만 다른 PR 과의 조율).
 
 원격은 **GitHub** ([SurvivorsStudio/ditter](https://github.com/SurvivorsStudio/ditter))이라 `gh` 를 쓴다.
 
@@ -34,7 +34,9 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
 
 ### 1. 사전 게이트 (모두 통과해야 함 — 첫 실패에서 종료)
 
-이 명령은 게이트 안에서 무엇도 고치지 않는다. 어떤 게이트든 실패하면 사용자의 다음 단계는 `/pr` 다.
+이 명령은 게이트 안에서 무엇도 고치지 않는다. 1a~1c 가 실패하면 사용자의 다음 단계는 `/pr` 다.
+**1d 만 예외** — 그 실패는 준비가 덜 된 것이 아니라 다른 사람의 PR 과 조율할 일이 남은 것이라,
+다음 단계가 `/pr` 이 아니다.
 
 #### 1a. 상태 · 머지 대상
 - `state == OPEN`. 이미 머지됐으면(`MERGED`) 그 사실만 보고하고 종료.
@@ -85,6 +87,40 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
   - 더럽거나 HEAD 가 다르면 종료: `/pr` 로 커밋·push 후 다시 `/pr-merge`.
 - PR 브랜치가 아닌 다른 곳에 체크아웃 중이면 이 로컬 검사는 건너뛴다 — 1a~1b 의 서버사이드
   검사가 머지 준비 상태를 이미 확인한다.
+
+#### 1d. 같은 이슈를 다루는 다른 열린 PR 없음
+
+머지 규칙 SSOT(`docs/conventions/commit-convention.md` **§5.1**)를 여기서 기계적으로 확인한다.
+**이 PR 이 닫는 이슈를 다루는 다른 열린 PR 이 있으면 머지하지 않는다.**
+
+- 대상 PR 이 닫는 이슈를 읽는다:
+  ```bash
+  gh pr view <n> --json closingIssuesReferences --jq '[.closingIssuesReferences[].number]'
+  ```
+  빈 배열이면 이 게이트는 **판정할 것이 없다 — 통과**하고, 그 사실을 5번 보고에 한 줄 남긴다
+  (통과했다고 확인된 것이 아니라 확인할 근거가 없었다는 뜻이라 둘을 같게 보고하면 안 된다).
+- 그 이슈를 닫겠다고 선언한 **다른 열린 PR** 을 찾는다(`<이슈>` 에 위 배열을, `<self>` 에 대상 PR
+  번호를 넣는다):
+  ```bash
+  gh pr list --state open --limit 100 --json number,title,headRefName,closingIssuesReferences | jq -c --argjson issues '<이슈>' --argjson self <self> 'map(. + {overlap: [.closingIssuesReferences[].number] | map(select(IN($issues[])))}) | map(select(.number != $self and (.overlap | length > 0))) | .[] | {number, title, headRefName, overlap}'
+  ```
+  (`jq` 로 파이프한다 — `gh --jq` 는 `--argjson` 을 받지 않는다. 열린 PR 이 100건을 넘는다면
+  `--limit` 을 올린다. **잘린 목록으로 "없다"고 판정하면 안 된다** — 목록이 정확히 한도만큼
+  돌아왔으면 한도를 올려 다시 읽는다.)
+- 한 건이라도 나오면 **종료한다.** 되묻지 않는다 — 여기서 필요한 것은 사용자의 허락이 아니라
+  **그 PR 에 알리는 일**이고, 그건 이 명령 밖에서 사람이 하는 일이다. 확인 창을 하나 두면 그것부터
+  습관적으로 넘기게 되고, 그러면 이 게이트는 없는 것과 같다.
+- 종료 보고에 담을 것: 겹친 PR 번호·제목·브랜치와 **겹친 이슈 번호**, 그리고 다음에 할 일 셋 —
+  **그 PR 에 알린다 → 이어받을지 갈라설지 정한다 → 정한 대로 그 PR 을 닫거나 `Closes #N` 을
+  고친다.** 정리되면 이 게이트는 저절로 열린다(열린 PR 이 사라지거나 겹침이 사라진다). 통과용
+  우회 인자는 두지 않는다.
+- 그 PR 을 닫는다면 남길 것 셋이 `CONTRIBUTING.md` 「메인테이너에게」에 있다 — 무엇이 맞았는지 ·
+  왜 다른 것이 들어갔는지 · 다음에 무엇을 보면 되는지.
+
+**이 게이트가 못 잡는 것**: `Closes #N` 없이 본문으로만 이슈를 가리킨 PR 은 걸리지 않는다
+(`closingIssuesReferences` 가 비기 때문). 넓은 문자열 검색(`gh pr list --search "<번호>"`)으로
+늘리지 않는 이유는 오탐이다 — `86` 은 줄 번호·버전·해시에도 있고, 멀쩡한 머지를 세우는 편이 더
+나쁘다. 그 구멍은 사람이 보는 자리(`CONTRIBUTING.md` 「메인테이너에게」)에 남겨 두었다.
 
 ### 2. 진행 고지 (되묻지 않는다)
 
@@ -171,6 +207,8 @@ gh pr merge <n> --squash --delete-branch --subject "<타입>: <제목>" --body "
 
 ### 5. Report
 - 머지된 PR 번호·제목, main 의 새 squash 커밋 해시, 삭제한 브랜치(원격·로컬)를 보고한다.
+- 1d 가 **판정할 근거 없이** 통과했다면(대상 PR 이 닫는 이슈가 없음) 그 한 줄을 함께 남긴다 —
+  "겹치는 PR 이 없음을 확인했다"와 "확인할 이슈가 없었다"는 다른 말이다.
 
 ## Notes
 - PR 타깃은 항상 `main`. 머지 전략은 **squash 고정**(`docs/conventions/commit-convention.md`
@@ -181,6 +219,10 @@ gh pr merge <n> --squash --delete-branch --subject "<타입>: <제목>" --body "
 - **`/pr-merge` 호출이 곧 머지 승인이다.** 게이트를 통과하면 되묻지 않는다 — 묻는 경우는 대상 PR
   이 하나로 안 좁혀질 때(step 0)와 사람의 미해결 리뷰 스레드가 남았을 때(step 2)뿐이다. 사용자에게
   되물어야 할 것은 "이미 지시한 일을 해도 되는지"가 아니라 **"지시만으로는 정해지지 않는 것"** 이다.
+- **같은 이슈를 다루는 다른 열린 PR 이 있으면 머지하지 않는다**(step 1d, SSOT 는
+  `docs/conventions/commit-convention.md` §5.1). 이 게이트는 묻지 않고 종료한다 — 필요한 것이
+  허락이 아니라 **그 PR 에 알리는 일**이라서다. 통과용 우회 인자는 없고, 조율이 끝나면 게이트가
+  저절로 열린다.
 - 되묻기를 없앤 만큼 **게이트가 기계적으로 완결돼야 한다.** 예전에는 확인 화면이 사람 눈으로
   걸러주던 것들(CI 가 아직 안 돌았다, base 가 main 이 아니다)이 있었다 — 그 역할은 1a·1b 의
   게이트가 대신한다. 확인 단계를 더 걷어낼 때는 그것이 떠받치던 검사가 무엇이었는지 먼저 찾아
