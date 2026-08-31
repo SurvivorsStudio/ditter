@@ -155,7 +155,7 @@ CDC_DELETE_MODES = frozenset({"soft", "hard", "ignore"})
 CDC_SNAPSHOT_MODES = frozenset({"initial", "never", "when_needed"})
 #: CDC 타깃 컬럼 매핑에서 허용하는 캐스트.
 #: worker ``nodes/transform.py`` 의 ``CASTS`` 키와 반드시 같아야 한다 (한쪽만 고치면 어긋남).
-CDC_MAP_CASTS = frozenset({"str", "int", "float", "bool", "upper", "lower", "strip"})
+CDC_MAP_CASTS = frozenset({"str", "int", "float", "bool", "upper", "lower", "strip", "datetime"})
 
 #: SymmetricDS 채널 — 전송 단위이자 우선순위 단위다 (기획안 §5-4).
 #: 대량 배치가 발생하는 테이블을 realtime 에 넣으면 그 한 번이 채널을 점유해
@@ -1152,12 +1152,17 @@ def _cdc_target_mapping_issues(node: PipelineNode) -> list[ValidationIssue]:
             )
             columns = []
         for c in columns or []:
-            if not isinstance(c, dict) or not c.get("source") or not c.get("target"):
+            # disabled 는 제외만 하므로 대상 이름이 없어도 된다 —
+            # sink 의 _build_column_map 이 그렇게 읽는데 여기서 막으면 저장이 거부돼,
+            # 화면에서 만든 제외 규칙이 실행에 닿지 못한다.
+            ok = isinstance(c, dict) and c.get("source") and (c.get("target") or c.get("disabled"))
+            if not ok:
                 issues.append(
                     ValidationIssue(
                         level="error",
                         node_id=node.id,
-                        message=f"매핑 #{i}: 컬럼 매핑에는 원본·대상 이름이 모두 필요합니다",
+                        message=f"매핑 #{i}: 컬럼 매핑에는 원본·대상 이름이 모두 필요합니다"
+                        " (제외 항목은 원본만 있어도 됩니다)",
                     )
                 )
             cast = c.get("cast") if isinstance(c, dict) else None

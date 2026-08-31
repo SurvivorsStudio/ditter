@@ -286,3 +286,28 @@ export function flattenFolders(
   }
   return out
 }
+
+/** 겹치지 않는 이름을 만든다.
+ *
+ *  겹치면 뒤에 번호를 붙이고, 이미 번호가 붙어 있으면 그 번호를 올린다
+ *  (「새 쿼리」 → 「새 쿼리 2」 → 「새 쿼리 3」). 번호를 무조건 덧붙이면
+ *  「새 쿼리 2 2」 처럼 길어지기만 한다.
+ *
+ *  `canvasStore.uniqueLabel` 과 **같은 규칙**이다 — 트리와 캔버스가 이름을 다르게
+ *  세면 한 화면에서 두 가지 규칙을 보게 된다. 비교도 거기와 같이 앞뒤 공백·
+ *  대소문자를 무시한다. */
+export function uniqueName(desired: string, taken: Iterable<string>): string {
+  const used = new Set([...taken].map((s) => s.trim().toLowerCase()))
+  const base = desired.trim() || '무제'
+  if (!used.has(base.toLowerCase())) return base
+
+  const numbered = /^(.*\S)\s+(\d+)$/.exec(base)
+  const stem = numbered ? numbered[1] : base
+  let n = numbered ? Number(numbered[2]) : 1
+  let candidate: string
+  do {
+    n += 1
+    candidate = `${stem} ${n}`
+  } while (used.has(candidate.toLowerCase()))
+  return candidate
+}

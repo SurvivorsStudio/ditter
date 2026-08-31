@@ -348,6 +348,7 @@ function SessionEditor({
   hidden,
   onChange,
   onChangeConn,
+  mutedOf,
   bindInsert,
   onFocus,
   onSave,
@@ -379,6 +380,8 @@ function SessionEditor({
   onAddFavorite: (name: string, sql: string, connId: string) => void
   /** 이 연결에서 사용자가 잠시 꺼 둔 명령 (툴바 태그 클릭). */
   muted: SqlStatement[]
+  /** 다른 연결에서 꺼 둔 명령 — 문장이 `-- @conn` 으로 그쪽으로 나갈 때 그 기준으로 막는다. */
+  mutedOf: (connId: string) => SqlStatement[]
   onToggleMuted: (connId: string, s: SqlStatement) => void
   onAiEscalate: (payload: { sql: string; error?: string; explain?: string; assistant: string; dbConnId?: string }) => void
 }) {
@@ -405,6 +408,18 @@ function SessionEditor({
   const scopedFavorites = effConnId ? favorites.filter((f) => f.connId === effConnId) : []
   const wbMode: 'sql' | 'mongo' | 'duck' = duck ? 'duck' : isMongo ? 'mongo' : 'sql'
   const notebook = session.view === 'notebook'
+
+  /* ── 문장별 연결(`-- @conn`) 후보 ──────────────────────────────
+     이기종 DB 를 한 탭에서 보기 위한 것이다. 상단 드롭다운이 **기본 연결**이고, 문장
+     앞에 마커를 두면 그 문장만 다른 연결로 나간다.
+
+     **MongoDB 는 뺀다.** 마커가 `--` 주석인데 mongo 셀은 자바스크립트 문법이라
+     `--` 가 주석이 아니다 — 넣는 순간 문법 오류이고, 한 문서에 두 문법을 섞으려면
+     중첩 언어 파서가 필요하다. 그래서 후보에도 두지 않는다. */
+  const markerConns = useMemo(
+    () => dbConns.filter((c) => c.type !== 'mongo').map((c) => ({ id: c.id, name: c.name, type: c.type })),
+    [dbConns],
+  )
 
   // 연결 선택 슬롯 — 편집기·노트북 툴바가 공유한다. 연합 조회(duck)도 드롭다운의 한 항목이라
   // 여기서 그대로 고르고 되돌릴 수 있다(연결을 탭 종류로 나누지 않는다).
@@ -504,6 +519,8 @@ function SessionEditor({
           tables={activeTables}
           duckTables={duckTables}
           favorites={scopedFavorites}
+          markerConns={markerConns}
+          mutedOf={mutedOf}
           toolbarLeft={connSelector}
           viewToggle={viewToggle}
           muted={muted}
@@ -531,6 +548,8 @@ function SessionEditor({
             namespace={session.mongoNs}
             tables={activeTables}
             duckTables={duckTables}
+            markerConns={markerConns}
+            mutedOf={mutedOf}
             loading={duck ? duckLoading : schemaLoading}
             autoFocus={!hidden}
             floatingRun
@@ -776,6 +795,7 @@ function DockView(props: {
                   folders={props.saved}
                   connections={props.navConnections}
                   pipelines={props.pipelines}
+                  openTitles={props.sessions.map((x) => x.title)}
                   onOpen={props.onOpenSaved}
                   onDeleteQuery={props.onDeleteSavedQuery}
                   onDeleteFolder={props.onDeleteSavedFolder}
@@ -882,6 +902,7 @@ function DockView(props: {
               favorites={props.favorites}
               onAddFavorite={props.onAddFavorite}
               muted={props.muted[s.connId || props.dbConns[0]?.id || ''] ?? []}
+              mutedOf={(id) => props.muted[id] ?? []}
               onToggleMuted={props.onToggleMuted}
               onAiEscalate={props.onAiEscalate}
             />

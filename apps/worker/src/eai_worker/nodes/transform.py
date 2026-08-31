@@ -11,6 +11,7 @@ import logging
 import operator
 import re
 from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
 from typing import Any
 
 from eai_api.schemas.dag import SWITCH_DEFAULT_HANDLE, NodeKind, PipelineNode
@@ -44,6 +45,33 @@ OPERATORS: dict[str, Callable[[Any, Any], bool]] = {
     "regex": lambda a, b: bool(re.search(str(b), str(a or ""))),
 }
 
+def _to_datetime(v: Any) -> Any:
+    """숫자 epoch 를 naive datetime 으로. 문자열·datetime 은 그대로 둔다.
+
+    CDC 에서 필요하다. Debezium 은 시간 컬럼을 **epoch 정수**로 내보내는데
+    (JSON 컨버터에 스키마를 끄면 논리 타입이 숫자로 납작해진다), 타깃의 timestamp
+    컬럼에 그대로 넣으면 ``type timestamp but expression is of type bigint`` 로 깨진다.
+
+    단위는 자릿수로 가른다 — 초·밀리초·마이크로초가 소스마다 다르고, 어느 쪽인지
+    설정으로 받으면 컬럼마다 달라 손이 많이 간다. 2001년 이후 값이면 자릿수가 겹치지 않는다.
+
+    UTC 로 해석한 뒤 tz 를 떼는 이유: MySQL DATETIME 은 시간대가 없는 벽시계 값이고
+    Debezium 이 그것을 UTC 기준 epoch 로 싣는다. 로컬 시간대로 풀면 시간이 밀린다.
+    """
+    if v is None or v == "":
+        return None
+    if isinstance(v, datetime):
+        return v
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return v  # 문자열 등은 드라이버가 파싱하도록 넘긴다
+    n = float(v)
+    if abs(n) >= 1e14:      # 마이크로초
+        n /= 1_000_000
+    elif abs(n) >= 1e11:    # 밀리초
+        n /= 1_000
+    return datetime.fromtimestamp(n, tz=UTC).replace(tzinfo=None)
+
+
 CASTS: dict[str, Callable[[Any], Any]] = {
     "str": lambda v: None if v is None else str(v),
     "int": lambda v: None if v in (None, "") else int(v),
@@ -52,6 +80,7 @@ CASTS: dict[str, Callable[[Any], Any]] = {
     "upper": lambda v: None if v is None else str(v).upper(),
     "lower": lambda v: None if v is None else str(v).lower(),
     "strip": lambda v: None if v is None else str(v).strip(),
+    "datetime": _to_datetime,
 }
 
 
