@@ -20,6 +20,7 @@ import type { SqlStatement } from '../api/statements'
 import { mutedRunMessage } from '../api/statements'
 import {
   DUCK_MARKER_NAME,
+  connName,
   endsInLineComment,
   findMarkers,
   mergeBody,
@@ -322,6 +323,10 @@ function CellConnPicker({
   )
 }
 
+/** 한 번의 실행이 나가는 곳. `mode` 가 진실이고 `connId` 는 연합 조회(`duck`)에서
+ *  정상적으로 비어 있다 — "연결이 없다"와 "아직 모른다"를 `connId` 로 가르면 안 되는 이유다. */
+type ExecTarget = { mode: 'sql' | 'mongo' | 'duck'; connId?: string }
+
 /** SQL 실행 셀 — 미니 에디터 + 실행 + 개별 결과. 각 셀이 자체 실행 훅을 갖는다(독립 실행). */
 function SqlCell({
   cell,
@@ -448,11 +453,20 @@ function SqlCell({
   )
   const [chartCfg, setChartCfg] = useState<ChartConfig | null>(hydrated?.chart ?? null)
   const filterTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // loadMore·정렬·필터 재조회가 참조할 "실제 실행된" 쿼리와 정렬·필터.
+  // loadMore·정렬·필터 재조회가 참조할 "실제 실행된" 쿼리·정렬·필터, 그리고 **그것이 나간 곳**.
+  //
+  // 목적지를 여기 담는 것이 핵심이다. 셀의 연결은 본문 마커(`-- @conn`)라 실행한 **뒤에도** 바뀔 수
+  // 있는데, 다음 페이지·정렬을 그때그때 다시 계산하면 같은 표에 다른 DB 의 행이 이어 붙고
+  // 정렬 한 번이 옛 쿼리를 새 DB 로 던진다. 편집기(`SqlWorkbench.execFirst`)가 `connId` 를
+  // 들고 있는 이유와 같다.
   const executedRef = useRef<{
     query: string
     sort: { col: string; dir: 'asc' | 'desc' } | null
     filters: { col: string; value: string }[]
+    /** 이 결과가 실제로 나간 목적지. 새로고침으로 복원된 결과에는 없다 — 그때만 지금 계산한
+     *  값으로 떨어진다(복원의 근거가 된 `cell.src` 가 같으므로 같은 목적지가 나온다). */
+    mode?: 'sql' | 'mongo' | 'duck'
+    connId?: string
   }>({
     query: hydrated?.query ?? '',
     sort: hydrated?.sort ?? null,
@@ -505,6 +519,14 @@ function SqlCell({
     [cell.src, hideMarker],
   )
   const setBody = (v: string) => onChangeSrc(hideMarker ? mergeBody(cell.src, v) : v)
+
+  /** 아래에 새로 만드는 셀에 **이 셀의 연결을 물려준다.** 물려줄 수 있을 때만 붙는다 —
+   *  `connName` 은 해석된 목적지(실재하는 연결·연합 조회)에만 이름을 주므로, 마커가 없거나
+   *  이름이 깨진 셀은 그대로 지나가 새 셀이 탭 기본 연결을 따른다. */
+  const withCellMarker = (sql: string): string => {
+    const name = connName(resolved)
+    return name ? upsertMarker(sql, name).text : sql
+  }
 
   const canRun =
     (effMode === 'duck' || Boolean(effConn)) && stripMarkers(cell.src).trim().length > 0
@@ -560,18 +582,30 @@ function SqlCell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resultView, chartCfg])
 
-  // 첫 페이지 실행(신규 실행·정렬·필터 변경 공용). 정렬·필터를 executedRef 에 저장해 loadMore 가 잇는다.
+  /** 이 셀이 **지금** 나갈 곳 — 새 실행이 쓴다. */
+  const liveTarget = (): ExecTarget => ({ mode: effMode, connId: effConn })
+  /** 화면의 결과가 **나왔던** 곳 — 다음 페이지·정렬·필터가 쓴다. 기록이 없을 때(새로고침
+   *  복원)만 지금 값으로 떨어진다. `connId` 는 연합 조회에서 정상적으로 비므로 `mode` 로 가른다. */
+  const ranTarget = (): ExecTarget => {
+    const ex = executedRef.current
+    return ex.mode ? { mode: ex.mode, connId: ex.connId } : liveTarget()
+  }
+
+  // 첫 페이지 실행(신규 실행·정렬·필터 변경 공용). 정렬·필터·목적지를 executedRef 에 저장해
+  // loadMore 가 잇는다. **목적지는 기본값을 두지 않고 호출부가 반드시 넘긴다** — 새 실행은
+  // 지금 값, 정렬·필터 재조회는 결과가 나왔던 값으로 갈려야 하기 때문이다.
   const execFirst = (
     q: string,
     s: { col: string; dir: 'asc' | 'desc' } | null,
     cf: Record<string, string>,
+    tgt: ExecTarget,
   ) => {
     if (!q) return
-    if (effMode !== 'duck' && !effConn) return
+    if (tgt.mode !== 'duck' && !tgt.connId) return
     const filters = buildFilters(cf)
     const sortCol = s?.col ?? null
     const sortDir = s?.dir ?? 'asc'
-    executedRef.current = { query: q, sort: s, filters }
+    executedRef.current = { query: q, sort: s, filters, mode: tgt.mode, connId: tgt.connId }
     setError(null)
     setShowFix(false) // 새 실행이면 이전 오류의 AI 수정 패널을 접는다
     setPending(true)
@@ -594,9 +628,9 @@ function SqlCell({
       setExecCount(ec)
       persist(null, msg, ec)
     }
-    if (effMode === 'duck') runDuck.mutate({ query: q, offset: 0, sortCol, sortDir, filters, signal }, { onSuccess, onError })
-    else if (effMode === 'mongo') runMongo.mutate({ id: effConn!, command: q, namespace, offset: 0, sortCol, sortDir, filters, signal }, { onSuccess, onError })
-    else runQuery.mutate({ id: effConn!, query: q, offset: 0, sortCol, sortDir, filters, signal }, { onSuccess, onError })
+    if (tgt.mode === 'duck') runDuck.mutate({ query: q, offset: 0, sortCol, sortDir, filters, signal }, { onSuccess, onError })
+    else if (tgt.mode === 'mongo') runMongo.mutate({ id: tgt.connId!, command: q, namespace, offset: 0, sortCol, sortDir, filters, signal }, { onSuccess, onError })
+    else runQuery.mutate({ id: tgt.connId!, query: q, offset: 0, sortCol, sortDir, filters, signal }, { onSuccess, onError })
   }
 
   const run = () => {
@@ -628,7 +662,7 @@ function SqlCell({
     // 새 실행이므로 정렬·필터는 초기화 (컬럼 구성이 달라질 수 있으므로).
     setSort(null)
     setColFilters({})
-    execFirst(q, null, {})
+    execFirst(q, null, {}, liveTarget())
   }
 
   // 결과 그리드를 아래로 끌면 다음 페이지를 이어 붙인다(무한 스크롤). 정렬·필터는 실행된 값 유지.
@@ -636,7 +670,10 @@ function SqlCell({
     if (!data || !data.truncated || pending || loadingMore) return
     const ex = executedRef.current
     if (!ex.query) return
-    if (effMode !== 'duck' && !effConn) return
+    // **이어 붙일 행은 그 결과가 나온 곳에서 와야 한다.** 실행 뒤에 셀의 연결을 바꿨다면
+    // 지금 값은 다른 DB 를 가리킨다 — 그대로 쓰면 한 표에 두 DB 의 행이 섞인다.
+    const tgt = ranTarget()
+    if (tgt.mode !== 'duck' && !tgt.connId) return
     setLoadingMore(true)
     const signal = (abortRef.current = new AbortController()).signal
     const onSuccess = (r: QueryResult) => {
@@ -657,9 +694,9 @@ function SqlCell({
     const sortCol = ex.sort?.col ?? null
     const sortDir = ex.sort?.dir ?? 'asc'
     const filters = ex.filters
-    if (effMode === 'duck') runDuck.mutate({ query: ex.query, offset, sortCol, sortDir, filters, signal }, { onSuccess, onError })
-    else if (effMode === 'mongo') runMongo.mutate({ id: effConn!, command: ex.query, namespace, offset, sortCol, sortDir, filters, signal }, { onSuccess, onError })
-    else runQuery.mutate({ id: effConn!, query: ex.query, offset, sortCol, sortDir, filters, signal }, { onSuccess, onError })
+    if (tgt.mode === 'duck') runDuck.mutate({ query: ex.query, offset, sortCol, sortDir, filters, signal }, { onSuccess, onError })
+    else if (tgt.mode === 'mongo') runMongo.mutate({ id: tgt.connId!, command: ex.query, namespace, offset, sortCol, sortDir, filters, signal }, { onSuccess, onError })
+    else runQuery.mutate({ id: tgt.connId!, query: ex.query, offset, sortCol, sortDir, filters, signal }, { onSuccess, onError })
   }
 
   // 한 페이지를 promise 로 받는다(loadAll 루프용). loadMore 와 같은 파라미터.
@@ -668,10 +705,11 @@ function SqlCell({
     const sortCol = ex.sort?.col ?? null
     const sortDir = ex.sort?.dir ?? 'asc'
     const filters = ex.filters
-    if (effMode === 'duck') return runDuck.mutateAsync({ query: ex.query, offset, sortCol, sortDir, filters, signal })
-    if (effMode === 'mongo')
-      return runMongo.mutateAsync({ id: effConn!, command: ex.query, namespace, offset, sortCol, sortDir, filters, signal })
-    return runQuery.mutateAsync({ id: effConn!, query: ex.query, offset, sortCol, sortDir, filters, signal })
+    const tgt = ranTarget()
+    if (tgt.mode === 'duck') return runDuck.mutateAsync({ query: ex.query, offset, sortCol, sortDir, filters, signal })
+    if (tgt.mode === 'mongo')
+      return runMongo.mutateAsync({ id: tgt.connId!, command: ex.query, namespace, offset, sortCol, sortDir, filters, signal })
+    return runQuery.mutateAsync({ id: tgt.connId!, query: ex.query, offset, sortCol, sortDir, filters, signal })
   }
 
   // "전체 로드" — truncated 가 false 가 될 때까지 페이지를 이어 받아 다 채운다.
@@ -683,7 +721,8 @@ function SqlCell({
     }
     if (!data || !data.truncated || pending || loadingMore) return
     if (!executedRef.current.query) return
-    if (effMode !== 'duck' && !effConn) return
+    const at = ranTarget()
+    if (at.mode !== 'duck' && !at.connId) return
     setLoadingAll(true)
     const signal = (abortRef.current = new AbortController()).signal
     try {
@@ -749,7 +788,8 @@ function SqlCell({
     cf: Record<string, string>,
   ) => {
     if (!executedRef.current.query || pending) return
-    execFirst(executedRef.current.query, s, cf)
+    // 같은 쿼리를 정렬만 바꿔 다시 보내는 것이라, **그 결과가 나왔던 연결**로 가야 한다.
+    execFirst(executedRef.current.query, s, cf, ranTarget())
   }
 
   // 헤더 클릭 → 정렬 순환(없음 → 오름 → 내림 → 없음)
@@ -1045,8 +1085,10 @@ function SqlCell({
                         sql={executedRef.current.query}
                         error={error}
                         dbConnId={effAiDbConnId}
+                        // 본문만 갈아 끼운다 — `onChangeSrc` 로 통째로 덮으면 감춰 둔
+                        // `-- @conn` 이 사라져, 저 DB 의 스키마로 만든 SQL 이 기본 연결로 나간다.
                         onApply={(fixed) => {
-                          onChangeSrc(fixed)
+                          setBody(fixed)
                           setShowFix(false)
                         }}
                         onEscalate={(p) => {
@@ -1126,8 +1168,10 @@ function SqlCell({
             modelOptions={aiOptions}
             onModelChange={onAiModelChange}
             onClose={() => setAiActive(false)}
-            onInsert={(sql) => onChangeSrc(sql)}
-            onInsertBelow={onInsertAiSqlBelow}
+            onInsert={(sql) => setBody(sql)}
+            // 아래 새 셀에도 **이 셀의 연결을 물려준다.** AI 가 그 연결의 스키마를 보고 만든
+            // SQL 인데 새 셀이 탭 기본 연결로 나가면, 이 기능이 막으려던 상황이 그대로 생긴다.
+            onInsertBelow={(sql) => onInsertAiSqlBelow(withCellMarker(sql))}
           />
         )}
       </div>
