@@ -1591,34 +1591,37 @@ export function Notebook({
     >
       <div className="nb-toolbar">
         {toolbarLeft}
-        <div className="nb-toolbar-spacer" />
-        <button className="btn sm" onClick={() => selectCommand(insertAt('sql', cells.length))} title="SQL 셀 추가">
-          <Icon.plus />
-          SQL 셀
-        </button>
-        <button className="btn sm" onClick={() => selectCommand(insertAt('md', cells.length))} title="메모 셀 추가">
-          <Icon.note />
-          메모 셀
-        </button>
-        <span className="nb-toolbar-div" />
-        <button className="btn sm" onClick={() => cells.filter((c) => c.type === 'sql').forEach((c) => apiRef.current.get(c.id)?.run())} title="모든 SQL 셀 실행">
-          <Icon.play />
-          전체 실행
-        </button>
-        <button className="btn sm" onClick={resetSession} title="세션 초기화 — 실행 번호와 모든 셀 출력을 지웁니다">
-          <Icon.refresh />
-          세션 초기화
-        </button>
-        {onSave && (
-          <button className="btn sm" onClick={onSave} title="저장 (⌘/Ctrl+S) — 셀을 하나의 쿼리로 저장">
-            <Icon.save />
-            저장
+        {/* 오른쪽 동작은 한 덩어리다 — 좁아지면 통째로 다음 줄로 내려간다.
+            낱개로 두면 「저장」만 아래로 떨어지는 식으로 묶음이 갈라진다. */}
+        <div className="nb-toolbar-actions">
+          <button className="btn sm" onClick={() => selectCommand(insertAt('sql', cells.length))} title="SQL 셀 추가">
+            <Icon.plus />
+            SQL 셀
           </button>
-        )}
-        <span className="nb-help" title="Shift+Enter 실행·다음 · ⌘/Ctrl+Enter 실행 · Alt+Enter 실행·삽입 · Esc 커맨드 · Enter 편집 · A/B 위·아래 추가 · DD 삭제 · M/Y 메모·코드 · Z 되돌리기">
-          단축키 ⓘ
-        </span>
-        {viewToggle}
+          <button className="btn sm" onClick={() => selectCommand(insertAt('md', cells.length))} title="메모 셀 추가">
+            <Icon.note />
+            메모 셀
+          </button>
+          <span className="nb-toolbar-div" />
+          <button className="btn sm" onClick={() => cells.filter((c) => c.type === 'sql').forEach((c) => apiRef.current.get(c.id)?.run())} title="모든 SQL 셀 실행">
+            <Icon.play />
+            전체 실행
+          </button>
+          <button className="btn sm" onClick={resetSession} title="세션 초기화 — 실행 번호와 모든 셀 출력을 지웁니다">
+            <Icon.refresh />
+            세션 초기화
+          </button>
+          {onSave && (
+            <button className="btn sm" onClick={onSave} title="저장 (⌘/Ctrl+S) — 셀을 하나의 쿼리로 저장">
+              <Icon.save />
+              저장
+            </button>
+          )}
+          <span className="nb-help" title="Shift+Enter 실행·다음 · ⌘/Ctrl+Enter 실행 · Alt+Enter 실행·삽입 · Esc 커맨드 · Enter 편집 · A/B 위·아래 추가 · DD 삭제 · M/Y 메모·코드 · Z 되돌리기">
+            단축키 ⓘ
+          </span>
+          {viewToggle}
+        </div>
       </div>
       <div className="nb-body" ref={bodyRef} tabIndex={0} onKeyDown={onCommandKeys}>
         {cells.length === 0 && (
