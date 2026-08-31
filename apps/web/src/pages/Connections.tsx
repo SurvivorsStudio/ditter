@@ -38,12 +38,18 @@ import {
 import type { Connection } from '../api/types'
 import { Banner, EmptyState, Spinner, Tag, formatDateTime } from '../components/common'
 import { Icon } from '../components/icons'
+import { useT, type MsgKey, type TFunc } from '../i18n'
 
-const HEALTH_LABEL: Record<string, string> = {
-  ok: '정상',
-  warn: '지연',
-  error: '오류',
-  unknown: '미확인',
+const HEALTH_LABEL: Record<string, MsgKey> = {
+  ok: 'status.ok',
+  warn: 'status.warn',
+  error: 'status.error',
+  unknown: 'status.unknown',
+}
+
+function healthLabel(t: TFunc, status: string): string {
+  const key = HEALTH_LABEL[status] as MsgKey | undefined
+  return key ? t(key) : status
 }
 
 function hostLine(conn: Connection): string {
@@ -51,6 +57,7 @@ function hostLine(conn: Connection): string {
 }
 
 export function Connections() {
+  const t = useT()
   const { data: connections, isLoading, error } = useConnections()
   const [showForm, setShowForm] = useState(false)
   const [addType, setAddType] = useState<string | null>(null)
@@ -86,29 +93,31 @@ export function Connections() {
         ok: result.status === 'ok',
         text:
           result.status === 'ok'
-            ? `정상 · ${result.latency_ms ?? '?'}ms${result.server_version ? ` · ${result.server_version}` : ''}`
-            : result.message || '연결 실패',
+            ? `${t('connections.testOk', { latency: result.latency_ms ?? '?' })}${result.server_version ? ` · ${result.server_version}` : ''}`
+            : result.message || t('connections.testFailed'),
       })
     } catch (e) {
-      setTestResult({ id, ok: false, text: e instanceof Error ? e.message : '연결 실패' })
+      setTestResult({ id, ok: false, text: e instanceof Error ? e.message : t('connections.testFailed') })
     }
   }
 
   return (
     <div className="view">
       <div className="pad">
-        <div className="badge-note">🔒 연결 시크릿은 암호화되어 저장되며 화면에 다시 표시되지 않습니다</div>
+        <div className="badge-note">{t('connections.secretNote')}</div>
 
         <div className="section-h">
-          <h2>연결 (Connections)</h2>
+          <h2>{t('connections.title')}</h2>
         </div>
 
-        {error && <Banner kind="error">연결 목록을 불러오지 못했습니다: {String(error)}</Banner>}
+        {error && <Banner kind="error">{t('connections.loadFailed', { error: String(error) })}</Banner>}
         {testResult && (
-          <Banner kind={testResult.ok ? 'ok' : 'error'}>연결 테스트: {testResult.text}</Banner>
+          <Banner kind={testResult.ok ? 'ok' : 'error'}>
+            {t('connections.testBanner', { text: testResult.text })}
+          </Banner>
         )}
 
-        {isLoading && !connections && <EmptyState title="불러오는 중…" />}
+        {isLoading && !connections && <EmptyState title={t('runs.loading')} />}
 
         {/* 카테고리별로 묶어 보여준다 — DB 는 DB 끼리, AI 모델은 AI 끼리, SAP 은 SAP 끼리.
             평평하게 늘어놓는 것보다 "어떤 종류인가"로 나뉘어 있어야 찾기 쉽다.
@@ -136,7 +145,7 @@ export function Connections() {
                     }}
                   >
                     <Icon.plus />
-                    새 {meta.label} 연결
+                    {t('connections.newOfKind', { name: meta.label })}
                   </div>
                 )}
               </div>
@@ -168,9 +177,12 @@ export function Connections() {
                 ? {
                     id: deleting.id,
                     ok: false,
-                    text: `'${deleting.name}' 을(를) 삭제했습니다. 다음 파이프라인은 연결을 다시 지정해야 합니다: ${affected.join(', ')}`,
+                    text: t('connections.deletedAffected', {
+                      name: deleting.name,
+                      pipelines: affected.join(', '),
+                    }),
                   }
-                : { id: deleting.id, ok: true, text: `'${deleting.name}' 을(를) 삭제했습니다.` },
+                : { id: deleting.id, ok: true, text: t('connections.deleted', { name: deleting.name }) },
             )
           }
         />
@@ -193,14 +205,14 @@ export function Connections() {
                 </div>
                 <div className="meta">
                   <span className="kv">{m.label}</span>
-                  <span className="kv">풀 {conn.pool_size}</span>
+                  <span className="kv">{t('connections.pool', { n: conn.pool_size })}</span>
                   {conn.ssl && <span className="kv">SSL</span>}
                   {conn.cdc_enabled && <span className="kv">CDC</span>}
-                  {conn.has_secret && <span className="kv">🔒 시크릿</span>}
+                  {conn.has_secret && <span className="kv">{t('connections.secretTag')}</span>}
                   {/* 쓰기가 열린 연결은 목록에서 바로 보여야 한다 — 편집 창을 열어야 알면 늦다 */}
                   {statementsOf(conn).some((s) => s !== 'select') && (
-                    <span className="kv warn" title={statementTitle(conn)}>
-                      쓰기 허용
+                    <span className="kv warn" title={statementTitle(t, conn)}>
+                      {t('connections.writeEnabled')}
                     </span>
                   )}
                 </div>
@@ -208,7 +220,7 @@ export function Connections() {
                   <div className="foot-status">
                     <span className={`health ${conn.health_status}`}>
                       <span className="hd" />
-                      {HEALTH_LABEL[conn.health_status] ?? conn.health_status}
+                      {healthLabel(t, conn.health_status)}
                     </span>
                     {conn.last_tested_at && (
                       <span className="foot-time">{formatDateTime(conn.last_tested_at)}</span>
@@ -217,11 +229,11 @@ export function Connections() {
                   <div className="actions">
                     <button
                       className="btn sm"
-                      title="이 연결을 사용하는 파이프라인 보기"
+                      title={t('connections.usageBtnTitle')}
                       onClick={() => setViewing(conn)}
                     >
                       <Icon.flow />
-                      사용 파이프라인
+                      {t('connections.usageTitle')}
                     </button>
                     {canOperate && (
                       <button
@@ -229,18 +241,18 @@ export function Connections() {
                         disabled={test.isPending}
                         onClick={() => runTest(conn.id)}
                       >
-                        {test.isPending && test.variables === conn.id ? <Spinner /> : '테스트'}
+                        {test.isPending && test.variables === conn.id ? <Spinner /> : t('connections.test')}
                       </button>
                     )}
                     {canEdit && (
-                      <button className="btn sm" onClick={() => setEditing(conn)} title="설정 편집">
-                        편집
+                      <button className="btn sm" onClick={() => setEditing(conn)} title={t('connections.editTitle')}>
+                        {t('connections.edit')}
                       </button>
                     )}
                     {canEdit && (
                       <button
                         className="btn sm danger"
-                        title="연결 삭제"
+                        title={t('connections.deleteTitle')}
                         onClick={() => setDeleting(conn)}
                       >
                         <Icon.trash />
@@ -274,6 +286,7 @@ function ConnectionForm({
   initialCategory?: ConnectorCategory | null
   onClose: () => void
 }) {
+  const tr = useT()
   const { data: types } = useConnectionTypes()
   const create = useCreateConnection()
   const update = useUpdateConnection()
@@ -311,20 +324,20 @@ function ConnectionForm({
       >
         <div className="mh">
           {type !== null && !isEdit && (
-            <button className="mh-back" onClick={back} title="커넥터 타입 다시 고르기">
+            <button className="mh-back" onClick={back} title={tr('connections.pickAgainTitle')}>
               ←
             </button>
           )}
           <h3>
             {type === null
               ? initialCategory
-                ? `${categoryMeta(initialCategory).label} — 타입 선택`
-                : '커넥터 타입 선택'
+                ? tr('connections.pickTypeOfCategory', { name: categoryMeta(initialCategory).label })
+                : tr('connections.pickType')
               : isEdit
-                ? `${connection.name} 편집`
-                : `새 ${specFor(type).label} 연결`}
+                ? tr('connections.editOf', { name: connection.name })
+                : tr('connections.newOfKind', { name: specFor(type).label })}
           </h3>
-          <button className="x" onClick={onClose} aria-label="닫기">
+          <button className="x" onClick={onClose} aria-label={tr('common.close')}>
             ×
           </button>
         </div>
@@ -356,7 +369,7 @@ function ConnectionForm({
                 }
                 onClose()
               } catch (e) {
-                setError(e instanceof Error ? e.message : '저장에 실패했습니다')
+                setError(e instanceof Error ? e.message : tr('connections.saveFailed'))
               }
             }}
             onCancel={onClose}
@@ -410,6 +423,7 @@ function FieldInput({
     onLoad: () => void
   }
 }) {
+  const t = useT()
   const [manual, setManual] = useState(false)
   return (
     <div className="field">
@@ -437,10 +451,10 @@ function FieldInput({
             <div className="remote-select-row">
               <select value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
                 <option value="" disabled>
-                  모델을 선택하세요
+                  {t('connections.pickModel')}
                 </option>
                 {value && !remote.options.some((o) => o.id === value) && (
-                  <option value={String(value)}>{String(value)} (현재)</option>
+                  <option value={String(value)}>{t('connections.currentValue', { name: String(value) })}</option>
                 )}
                 {remote.options.map((o) => (
                   <option key={o.id} value={o.id}>
@@ -449,7 +463,7 @@ function FieldInput({
                 ))}
               </select>
               <button type="button" className="btn sm" onClick={() => setManual(true)}>
-                직접 입력
+                {t('connections.manualInput')}
               </button>
               <button
                 type="button"
@@ -457,7 +471,7 @@ function FieldInput({
                 onClick={() => remote.onLoad()}
                 disabled={remote.loading}
               >
-                {remote.loading ? '…' : '새로고침'}
+                {remote.loading ? '…' : t('common.refresh')}
               </button>
             </div>
           ) : (
@@ -477,7 +491,7 @@ function FieldInput({
                 }}
                 disabled={remote?.loading}
               >
-                {remote?.loading ? '불러오는 중…' : '모델 불러오기'}
+                {remote?.loading ? t('runs.loading') : t('connections.loadModels')}
               </button>
             </div>
           )}
@@ -505,7 +519,7 @@ function FieldInput({
         </>
       )}
       {isEdit && field.kind === 'password' ? (
-        <div className="hint">비워두면 기존 값을 그대로 유지합니다.</div>
+        <div className="hint">{t('connections.keepExistingHint')}</div>
       ) : (
         field.hint && <div className="hint">{field.hint}</div>
       )}
@@ -515,10 +529,12 @@ function FieldInput({
 
 
 /** 카드·태그의 툴팁 문구 — 무엇이 열려 있는지 한 줄로. */
-function statementTitle(conn: Connection): string {
-  return `허용 명령: ${statementsOf(conn)
-    .map((s) => s.toUpperCase())
-    .join(', ')}`
+function statementTitle(t: TFunc, conn: Connection): string {
+  return t('connections.stmtTitle', {
+    list: statementsOf(conn)
+      .map((s) => s.toUpperCase())
+      .join(', '),
+  })
 }
 
 /** 허용 명령 체크박스 묶음. 값은 CSV 문자열(`'select,update'`)로 오간다 —
@@ -586,13 +602,12 @@ function initialValues(connection: Connection): Record<string, string | boolean>
 }
 
 function TypePicker({ types, onPick }: { types: string[]; onPick: (type: string) => void }) {
+  const tr = useT()
   const groups = groupByCategory(types)
 
   return (
     <div className="mb type-picker">
-      <p className="type-picker-lead">
-        연결할 시스템 종류를 고르세요. 종류에 따라 필요한 설정이 달라집니다.
-      </p>
+      <p className="type-picker-lead">{tr('connections.typeLead')}</p>
 
       {groups.map(({ category, types: members }) => {
         const meta = categoryMeta(category)
@@ -662,6 +677,7 @@ function ConnectorSettings({
   onSubmit,
   onCancel,
 }: SettingsProps) {
+  const t = useT()
   const spec = specFor(type)
   // CDC 를 지원하는 타입(mysql·postgres)이고 편집 중이면 전제조건 점검을 노출한다
   const cdcCapable = type === 'mysql' || type === 'postgres'
@@ -680,7 +696,7 @@ function ConnectorSettings({
     const region = String(values.region ?? '').trim()
     const token = String(values.session_token ?? '').trim()
     if (!akid || !secret || !region) {
-      setModelsError('먼저 리전 · Access Key ID · Secret Access Key 를 입력하세요.')
+      setModelsError(t('connections.bedrockNeedCreds'))
       return
     }
     setModelsError(null)
@@ -699,11 +715,11 @@ function ConnectorSettings({
       )
       setBedrockModels(data.models)
       if (data.models.length === 0) {
-        setModelsError('사용 가능한 모델이 없습니다 — 리전·모델 액세스 권한을 확인하세요.')
+        setModelsError(t('connections.noModels'))
       }
     } catch (e) {
       setBedrockModels(null)
-      setModelsError(e instanceof Error ? e.message : '모델 목록을 불러오지 못했습니다.')
+      setModelsError(e instanceof Error ? e.message : t('connections.modelsFailed'))
     } finally {
       setModelsLoading(false)
     }
@@ -728,9 +744,9 @@ function ConnectorSettings({
 
   // 사이드카 주소를 비워두면 쓰이는 시스템 기본값을 placeholder 로 보여준다
   const placeholderFor = (f: (typeof spec.fields)[number]): string | undefined => {
-    if (isEdit && f.kind === 'password' && hasSecret) return '●●●●●●●● 저장됨 — 바꿀 때만 입력'
+    if (isEdit && f.kind === 'password' && hasSecret) return t('connections.secretSavedPh')
     if (f.key === 'sidecar_url' && defaults?.sap.default_sidecar_url) {
-      return `비워두면 ${defaults.sap.default_sidecar_url}`
+      return t('connections.emptyDefault', { value: defaults.sap.default_sidecar_url })
     }
     return f.placeholder
   }
@@ -747,15 +763,15 @@ function ConnectorSettings({
     if (Object.keys(toOpen).length > 0) setOpen((o) => ({ ...o, ...toOpen }))
 
     const missing = missingFields.map((f) => f.label)
-    if (!name.trim()) missing.unshift('이름')
+    if (!name.trim()) missing.unshift(t('common.name'))
     if (missing.length > 0) {
-      setError(`필수 항목이 비어 있습니다: ${missing.join(', ')}`)
+      setError(t('connections.missingRequired', { list: missing.join(', ') }))
       return
     }
     // 허용 명령을 다 끄면 편집기에서 아무것도 못 돌린다 — 조용히 SELECT 로 되돌리지 않고 묻는다.
     const stmtField = spec.fields.find((f) => f.kind === 'statements')
     if (stmtField && parseStatements(values[stmtField.key]).length === 0) {
-      setError('허용 명령을 하나 이상 선택하세요 (읽기만 하려면 SELECT).')
+      setError(t('connections.needStatement'))
       return
     }
 
@@ -818,12 +834,12 @@ function ConnectorSettings({
 
         <div className="field">
           <label>
-            이름<span style={{ color: 'var(--red)' }}> *</span>
+            {t('common.name')}<span style={{ color: 'var(--red)' }}> *</span>
           </label>
           <input
             autoFocus
             value={name}
-            placeholder={`${spec.label} 운영`}
+            placeholder={t('connections.namePh', { name: spec.label })}
             onChange={(e) => setName(e.target.value)}
           />
         </div>
@@ -877,11 +893,11 @@ function ConnectorSettings({
 
       <div className="mf">
         <button className="btn" onClick={onCancel}>
-          취소
+          {t('common.cancel')}
         </button>
         <button className="btn primary" disabled={pending} onClick={submit}>
           {pending ? <Spinner /> : <Icon.save />}
-          {isEdit ? '저장' : '등록'}
+          {isEdit ? t('connections.save') : t('connections.register')}
         </button>
       </div>
     </>
@@ -903,6 +919,7 @@ function PreflightPanel({
   cdcEnabledSaved: boolean
   cdcEnabledDraft: boolean
 }) {
+  const t = useT()
   const preflight = usePreflight()
   const result = preflight.data
   const dirtyToggle = cdcEnabledSaved !== cdcEnabledDraft
@@ -911,27 +928,25 @@ function PreflightPanel({
     <div className="form-section">
       <div className="section-toggle open" style={{ cursor: 'default' }}>
         <span className="section-chevron">◈</span>
-        CDC 전제조건 점검
-        <span className="section-hint">실시간 소스로 쓸 준비 상태</span>
+        {t('connections.preflightTitle')}
+        <span className="section-hint">{t('connections.preflightHint')}</span>
       </div>
       <div className="field">
-        {dirtyToggle && (
-          <Banner kind="warn">
-            「CDC 사용」 변경은 아직 저장되지 않았습니다. 먼저 저장한 뒤 점검하세요.
-          </Banner>
-        )}
+        {dirtyToggle && <Banner kind="warn">{t('connections.preflightDirty')}</Banner>}
         <button
           className="btn"
           disabled={preflight.isPending}
           onClick={() => preflight.mutate(connectionId)}
         >
           {preflight.isPending ? <Spinner /> : <Icon.search />}
-          전제조건 점검
+          {t('connections.preflightRun')}
         </button>
         {preflight.error && (
           <div style={{ marginTop: 10 }}>
             <Banner kind="error">
-              점검 실패: {preflight.error instanceof Error ? preflight.error.message : '오류'}
+              {t('connections.preflightFailed', {
+                error: preflight.error instanceof Error ? preflight.error.message : t('status.error'),
+              })}
             </Banner>
           </div>
         )}
@@ -940,7 +955,7 @@ function PreflightPanel({
             <div style={{ marginBottom: 8 }}>
               <Tag status={result.ready ? 'ok' : 'error'} />{' '}
               <span style={{ fontSize: 13, color: 'var(--muted)' }}>
-                {result.ready ? 'CDC 소스로 사용할 수 있습니다.' : '아직 준비되지 않았습니다.'}
+                {result.ready ? t('connections.preflightReady') : t('connections.preflightNotReady')}
               </span>
             </div>
             <div className="preflight-list">
@@ -965,6 +980,7 @@ function PreflightPanel({
  * "어디서 이 연결을 쓰고 있나"만 보여준다. 파이프라인 이름을 누르면 캔버스로 이동한다.
  */
 function UsageDialog({ connection, onClose }: { connection: Connection; onClose: () => void }) {
+  const t = useT()
   const navigate = useNavigate()
   const { data, isLoading, error } = useConnectionUsages(connection.id)
 
@@ -976,8 +992,8 @@ function UsageDialog({ connection, onClose }: { connection: Connection; onClose:
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="mh">
-          <h3>사용 파이프라인</h3>
-          <button className="x" onClick={onClose} aria-label="닫기">
+          <h3>{t('connections.usageTitle')}</h3>
+          <button className="x" onClick={onClose} aria-label={t('common.close')}>
             ×
           </button>
         </div>
@@ -993,21 +1009,23 @@ function UsageDialog({ connection, onClose }: { connection: Connection; onClose:
             </span>
           </div>
 
-          {error && <Banner kind="error">사용처를 불러오지 못했습니다: {String(error)}</Banner>}
+          {error && (
+            <Banner kind="error">{t('connections.usagesLoadFailed', { error: String(error) })}</Banner>
+          )}
           {isLoading && (
             <p style={{ fontSize: 13, color: 'var(--muted)' }}>
-              <Spinner /> 사용처를 확인하는 중…
+              <Spinner /> {t('connections.usagesLoading')}
             </p>
           )}
 
           {data && !inUse && (
-            <Banner kind="ok">이 연결을 사용하는 파이프라인이 없습니다.</Banner>
+            <Banner kind="ok">{t('connections.noUsages')}</Banner>
           )}
 
           {data && inUse && (
             <>
               <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 10px' }}>
-                파이프라인 {usages.length}개 · 노드 {nodeCount}개가 이 연결을 사용 중입니다.
+                {t('connections.inUseSummary', { pipelines: usages.length, nodes: nodeCount })}
               </p>
               <div className="usage-list">
                 {usages.map((u) => (
@@ -1018,7 +1036,7 @@ function UsageDialog({ connection, onClose }: { connection: Connection; onClose:
                         onClose()
                         navigate(`/canvas/${u.pipeline_id}`)
                       }}
-                      title="이 파이프라인 열기"
+                      title={t('connections.openPipeline')}
                     >
                       {u.pipeline_name}
                     </button>
@@ -1037,7 +1055,7 @@ function UsageDialog({ connection, onClose }: { connection: Connection; onClose:
 
         <div className="mf">
           <button className="btn" onClick={onClose}>
-            닫기
+            {t('common.close')}
           </button>
         </div>
       </div>
@@ -1059,6 +1077,7 @@ function DeleteDialog({
   onClose: () => void
   onDeleted: (affectedPipelines: string[]) => void
 }) {
+  const t = useT()
   const navigate = useNavigate()
   const { data, isLoading } = useConnectionUsages(connection.id)
   const remove = useDeleteConnection()
@@ -1076,7 +1095,7 @@ function DeleteDialog({
       onDeleted(result.affected_pipelines)
       onClose()
     } catch (e) {
-      setError(e instanceof Error ? e.message : '삭제에 실패했습니다')
+      setError(e instanceof Error ? e.message : t('connections.deleteFailed'))
     }
   }
 
@@ -1084,8 +1103,8 @@ function DeleteDialog({
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="mh">
-          <h3>연결 삭제</h3>
-          <button className="x" onClick={onClose} aria-label="닫기">
+          <h3>{t('connections.deleteTitle')}</h3>
+          <button className="x" onClick={onClose} aria-label={t('common.close')}>
             ×
           </button>
         </div>
@@ -1104,15 +1123,15 @@ function DeleteDialog({
           {error && <Banner kind="error">{error}</Banner>}
           {isLoading && (
             <p style={{ fontSize: 13, color: 'var(--muted)' }}>
-              <Spinner /> 사용처를 확인하는 중…
+              <Spinner /> {t('connections.usagesLoading')}
             </p>
           )}
 
           {data && !inUse && (
             <>
-              <Banner kind="ok">이 연결을 사용하는 파이프라인이 없습니다.</Banner>
+              <Banner kind="ok">{t('connections.noUsages')}</Banner>
               <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 12 }}>
-                삭제하면 저장된 시크릿도 함께 지워지며 되돌릴 수 없습니다.
+                {t('connections.deleteSecretWarn')}
               </p>
             </>
           )}
@@ -1120,8 +1139,10 @@ function DeleteDialog({
           {data && inUse && (
             <>
               <Banner kind="error">
-                파이프라인 {usages.length}개 · 노드 {nodeCount}개가 이 연결을 사용 중입니다.
-                삭제하면 해당 노드는 연결을 잃고 <b>다음 실행에서 실패</b>합니다.
+                {t('connections.inUseSummary', { pipelines: usages.length, nodes: nodeCount })}{' '}
+                {t('connections.deleteWarnPre')}
+                <b>{t('connections.deleteWarnBold')}</b>
+                {t('connections.deleteWarnPost')}
               </Banner>
 
               <div className="usage-list">
@@ -1133,7 +1154,7 @@ function DeleteDialog({
                         onClose()
                         navigate(`/canvas/${u.pipeline_id}`)
                       }}
-                      title="이 파이프라인 열기"
+                      title={t('connections.openPipeline')}
                     >
                       {u.pipeline_name}
                     </button>
@@ -1153,7 +1174,7 @@ function DeleteDialog({
                   checked={acknowledged}
                   onChange={(e) => setAcknowledged(e.target.checked)}
                 />
-                위 파이프라인이 깨진다는 것을 이해했고, 그래도 삭제합니다.
+                {t('connections.deleteAck')}
               </label>
             </>
           )}
@@ -1161,7 +1182,7 @@ function DeleteDialog({
 
         <div className="mf">
           <button className="btn" onClick={onClose}>
-            취소
+            {t('common.cancel')}
           </button>
           <button
             className="btn danger-solid"
@@ -1169,7 +1190,7 @@ function DeleteDialog({
             onClick={submit}
           >
             {remove.isPending ? <Spinner /> : <Icon.trash />}
-            {inUse ? '그래도 삭제' : '삭제'}
+            {inUse ? t('connections.deleteAnyway') : t('connections.delete')}
           </button>
         </div>
       </div>

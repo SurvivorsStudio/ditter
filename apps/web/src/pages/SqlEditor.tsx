@@ -64,6 +64,7 @@ import {
   type DuckTable,
 } from '../canvas/duckRefs'
 import { DuckScriptModal } from '../canvas/DuckScriptModal'
+import { t, useT } from '../i18n'
 
 // 이 페이지에서 조회 가능한 연결 타입 — SQL(mysql·postgres·mssql) + MongoDB(mongo)
 const DB_TYPES = ['mysql', 'postgres', 'mssql', 'mongo']
@@ -144,7 +145,8 @@ const isUntouched = (sql: string) => !sql.trim() || sql.trim() === BLANK_SQL.tri
 
 const blankSession = (id: number): Session => ({
   id,
-  title: `쿼리 ${id}`,
+  // 만드는 시점의 언어로 짓고 세션에 저장된다 — 그 뒤로는 데이터라 언어를 따라가지 않는다.
+  title: t('sqlPage.queryTabTitle', { n: String(id) }),
   connId: '',
   sql: BLANK_SQL,
   mongoCmd: '',
@@ -303,6 +305,7 @@ function StatementTags({
   muted: SqlStatement[]
   onToggle: (s: SqlStatement) => void
 }) {
+  const tr = useT()
   const list = statementsOf(conn)
   return (
     <span className="stmt-tags">
@@ -312,7 +315,7 @@ function StatementTags({
         if (!canMute(s)) {
           // SELECT 는 끄지 않는다 — 실수로 조회하는 일은 없고, 끄면 편집기가 아무 일도 못 한다.
           return (
-            <span key={s} className={`stmt-tag risk-${riskOf(s)}`} title="조회는 항상 켜져 있습니다">
+            <span key={s} className={`stmt-tag risk-${riskOf(s)}`} title={tr('sqlPage.stmtSelectAlwaysOn')}>
               {name}
             </span>
           )
@@ -325,9 +328,7 @@ function StatementTags({
             aria-pressed={!off}
             onClick={() => onToggle(s)}
             title={
-              off
-                ? `${name} 를 꺼 두었습니다 — 눌러서 다시 켭니다`
-                : `${name} 를 실행할 수 있습니다 — 눌러서 잠시 끕니다 (실수 방지)`
+              off ? tr('sqlPage.stmtMutedTip', { name }) : tr('sqlPage.stmtOnTip', { name })
             }
           >
             {name}
@@ -385,6 +386,7 @@ function SessionEditor({
   onToggleMuted: (connId: string, s: SqlStatement) => void
   onAiEscalate: (payload: { sql: string; error?: string; explain?: string; assistant: string; dbConnId?: string }) => void
 }) {
+  const tr = useT()
   const duck = isDuckSession(session)
   // 파이썬 코드 팝업 — 세션마다 따로 연다 (탭이 여럿이면 각자 자기 쿼리를 보여야 한다)
   const [showScript, setShowScript] = useState(false)
@@ -400,7 +402,8 @@ function SessionEditor({
   // 아래로 내려가면 연결이 많을 때 스크롤에 묻힌다.
   // AI 어시스턴트는 이제 고유의 특수 탭(AI_TAB)이라 여기 드롭다운에는 넣지 않는다.
   const connOptions: SelectOption[] = [
-    { value: DUCK_CONN, label: '연합 조회', hint: '여러 연결', accent: true },
+    // '연합 조회' 는 두 언어 공통의 고정 표기(마커 프로토콜 값) — 번역하지 않는다.
+    { value: DUCK_CONN, label: '연합 조회', hint: tr('sqlPage.duckOptionHint'), accent: true },
     ...dbConns.map((c) => ({ value: c.id, label: c.name, hint: specFor(c.type).label })),
   ]
 
@@ -425,12 +428,12 @@ function SessionEditor({
   // 여기서 그대로 고르고 되돌릴 수 있다(연결을 탭 종류로 나누지 않는다).
   const connSelector = (
     <div className="sql-conn-bar">
-      <div className="sql-conn-select" title="이 탭이 조회할 연결">
+      <div className="sql-conn-select" title={tr('sqlPage.connSelectTitle')}>
         <SearchSelect
           value={duck ? DUCK_CONN : effConnId}
           onChange={onChangeConn}
           options={connOptions}
-          placeholder="연결 선택…"
+          placeholder={tr('sqlPage.connSelectPlaceholder')}
           loading={connLoading}
           leading={
             duck ? (
@@ -493,10 +496,10 @@ function SessionEditor({
     <button
       className="sql-view-toggle"
       onClick={toggleView}
-      title={notebook ? '단일 편집기로 전환' : '노트북(블록)으로 전환'}
+      title={notebook ? tr('sqlPage.toEditorTip') : tr('sqlPage.toNotebookTip')}
     >
       {notebook ? <Icon.code /> : <Icon.stack />}
-      {notebook ? '편집기' : '노트북'}
+      {notebook ? tr('sqlPage.viewEditor') : tr('sqlPage.viewNotebook')}
     </button>
   )
 
@@ -579,13 +582,13 @@ function SessionEditor({
                       className="btn sm sql-duck-py"
                       onClick={() => setShowScript(true)}
                       disabled={!session.sql.trim()}
-                      title="이 조회를 그대로 돌릴 수 있는 파이썬 코드로 — 노트북·배치로 옮길 때"
+                      title={tr('sqlPage.duckPyTip')}
                     >
                       <Icon.code />
                       Python
                     </button>
-                    <code className="sql-duck-hint" title="여러 연결의 테이블을 한 SQL 로 조회합니다">
-                      연결이름.데이터베이스[.스키마].테이블
+                    <code className="sql-duck-hint" title={tr('sqlPage.duckSyntaxTip')}>
+                      {tr('sqlPage.duckSyntax')}
                     </code>
                   </>
                 )}
@@ -670,6 +673,7 @@ function DockView(props: {
   canvasOwnerLabel: string
   onTakeCanvas: (sid: number) => void
 }) {
+  const tr = useT()
   const { dock } = props
   const isDropStrip = props.dropTarget?.dock === dock.id && props.dropTarget?.side == null
 
@@ -685,13 +689,13 @@ function DockView(props: {
           const s = special ? null : props.sessions.find((x) => x.id === tabId)
           if (!special && !s) return null
           const label = isConn
-            ? '연결'
+            ? tr('sqlPage.tabConnections')
             : isSaved
-              ? '저장됨'
+              ? tr('sqlPage.tabSaved')
               : isFav
-                ? '즐겨찾기'
+                ? tr('sqlPage.tabFavorites')
                 : isAi
-                  ? 'AI 어시스턴트'
+                  ? tr('sqlPage.tabAi')
                   : (s?.title ?? '')
           // 쿼리 탭은 제목 앞에 그 탭이 선택한 연결의 DB 배지를 보여준다.
           // 아직 연결을 안 골랐으면 코드(<>) 아이콘으로 대체한다.
@@ -726,7 +730,7 @@ function DockView(props: {
               onAuxClick={(e) => {
                 if (e.button === 1 && !special) props.onCloseTab(tabId)
               }}
-              title={special ? `${label} — 드래그해서 이동/분할` : undefined}
+              title={special ? tr('sqlPage.specialTabTip', { label }) : undefined}
             >
               {tabIcon}
               <span className="sql-tab-title">{label}</span>
@@ -738,8 +742,8 @@ function DockView(props: {
                     e.stopPropagation()
                     props.onCloseTab(tabId)
                   }}
-                  aria-label="탭 닫기"
-                  title="탭 닫기"
+                  aria-label={tr('sqlPage.closeTab')}
+                  title={tr('sqlPage.closeTab')}
                 >
                   ×
                 </button>
@@ -750,13 +754,18 @@ function DockView(props: {
         <button
           className="sql-tab-add"
           onClick={props.onAddTab}
-          title="새 쿼리 탭 (Alt+T)"
-          aria-label="새 쿼리 탭"
+          title={tr('sqlPage.newQueryTabTip')}
+          aria-label={tr('sqlPage.newQueryTab')}
         >
           <Icon.plus />
         </button>
         <div className="sql-tabs-spacer" />
-        <button className="sql-tab-split" onClick={props.onSplit} title="오른쪽으로 분할" aria-label="분할">
+        <button
+          className="sql-tab-split"
+          onClick={props.onSplit}
+          title={tr('sqlPage.splitRightTip')}
+          aria-label={tr('sqlPage.split')}
+        >
           <Icon.split />
         </button>
       </div>
@@ -864,18 +873,20 @@ function DockView(props: {
                   <div className="canvas-busy">
                     <Icon.alert />
                     <p>
-                      캔버스는 한 번에 한 탭에서만 편집할 수 있습니다
+                      {tr('sqlPage.canvasSingleTab')}
                       {props.canvasOwnerLabel && (
                         <>
                           {' '}
-                          — 지금은 <b>{props.canvasOwnerLabel}</b> 탭이 쓰고 있습니다
+                          {tr('sqlPage.canvasOwnedByPre')}
+                          <b>{props.canvasOwnerLabel}</b>
+                          {tr('sqlPage.canvasOwnedByPost')}
                         </>
                       )}
                       .
                     </p>
                     <button className="btn primary" onClick={() => props.onTakeCanvas(tabId)}>
                       <Icon.flow />
-                      여기서 편집
+                      {tr('sqlPage.editHere')}
                     </button>
                   </div>
                 )}
@@ -917,7 +928,7 @@ function DockView(props: {
                 props.dropTarget?.dock === dock.id && props.dropTarget?.side === 'top' ? 'over' : ''
               }`}
             >
-              <span className="sql-dz-hint">▲ 위쪽에 분할</span>
+              <span className="sql-dz-hint">{tr('sqlPage.dzTop')}</span>
             </div>
             <div className="sql-dz-mid">
               <div
@@ -927,7 +938,7 @@ function DockView(props: {
                   props.dropTarget?.dock === dock.id && props.dropTarget?.side === 'left' ? 'over' : ''
                 }`}
               >
-                <span className="sql-dz-hint">◧ 왼쪽</span>
+                <span className="sql-dz-hint">{tr('sqlPage.dzLeft')}</span>
               </div>
               <div className="sql-dz-center" />
               <div
@@ -937,7 +948,7 @@ function DockView(props: {
                   props.dropTarget?.dock === dock.id && props.dropTarget?.side === 'right' ? 'over' : ''
                 }`}
               >
-                <span className="sql-dz-hint">오른쪽 ◨</span>
+                <span className="sql-dz-hint">{tr('sqlPage.dzRight')}</span>
               </div>
             </div>
             <div
@@ -947,7 +958,7 @@ function DockView(props: {
                 props.dropTarget?.dock === dock.id && props.dropTarget?.side === 'bottom' ? 'over' : ''
               }`}
             >
-              <span className="sql-dz-hint">▼ 아래쪽에 분할</span>
+              <span className="sql-dz-hint">{tr('sqlPage.dzBottom')}</span>
             </div>
           </div>
         )}
@@ -961,6 +972,7 @@ function DockView(props: {
  *  다른 도크의 탭 바에 놓으면 이동, 본문 좌/우/위/아래에 놓으면 그 방향으로 분할된다.
  *  내비게이터에서 테이블을 클릭하면 "마지막에 포커스한 쿼리 탭" 커서에 삽입된다. */
 export function SqlEditorPage() {
+  const tr = useT() // 이 컴포넌트에는 지역 변수 `t` 가 여럿이라 이름을 달리 둔다
   const { data: connections = [], isLoading: connLoading } = useConnections()
   const dbConns = useMemo(() => connections.filter((c) => DB_TYPES.includes(c.type)), [connections])
   const { data: pipelines = [] } = usePipelines()
@@ -1113,8 +1125,11 @@ export function SqlEditorPage() {
         ? { sql: duckStarter(connections) }
         : {}
     // AI 챗으로 바꾸면 탭 이름도 그렇게 — 아직 이름을 안 바꾼 기본 탭일 때만.
+    // 기본 이름은 만들 때의 언어를 따르므로 두 언어 형태를 모두 기본으로 인정한다.
     const rename =
-      isChatConn(connId) && target && /^쿼리 \d+$/.test(target.title) ? { title: 'AI 챗' } : {}
+      isChatConn(connId) && target && /^(쿼리|Query) \d+$/.test(target.title)
+        ? { title: tr('sqlPage.aiChatTitle') }
+        : {}
     updateSession(sid, { connId, mongoNs: null, ...seed, ...rename })
   }
 
@@ -1294,7 +1309,7 @@ export function SqlEditorPage() {
             })
           : null
       if (ref) insertReg.current.get(target.id)?.(ref)
-      else setDuckHint(conn ? `「${conn.name}」 은(는) 연합 조회에 쓸 수 없습니다 (MySQL·PostgreSQL·SQL Server 만).` : null)
+      else setDuckHint(conn ? tr('sqlPage.duckNotAttachable', { name: conn.name }) : null)
       setLastFocused(target.id)
       return
     }
@@ -1419,9 +1434,9 @@ export function SqlEditorPage() {
     const outSql = p.assistant.match(/```sql\s*\n([\s\S]*?)```/i)?.[1].trim() || null
     // fix(오류)냐 tune(계획)이냐에 따라 첫 사용자 메시지를 다르게 짓는다.
     const userContent = p.error
-      ? `다음 쿼리에서 오류가 났어요. 고쳐 주세요.\n\n\`\`\`sql\n${p.sql}\n\`\`\`\n\n오류:\n${p.error}`
-      : `다음 쿼리를 튜닝하고 싶어요.\n\n\`\`\`sql\n${p.sql}\n\`\`\`` +
-        (p.explain ? `\n\n실행 계획:\n${p.explain}` : '')
+      ? tr('sqlPage.aiFixPrompt', { sql: p.sql, error: p.error })
+      : tr('sqlPage.aiTunePrompt', { sql: p.sql }) +
+        (p.explain ? tr('sqlPage.aiTuneExplain', { explain: p.explain }) : '')
     const seeded: ChatState = {
       dbConnId: p.dbConnId,
       intent: p.error ? 'sql.generate' : 'sql.tune',
@@ -1525,9 +1540,7 @@ export function SqlEditorPage() {
     if (canvasOwner !== null && canvasOwner !== sid && useCanvasStore.getState().dirty) {
       const prev = L.sessions.find((s) => s.id === canvasOwner)
       const ok = confirm(
-        `「${prev?.title ?? '다른 파이프라인'}」 탭에 저장하지 않은 변경이 있습니다.
-` +
-          '버리고 여기서 편집할까요?',
+        tr('sqlPage.canvasDirtyConfirm', { tab: prev?.title ?? tr('sqlPage.otherPipeline') }),
       )
       if (!ok) return
     }
@@ -1582,7 +1595,7 @@ export function SqlEditorPage() {
         updated_at: created.updated_at,
       })
     } catch (e) {
-      alert(e instanceof Error ? e.message : '파이프라인을 만들지 못했습니다')
+      alert(e instanceof Error ? e.message : tr('sqlPage.createPipelineFailed'))
     }
   }
 
@@ -1697,10 +1710,11 @@ export function SqlEditorPage() {
       <div className="view sqlpage-empty">
         <div className="sqlpage-empty-box">
           <Icon.db />
-          <h3>DB 연결이 없습니다</h3>
+          <h3>{tr('sqlPage.noDbTitle')}</h3>
           <p>
-            SQL 편집기는 DB 연결(MySQL · PostgreSQL · MSSQL · MongoDB)이 필요합니다. 먼저{' '}
-            <b>연결</b> 메뉴에서 등록하세요.
+            {tr('sqlPage.noDbBodyPre')}
+            <b>{tr('sqlPage.noDbBodyConn')}</b>
+            {tr('sqlPage.noDbBodyPost')}
           </p>
         </div>
       </div>
@@ -1720,7 +1734,7 @@ export function SqlEditorPage() {
             <div
               className="sql-pane-vsplit"
               onPointerDown={(e) => startColResize(e, L.columns[ci - 1].id, col.id)}
-              title="드래그해서 좌·우 크기 조절"
+              title={tr('sqlPage.colResizeTip')}
             >
               <span className="sql-pane-vsplit-grip" />
             </div>
@@ -1732,7 +1746,7 @@ export function SqlEditorPage() {
                   <div
                     className="sql-hsplit"
                     onPointerDown={(e) => startRowResize(e, col.docks[di - 1].id, dock.id)}
-                    title="드래그해서 위·아래 크기 조절"
+                    title={tr('sqlPage.rowResizeTip')}
                   >
                     <span className="sql-hsplit-grip" />
                   </div>

@@ -15,12 +15,17 @@
  *  `Record<X, MsgKey>` 로 두고 조회 함수에서 t() 를 부른다.
  */
 import { canvas } from './messages/canvas'
+import { canvasPage } from './messages/canvasPage'
 import { common } from './messages/common'
+import { connections } from './messages/connections'
 import { connectors } from './messages/connectors'
+import { home } from './messages/home'
 import { login } from './messages/login'
+import { monitor } from './messages/monitor'
 import { nav } from './messages/nav'
 import { nodes } from './messages/nodes'
 import { runs } from './messages/runs'
+import { sqlPage } from './messages/sqlPage'
 import { statements } from './messages/statements'
 import { status } from './messages/status'
 import { getLocale, localeTag, useLocale, type Locale } from './locale'
@@ -35,6 +40,11 @@ const MESSAGES = {
   ...connectors,
   ...statements,
   ...canvas,
+  ...home,
+  ...monitor,
+  ...connections,
+  ...canvasPage,
+  ...sqlPage,
 } as const
 
 export type MsgKey = keyof typeof MESSAGES

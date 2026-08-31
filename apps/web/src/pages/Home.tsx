@@ -19,6 +19,7 @@ import {
   formatDateTime,
   formatNumber,
 } from '../components/common'
+import { useT } from '../i18n'
 
 /** 칩 색은 노드 종류를 따른다 — 소스=파랑(a) · 변환=보라(b) · 타깃=초록(c) (설계 문서 §8) */
 const CHIP_CLASS: Record<string, string> = {
@@ -31,6 +32,7 @@ const CHIP_CLASS: Record<string, string> = {
 }
 
 export function Home() {
+  const t = useT()
   const navigate = useNavigate()
   const { data: stats, isLoading: statsLoading } = useStats()
   const { data: pipelines, isLoading, error } = usePipelines()
@@ -44,37 +46,40 @@ export function Home() {
       <div className="pad">
         <div className="stats">
           <Stat
-            label="전체 파이프라인"
+            label={t('home.statPipelines')}
             value={statsLoading ? <Spinner /> : formatNumber(stats?.pipelines_total ?? 0)}
-            sub={`활성 ${stats?.pipelines_active ?? 0} · 비활성 ${stats?.pipelines_inactive ?? 0}`}
+            sub={t('home.statPipelinesSub', {
+              active: stats?.pipelines_active ?? 0,
+              inactive: stats?.pipelines_inactive ?? 0,
+            })}
             color="var(--purple)"
           />
           <Stat
-            label="오늘 성공"
+            label={t('home.statSuccessToday')}
             value={statsLoading ? <Spinner /> : formatNumber(stats?.runs_success_today ?? 0)}
-            sub={`24시간 성공률 ${stats?.success_rate_24h ?? 0}%`}
+            sub={t('home.statSuccessSub', { rate: stats?.success_rate_24h ?? 0 })}
             color="var(--green)"
             tone="up"
           />
           <Stat
-            label="실패"
+            label={t('status.failed')}
             value={statsLoading ? <Spinner /> : formatNumber(stats?.runs_failed_today ?? 0)}
-            sub={(stats?.runs_failed_today ?? 0) > 0 ? '확인 필요' : '이상 없음'}
+            sub={(stats?.runs_failed_today ?? 0) > 0 ? t('home.statNeedsCheck') : t('home.statAllClear')}
             color="var(--red)"
             tone={(stats?.runs_failed_today ?? 0) > 0 ? 'down' : undefined}
           />
           <Stat
-            label="처리 레코드"
+            label={t('home.statRecords')}
             value={statsLoading ? <Spinner /> : formatCompact(stats?.records_24h ?? 0)}
-            sub="지난 24시간"
+            sub={t('home.statLast24h')}
             color="var(--blue)"
           />
         </div>
 
         <div className="section-h">
-          <h2>파이프라인</h2>
+          <h2>{t('nav.pipelines')}</h2>
           <span className="more" onClick={() => navigate('/monitor')}>
-            실행 이력 보기 →
+            {t('home.viewRunHistory')}
           </span>
         </div>
 
@@ -83,7 +88,7 @@ export function Home() {
             <Banner kind="ok">
               <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ flex: 1 }}>{notice}</span>
-                <button className="x" onClick={() => setNotice(null)} aria-label="알림 닫기">
+                <button className="x" onClick={() => setNotice(null)} aria-label={t('home.dismissNotice')}>
                   ×
                 </button>
               </span>
@@ -91,13 +96,13 @@ export function Home() {
           </div>
         )}
 
-        {error && <EmptyState title="목록을 불러오지 못했습니다">{String(error)}</EmptyState>}
+        {error && <EmptyState title={t('home.loadFailed')}>{String(error)}</EmptyState>}
 
-        {isLoading && !pipelines && <EmptyState title="불러오는 중…" />}
+        {isLoading && !pipelines && <EmptyState title={t('runs.loading')} />}
 
         {pipelines && pipelines.length === 0 && (
-          <EmptyState title="아직 파이프라인이 없습니다" image="/logo.png">
-            상단의 [새 파이프라인] 버튼으로 첫 파이프라인을 만들어 보세요.
+          <EmptyState title={t('home.emptyTitle')} image="/logo.png">
+            {t('home.emptyBody')}
           </EmptyState>
         )}
 
@@ -113,7 +118,10 @@ export function Home() {
                 </div>
                 <div className="pmeta">
                   <div className="nm">{p.name}</div>
-                  <div className="ds">{p.description || `버전 관리 · ${p.flow.join(' → ') || '노드 없음'}`}</div>
+                  <div className="ds">
+                    {p.description ||
+                      t('home.flowFallback', { flow: p.flow.join(' → ') || t('home.noNodes') })}
+                  </div>
                 </div>
                 <div className="miniflow">
                   {p.flow.map((label, index) => (
@@ -124,14 +132,14 @@ export function Home() {
                   ))}
                 </div>
                 <div className="schedule">
-                  🕑 {p.schedule_enabled && p.schedule ? p.schedule : '수동'}
+                  🕑 {p.schedule_enabled && p.schedule ? p.schedule : t('trigger.manual')}
                 </div>
                 <Tag status={p.last_run_status ?? p.status} />
                 {canEdit && (
                   <button
                     className="btn sm danger prow-del"
-                    title="파이프라인 삭제"
-                    aria-label={`${p.name} 삭제`}
+                    title={t('home.deletePipeline')}
+                    aria-label={t('home.deleteAria', { name: p.name })}
                     onClick={(e) => {
                       // 행 전체가 캔버스로 가는 링크다 — 삭제는 그 이동을 타면 안 된다
                       e.stopPropagation()
@@ -154,9 +162,9 @@ export function Home() {
           onClose={() => setDeleting(null)}
           onDeleted={(impact) =>
             setNotice(
-              `'${impact.pipeline_name}' 을(를) 삭제했습니다.` +
+              t('home.deletedNotice', { name: impact.pipeline_name }) +
                 (impact.runs_total > 0
-                  ? ` 실행 이력 ${formatNumber(impact.runs_total)}건도 함께 지워졌습니다.`
+                  ? t('home.deletedRunsNotice', { n: impact.runs_total })
                   : ''),
             )
           }
@@ -181,6 +189,7 @@ function DeletePipelineDialog({
   onClose: () => void
   onDeleted: (impact: DeletionImpact) => void
 }) {
+  const t = useT()
   const { data, isLoading } = usePipelineDeletionImpact(pipeline.id)
   const remove = useDeletePipeline()
   const [error, setError] = useState<string | null>(null)
@@ -198,7 +207,7 @@ function DeletePipelineDialog({
       onDeleted(impact)
       onClose()
     } catch (e) {
-      setError(e instanceof Error ? e.message : '삭제에 실패했습니다')
+      setError(e instanceof Error ? e.message : t('home.deleteFailed'))
     }
   }
 
@@ -206,8 +215,8 @@ function DeletePipelineDialog({
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="mh">
-          <h3>파이프라인 삭제</h3>
-          <button className="x" onClick={onClose} aria-label="닫기">
+          <h3>{t('home.deletePipeline')}</h3>
+          <button className="x" onClick={onClose} aria-label={t('common.close')}>
             ×
           </button>
         </div>
@@ -226,59 +235,56 @@ function DeletePipelineDialog({
 
           {isLoading && !data && (
             <p style={{ fontSize: 13, color: 'var(--muted)' }}>
-              <Spinner /> 삭제 영향을 확인하는 중…
+              <Spinner /> {t('home.impactLoading')}
             </p>
           )}
 
           {data && cdcBlocked && (
             <Banner kind="error">
-              CDC 스트림이 살아 있어 지울 수 없습니다 (<b>{data.cdc_stream_status}</b>). 모니터에서
-              스트림을 먼저 중지하세요. 여기서 지우면 Debezium 커넥터가 주인 없이 남아 계속
-              토픽에 씁니다.
+              {t('home.cdcBlockedLead')} (<b>{data.cdc_stream_status}</b>).{' '}
+              {t('home.cdcBlockedRest')}
             </Banner>
           )}
 
           {data && !cdcBlocked && runBlocked && (
             <Banner kind="warn">
-              지금 실행이 진행 중입니다 (<b>{data.active_run_status}</b>). 그래도 지우면 그 실행은
-              중간에 끊깁니다. 끝나기를 기다리는 편이 안전합니다.
+              {t('home.runBlockedLead')} (<b>{data.active_run_status}</b>).{' '}
+              {t('home.runBlockedRest')}
             </Banner>
           )}
 
           {data && !cdcBlocked && !runBlocked && (
-            <Banner kind="warn">
-              삭제하면 되돌릴 수 없습니다. 아래 이력도 함께 사라집니다.
-            </Banner>
+            <Banner kind="warn">{t('home.deleteWarn')}</Banner>
           )}
 
           {data && (
             <div className="usage-list" style={{ marginTop: 12 }}>
               <div className="usage-row">
                 <span className="usage-name" style={{ cursor: 'default' }}>
-                  실행 이력
+                  {t('nav.crumb.monitor')}
                 </span>
                 <span className="usage-nodes">
-                  <code>{formatNumber(data.runs_total)}건</code>
+                  <code>{t('common.count', { n: data.runs_total })}</code>
                   {data.last_run_at && (
-                    <code>마지막 {formatDateTime(data.last_run_at)}</code>
+                    <code>{t('home.lastAt', { at: formatDateTime(data.last_run_at) })}</code>
                   )}
                 </span>
               </div>
               <div className="usage-row">
                 <span className="usage-name" style={{ cursor: 'default' }}>
-                  증분 체크포인트
+                  {t('home.checkpoints')}
                 </span>
                 <span className="usage-nodes">
-                  <code>{formatNumber(data.checkpoints_total)}개</code>
-                  {data.checkpoints_total > 0 && <code>워터마크 초기화됨</code>}
+                  <code>{t('home.itemCount', { n: data.checkpoints_total })}</code>
+                  {data.checkpoints_total > 0 && <code>{t('home.watermarkReset')}</code>}
                 </span>
               </div>
               <div className="usage-row">
                 <span className="usage-name" style={{ cursor: 'default' }}>
-                  버전 스냅샷
+                  {t('home.versionSnapshots')}
                 </span>
                 <span className="usage-nodes">
-                  <code>{formatNumber(data.versions_total)}개</code>
+                  <code>{t('home.itemCount', { n: data.versions_total })}</code>
                 </span>
               </div>
             </div>
@@ -291,16 +297,14 @@ function DeletePipelineDialog({
                 checked={acknowledged}
                 onChange={(e) => setAcknowledged(e.target.checked)}
               />
-              {runBlocked
-                ? '진행 중인 실행이 끊긴다는 것을 이해했고, 그래도 삭제합니다.'
-                : '실행 이력과 체크포인트가 함께 지워진다는 것을 이해했습니다.'}
+              {runBlocked ? t('home.ackRun') : t('home.ackHistory')}
             </label>
           )}
         </div>
 
         <div className="mf">
           <button className="btn" onClick={onClose}>
-            취소
+            {t('common.cancel')}
           </button>
           <button
             className="btn danger-solid"
@@ -310,7 +314,7 @@ function DeletePipelineDialog({
             onClick={submit}
           >
             {remove.isPending ? <Spinner /> : <Icon.trash />}
-            {runBlocked ? '그래도 삭제' : '삭제'}
+            {runBlocked ? t('home.deleteAnyway') : t('home.delete')}
           </button>
         </div>
       </div>
