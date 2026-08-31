@@ -63,6 +63,26 @@ const render = (ui: React.ReactElement) => {
 const names = () => [...container.querySelectorAll('.sq-query-name')].map((el) => el.textContent ?? '')
 const buttonByText = (text: string) =>
   [...container.querySelectorAll('button')].find((b) => b.textContent?.includes(text))
+/** 추가 입력줄 안의 버튼 — 헤더의 [폴더] 와 글자가 겹쳐서 범위를 좁혀야 한다. */
+const addButton = (text: string) =>
+  [...container.querySelectorAll('.sq-addfolder button')].find((b) =>
+    b.textContent?.includes(text),
+  ) as HTMLElement | undefined
+const addInput = () => container.querySelector<HTMLInputElement>('.sq-addfolder input')
+const typeAdd = (value: string) => {
+  const el = addInput()
+  act(() => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+    setter?.call(el, value)
+    el?.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+/** 종류 버튼 위에 포인터를 올린다 — 손대지 않은 이름은 그 종류를 따라간다.
+ *  React 는 onPointerEnter 를 pointerover 에서 합성하므로 그쪽을 쏜다. */
+const hoverAdd = (text: string) =>
+  act(() => {
+    addButton(text)?.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }))
+  })
 
 beforeEach(() => {
   container = document.createElement('div')
@@ -142,16 +162,129 @@ describe('SavedQueriesPanel', () => {
     act(() => {
       container.querySelector<HTMLElement>('.sq-folder-row .sq-edit')?.click()
     })
-    const input = container.querySelector<HTMLInputElement>('.sq-addfolder input')
+    typeAdd('주문 적재')
     act(() => {
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
-      setter?.call(input, '주문 적재')
-      input?.dispatchEvent(new Event('input', { bubbles: true }))
-    })
-    act(() => {
-      buttonByText('파이프라인')?.click()
+      addButton('파이프라인')?.click()
     })
     expect(onNewPipeline).toHaveBeenCalledWith('f1', '주문 적재')
+  })
+
+  it('입력줄은 만들어질 이름이 채워진 채로 열린다', () => {
+    render(<SavedQueriesPanel folders={[folder('f1', '일배치')]} connections={[]} pipelines={[]} {...handlers} />)
+    act(() => {
+      container.querySelector<HTMLElement>('.sq-folder-row .sq-edit')?.click()
+    })
+    // 주 버튼(=Enter)이 [폴더] 라 폴더 이름으로 열린다
+    expect(addInput()?.value).toBe('새 폴더')
+    // 다른 종류를 가리키면 그 종류의 이름으로 바뀐다 — 보이는 이름과 만들어질 이름이 같아야 한다
+    hoverAdd('파이프라인')
+    expect(addInput()?.value).toBe('새 파이프라인')
+    hoverAdd('쿼리')
+    expect(addInput()?.value).toBe('새 쿼리')
+  })
+
+  it('직접 고친 이름은 다른 종류를 가리켜도 그대로 둔다', () => {
+    render(<SavedQueriesPanel folders={[folder('f1', '일배치')]} connections={[]} pipelines={[]} {...handlers} />)
+    act(() => {
+      container.querySelector<HTMLElement>('.sq-folder-row .sq-edit')?.click()
+    })
+    typeAdd('주문 적재')
+    hoverAdd('파이프라인')
+    expect(addInput()?.value).toBe('주문 적재')
+  })
+
+  it('채워진 이름 그대로 누르면 그 이름으로 만들어진다', () => {
+    const onNewQuery = vi.fn()
+    const onNewPipeline = vi.fn()
+    const onNewFolder = vi.fn()
+    render(
+      <SavedQueriesPanel
+        folders={[folder('f1', '일배치')]}
+        connections={[]}
+        pipelines={[]}
+        {...handlers}
+        onNewQuery={onNewQuery}
+        onNewPipeline={onNewPipeline}
+        onNewFolder={onNewFolder}
+      />,
+    )
+    // hover 없이 곧장 누르는 길(터치·키보드)에서도 누른 종류의 이름이어야 한다
+    for (const [text, spy, name] of [
+      ['쿼리', onNewQuery, '새 쿼리'],
+      ['파이프라인', onNewPipeline, '새 파이프라인'],
+    ] as const) {
+      act(() => {
+        container.querySelector<HTMLElement>('.sq-folder-row .sq-edit')?.click()
+      })
+      act(() => {
+        addButton(text)?.click()
+      })
+      expect(spy).toHaveBeenCalledWith('f1', name)
+    }
+    act(() => {
+      container.querySelector<HTMLElement>('.sq-folder-row .sq-edit')?.click()
+    })
+    act(() => {
+      addButton('폴더')?.click()
+    })
+    expect(onNewFolder).toHaveBeenCalledWith('f1', '새 폴더')
+  })
+
+  it('기본 이름은 형제·떠 있는 탭 이름을 피한다', () => {
+    const onNewQuery = vi.fn()
+    const onNewPipeline = vi.fn()
+    const f: SavedFolder = {
+      ...folder('f1', '일배치'),
+      queries: [{ id: 'q1', name: '새 쿼리', mode: 'sql', text: '', createdAt: 0 }],
+    }
+    render(
+      <SavedQueriesPanel
+        folders={[f]}
+        connections={[]}
+        pipelines={[pipeline('p1', '새 파이프라인')]}
+        openTitles={['새 쿼리 2', '새 파이프라인 2']}
+        {...handlers}
+        onNewQuery={onNewQuery}
+        onNewPipeline={onNewPipeline}
+      />,
+    )
+    act(() => {
+      container.querySelector<HTMLElement>('.sq-folder-row .sq-edit')?.click()
+    })
+    hoverAdd('쿼리')
+    expect(addInput()?.value).toBe('새 쿼리 3')
+    act(() => {
+      addButton('쿼리')?.click()
+    })
+    expect(onNewQuery).toHaveBeenCalledWith('f1', '새 쿼리 3')
+    act(() => {
+      container.querySelector<HTMLElement>('.sq-folder-row .sq-edit')?.click()
+    })
+    act(() => {
+      addButton('파이프라인')?.click()
+    })
+    expect(onNewPipeline).toHaveBeenCalledWith('f1', '새 파이프라인 3')
+  })
+
+  it('최상위 입력줄도 폴더 이름이 채워진 채로 열린다', () => {
+    const onNewFolder = vi.fn()
+    render(
+      <SavedQueriesPanel
+        folders={[folder('f1', '새 폴더')]}
+        connections={[]}
+        pipelines={[]}
+        {...handlers}
+        onNewFolder={onNewFolder}
+      />,
+    )
+    act(() => {
+      container.querySelector<HTMLElement>('.sq-head .sq-newfolder')?.click()
+    })
+    expect(addInput()?.value).toBe('새 폴더 2')
+    act(() => {
+      addButton('폴더')?.click()
+    })
+    expect(onNewFolder).toHaveBeenCalledWith(null, '새 폴더 2')
   })
 
   it('파이프라인을 누르면 onOpenPipeline 이 불린다', () => {

@@ -8,6 +8,7 @@ import {
   placedPipelineIds,
   removeFolder,
   removePipeline,
+  uniqueName,
   type SavedFolder,
 } from './savedStore'
 
@@ -89,5 +90,29 @@ describe('savedStore — 파이프라인 항목', () => {
     expect(out[0].pipelines).toEqual([])
     expect(out[0].folders).toEqual([])
     localStorage.clear()
+  })
+})
+
+/** 새로 만들 때 입력줄에 미리 채우는 이름. 겹치면 트리에서도 탭에서도 구별되지 않는다. */
+describe('uniqueName', () => {
+  it('겹치지 않으면 그대로 돌려준다', () => {
+    expect(uniqueName('새 쿼리', ['다른 쿼리'])).toBe('새 쿼리')
+  })
+
+  it('겹치면 번호를 붙이고, 그 번호도 차 있으면 건너뛴다', () => {
+    expect(uniqueName('새 쿼리', ['새 쿼리'])).toBe('새 쿼리 2')
+    expect(uniqueName('새 쿼리', ['새 쿼리', '새 쿼리 2'])).toBe('새 쿼리 3')
+  })
+
+  it('이미 번호가 붙어 있으면 그 번호를 올린다 — 덧붙이면 「새 쿼리 2 2」 가 된다', () => {
+    expect(uniqueName('새 쿼리 2', ['새 쿼리 2'])).toBe('새 쿼리 3')
+  })
+
+  it('앞뒤 공백·대소문자를 무시한다 (canvasStore.uniqueLabel 과 같은 규칙)', () => {
+    expect(uniqueName('Report', ['  report '])).toBe('Report 2')
+  })
+
+  it('빈 이름은 「무제」로 떨어진다', () => {
+    expect(uniqueName('   ', [])).toBe('무제')
   })
 })

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from './icons'
 import { Tag } from './common'
@@ -7,6 +7,7 @@ import { specFor } from '../api/connectorFields'
 import {
   flattenFolders,
   placedPipelineIds,
+  uniqueName,
   type SavedFolder,
   type SavedQuery,
 } from '../api/savedStore'
@@ -22,6 +23,20 @@ function findQueryNote(folders: SavedFolder[], name: string): string {
   }
   return ''
 }
+
+/** 트리에서 id 로 폴더를 찾는다 (재귀). 형제 이름을 모아 기본 이름을 지을 때 쓴다. */
+function findFolder(folders: SavedFolder[], id: string): SavedFolder | null {
+  for (const f of folders) {
+    if (f.id === id) return f
+    const sub = findFolder(f.folders, id)
+    if (sub) return sub
+  }
+  return null
+}
+
+/** 새로 만들 때 입력줄에 **미리 채워 두는** 이름. */
+const ADD_DEFAULT_NAME = { folder: '새 폴더', query: '새 쿼리', pipeline: '새 파이프라인' } as const
+type AddKind = keyof typeof ADD_DEFAULT_NAME
 
 /** 끌 수 있는 것 네 가지. `pipeline` 은 폴더에 담긴 항목(트리 항목 id),
  *  `loose` 는 아직 어느 폴더에도 없는 「미분류」 파이프라인(파이프라인 id)이다 —
@@ -59,18 +74,27 @@ export function SavedQueriesPanel({
   folders,
   connections,
   pipelines,
+  openTitles = [],
   ...h
 }: {
   folders: SavedFolder[]
   connections: Connection[]
   pipelines: PipelineSummary[]
+  /** 지금 떠 있는 탭 이름들. 기본 이름이 그것들과 겹치지 않게 하려고 받는다 —
+   *  쿼리·파이프라인은 만들자마자 탭으로 열리는데, 같은 이름의 탭이 둘이면
+   *  방금 무엇이 생겼는지 알 수 없다. */
+  openTitles?: string[]
 } & PanelHandlers) {
   const [open, setOpen] = useState<Record<string, boolean>>({})
   const [editing, setEditing] = useState<{ folderId?: string; queryId?: string } | null>(null)
   const [editValue, setEditValue] = useState('')
   // 새 폴더 추가: parentId 가 null 이면 최상위, 문자열이면 그 폴더의 하위
   const [addParent, setAddParent] = useState<string | null | undefined>(undefined)
+  // 입력줄은 **기본 이름이 채워진 채로** 열린다 (빈 칸이 아니다 — 아래 openAdd 주석).
   const [addName, setAddName] = useState('')
+  // 사용자가 직접 고친 이름인지. 안 고쳤으면 누르는 버튼의 종류를 따라간다.
+  const [addTouched, setAddTouched] = useState(false)
+  const addInput = useRef<HTMLInputElement | null>(null)
   // 드래그앤드롭 이동
   const [drag, setDrag] = useState<{
     kind: DragKind
@@ -176,52 +200,104 @@ export function SavedQueriesPanel({
     if (e.key === 'Enter') commitEdit()
     if (e.key === 'Escape') setEditing(null)
   }
-  const submitAdd = (kind: 'folder' | 'query' | 'pipeline') => {
-    const name = addName.trim()
-    if (name) {
-      // 쿼리·파이프라인은 반드시 폴더 안에 있어야 한다 — 최상위(addParent=null)에선 폴더만 만든다.
-      if (kind === 'query' && addParent) h.onNewQuery(addParent, name)
-      else if (kind === 'pipeline' && addParent) h.onNewPipeline(addParent, name)
-      else h.onNewFolder(addParent ?? null, name)
-    }
+  /** 이름을 안 적었을 때 붙일 이름.
+   *
+   *  겹침을 피하는 대상이 둘이다: 같은 자리의 **형제**(트리에서 구별해야 한다)와
+   *  지금 떠 있는 **탭 이름**(쿼리·파이프라인은 만들자마자 탭으로 열린다).
+   *  폴더는 탭이 되지 않으므로 형제 폴더 이름만 본다. */
+  const defaultAddName = (kind: AddKind, parentId: string | null) => {
+    const parent = parentId ? findFolder(folders, parentId) : null
+    const taken =
+      kind === 'folder'
+        ? (parent?.folders ?? folders).map((f) => f.name)
+        : kind === 'query'
+          ? [...(parent?.queries ?? []).map((q) => q.name), ...openTitles]
+          : [...pipelines.map((p) => p.name), ...openTitles]
+    return uniqueName(ADD_DEFAULT_NAME[kind], taken)
+  }
+
+  /** 입력줄을 연다 — **기본 이름을 채운 채로.**
+   *
+   *  전에는 빈 칸으로 열렸고, 이름 없이 만들면 아무것도 생기지 않고 줄만 닫혔다.
+   *  이름을 지어 주기만 해도 만들어지기는 하지만, 그러면 **무엇이 생겼는지 누르기
+   *  전에는 알 수 없다** — 만들자마자 탭이 열리는데 그 탭 이름을 방금 처음 본다.
+   *  그래서 만들어질 이름을 미리 보여주고, 그대로 두면 그 이름이 된다.
+   *
+   *  기본은 [폴더] 다 — 그것이 주 버튼이고 Enter 가 하는 일이다. 다른 종류를
+   *  가리키면(hover·포커스) 그 종류의 이름으로 바뀐다. */
+  const openAdd = (parentId: string | null) => {
+    setAddParent(parentId)
+    setAddName(defaultAddName('folder', parentId))
+    setAddTouched(false)
+  }
+  /** 손대지 않은 이름은 가리키는 버튼의 종류를 따라간다 — 보이는 이름과 만들어질
+   *  이름이 갈리면 미리 보여 주는 의미가 없다. */
+  const previewAdd = (kind: AddKind) => {
+    if (!addTouched && addParent !== undefined) setAddName(defaultAddName(kind, addParent))
+  }
+  const closeAdd = () => {
     setAddParent(undefined)
     setAddName('')
+    setAddTouched(false)
   }
-  const cancelAdd = () => {
-    setAddParent(undefined)
-    setAddName('')
+  const submitAdd = (kind: AddKind) => {
+    // 쿼리·파이프라인은 반드시 폴더 안에 있어야 한다 — 최상위(addParent=null)에선 폴더만 만든다.
+    const real: AddKind = kind !== 'folder' && !addParent ? 'folder' : kind
+    // 비워 두고 눌러도 만들어진다. 이름을 손대지 않았으면 **누른 종류**의 기본 이름이다
+    // (hover 없이 곧장 누르는 길 — 터치·키보드 — 에서도 화면과 결과가 같아야 한다).
+    const typed = addTouched ? addName.trim() : ''
+    const name = typed || defaultAddName(real, addParent ?? null)
+    if (real === 'query' && addParent) h.onNewQuery(addParent, name)
+    else if (real === 'pipeline' && addParent) h.onNewPipeline(addParent, name)
+    else h.onNewFolder(addParent ?? null, name)
+    closeAdd()
   }
+  const cancelAdd = closeAdd
+  // 열릴 때 채워 둔 이름을 통째로 선택해 둔다 — 그대로 두면 그 이름이고,
+  // 바로 타이핑하면 덮인다. (지울 것이 없어야 고치기 쉽다.)
+  useEffect(() => {
+    if (addParent !== undefined) addInput.current?.select()
+  }, [addParent])
+  /** 종류 버튼 — 가리키기만 해도 입력줄의 이름이 그 종류로 바뀐다. */
+  const addKindButton = (kind: AddKind, label: string, icon: React.ReactNode, title: string) => (
+    <button
+      className={`btn sm ${kind === 'folder' ? 'primary' : ''}`}
+      onClick={() => submitAdd(kind)}
+      onPointerEnter={() => previewAdd(kind)}
+      onFocus={() => previewAdd(kind)}
+      title={title}
+    >
+      {icon}
+      {label}
+    </button>
+  )
   const addBox = (parentId: string | null) =>
     addParent === parentId ? (
       <div className="sq-addfolder">
         <input
+          ref={addInput}
           autoFocus
           value={addName}
           placeholder={parentId === null ? '폴더 이름…' : '이름…'}
-          onChange={(e) => setAddName(e.target.value)}
+          onChange={(e) => {
+            setAddName(e.target.value)
+            setAddTouched(true)
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') submitAdd('folder')
             if (e.key === 'Escape') cancelAdd()
           }}
         />
-        <button className="btn sm primary" onClick={() => submitAdd('folder')} title="폴더 만들기">
-          <Icon.stack />
-          폴더
-        </button>
+        {addKindButton('folder', '폴더', <Icon.stack />, '폴더 만들기')}
         {parentId !== null && (
           <>
-            <button className="btn sm" onClick={() => submitAdd('query')} title="쿼리 파일 만들기">
-              <Icon.code />
-              쿼리
-            </button>
-            <button
-              className="btn sm"
-              onClick={() => submitAdd('pipeline')}
-              title="파이프라인을 새로 만들고 이 폴더에 놓습니다 (탭으로 열립니다)"
-            >
-              <Icon.flow />
-              파이프라인
-            </button>
+            {addKindButton('query', '쿼리', <Icon.code />, '쿼리 파일 만들기')}
+            {addKindButton(
+              'pipeline',
+              '파이프라인',
+              <Icon.flow />,
+              '파이프라인을 새로 만들고 이 폴더에 놓습니다 (탭으로 열립니다)',
+            )}
           </>
         )}
         <button className="sq-add-x" onClick={cancelAdd} title="취소 (Esc)" aria-label="취소">
@@ -354,8 +430,7 @@ export function SavedQueriesPanel({
             onPointerDown={stopDrag}
             onClick={() => {
               setOpen((o) => ({ ...o, [f.id]: true }))
-              setAddParent(f.id)
-              setAddName('')
+              openAdd(f.id)
             }}
           >
             <Icon.plus />
@@ -484,10 +559,7 @@ export function SavedQueriesPanel({
         <span className="sq-title">쿼리 · 파이프라인</span>
         <button
           className="sq-newfolder"
-          onClick={() => {
-            setAddParent((p) => (p === null ? undefined : null))
-            setAddName('')
-          }}
+          onClick={() => (addParent === null ? closeAdd() : openAdd(null))}
           title="새 폴더"
         >
           <Icon.plus />

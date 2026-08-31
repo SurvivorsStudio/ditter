@@ -795,6 +795,7 @@ function DockView(props: {
                   folders={props.saved}
                   connections={props.navConnections}
                   pipelines={props.pipelines}
+                  openTitles={props.sessions.map((x) => x.title)}
                   onOpen={props.onOpenSaved}
                   onDeleteQuery={props.onDeleteSavedQuery}
                   onDeleteFolder={props.onDeleteSavedFolder}
