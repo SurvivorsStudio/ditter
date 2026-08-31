@@ -56,6 +56,15 @@ type CachedResult = {
   colFilters: Record<string, string>
   error: string | null
   query: string
+  /** 이 결과가 **실제로 나간 목적지**. 셀의 연결은 본문 마커(`-- @conn`)라 실행한 뒤에도
+   *  바뀔 수 있어, 되살린 결과의 「더 보기」·정렬도 그 결과가 나왔던 곳으로 가야 한다.
+   *  없으면 지금 셀이 가리키는 곳으로 떨어져 한 표에 두 DB 의 행이 섞인다.
+   *
+   *  **옵셔널인 이유**: 이 필드가 생기기 전에 쓰인 캐시가 그대로 살아 있다. 키 버전
+   *  (`NB_CACHE_KEY`)을 올리면 기존 사용자의 결과 캐시가 통째로 버려지므로 올리지 않고,
+   *  없으면 예전처럼 지금 값으로 떨어뜨린다(`ranTarget`). */
+  mode?: 'sql' | 'mongo' | 'duck'
+  connId?: string
   viewMode?: 'table' | 'chart' | 'json'
   chart?: ChartConfig | null
   ts: number
@@ -463,8 +472,9 @@ function SqlCell({
     query: string
     sort: { col: string; dir: 'asc' | 'desc' } | null
     filters: { col: string; value: string }[]
-    /** 이 결과가 실제로 나간 목적지. 새로고침으로 복원된 결과에는 없다 — 그때만 지금 계산한
-     *  값으로 떨어진다(복원의 근거가 된 `cell.src` 가 같으므로 같은 목적지가 나온다). */
+    /** 이 결과가 실제로 나간 목적지. 캐시에 함께 저장하므로 **새로고침으로 복원된 결과에도
+     *  남는다.** 이 필드가 생기기 전에 쓰인 옛 캐시에서만 비고, 그때만 `ranTarget()` 이
+     *  지금 값으로 떨어진다. */
     mode?: 'sql' | 'mongo' | 'duck'
     connId?: string
   }>({
@@ -475,6 +485,9 @@ function SqlCell({
           .map(([col, value]) => ({ col, value: value.trim() }))
           .filter((f) => f.value !== '')
       : [],
+    // 되살린 결과가 나갔던 곳. 옛 캐시에는 없어 undefined 로 남는다(위 주석).
+    mode: hydrated?.mode,
+    connId: hydrated?.connId,
   })
 
   /* ── 이 셀이 어디로 나가는가 ──────────────────────────────────
@@ -570,6 +583,9 @@ function SqlCell({
       colFilters: cf,
       error: err,
       query: ex.query,
+      // 이 결과가 나간 곳까지 담는다 — 새로고침 뒤의 「더 보기」·정렬도 여기로 가야 한다.
+      mode: ex.mode,
+      connId: ex.connId,
       viewMode: resultView,
       chart: chartCfg,
       ts: Date.now(),
@@ -584,8 +600,12 @@ function SqlCell({
 
   /** 이 셀이 **지금** 나갈 곳 — 새 실행이 쓴다. */
   const liveTarget = (): ExecTarget => ({ mode: effMode, connId: effConn })
-  /** 화면의 결과가 **나왔던** 곳 — 다음 페이지·정렬·필터가 쓴다. 기록이 없을 때(새로고침
-   *  복원)만 지금 값으로 떨어진다. `connId` 는 연합 조회에서 정상적으로 비므로 `mode` 로 가른다. */
+  /** 화면의 결과가 **나왔던** 곳 — 다음 페이지·정렬·필터가 쓴다. 목적지는 캐시에도 담기므로
+   *  새로고침으로 복원된 결과에도 남는다.
+   *
+   *  **폴백은 그래도 남긴다.** 이 필드가 생기기 전에 쓰인 캐시(`eai_nb_cache_v1` 는 버전을
+   *  올리지 않았다 — 올리면 기존 결과가 통째로 버려진다)에는 목적지가 없고, 그때는 예전처럼
+   *  지금 값으로 떨어진다. `connId` 는 연합 조회에서 정상적으로 비므로 `mode` 로 가른다. */
   const ranTarget = (): ExecTarget => {
     const ex = executedRef.current
     return ex.mode ? { mode: ex.mode, connId: ex.connId } : liveTarget()
