@@ -7525,9 +7525,21 @@ tbody tr:hover {
   padding: 8px 12px;
   border-bottom: 1px solid var(--line2);
   background: #fff;
+  /* 좁아지면 **줄을 바꾼다** (.sql-editor-toolbar 와 같은 규칙).
+     안 바꾸면 가장 잘 줄어드는 것 — 허용 명령 태그와 단축키 힌트 — 이 한 글자씩
+     세로로 쌓여 툴바가 몇 배로 높아지고 옆 버튼과 겹쳐 보인다. */
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
-.nb-toolbar-spacer {
-  flex: 1;
+/* 오른쪽 동작 묶음 — 좁아지면 통째로 다음 줄로 내려간다.
+   낱개로 두면 「저장」만 아래로 떨어지는 식으로 묶음이 갈라져 어느 것이 한 벌인지 안 보인다. */
+.nb-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  row-gap: 6px;
+  flex-wrap: wrap;
+  margin-left: auto;
 }
 .nb-toolbar-div {
   width: 1px;
@@ -7576,6 +7588,9 @@ tbody tr:hover {
   font-size: 11px;
   color: var(--muted);
   cursor: help;
+  /* 툴바가 한 줄일 때 이것부터 줄어들어 「단/축/키」로 쪼개졌다 — 줄 바꿈 대신 줄을 넘긴다. */
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .nb-md-placeholder {
   color: var(--muted);
