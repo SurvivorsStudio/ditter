@@ -133,7 +133,7 @@ cd apps/web && npm run test:coverage
 
 **머지 시점**의 같은 규칙은 [commit-convention.md](docs/conventions/commit-convention.md)
 **§5.1** 이 소유하고(머지 규칙의 SSOT 가 그쪽이다 — 타깃·squash·사전 게이트도 거기서 본다),
-`/pr-merge` **§1d** 가 머지 직전에 기계적으로 확인한다.
+`/pr-merge`(`.claude/commands/pr-merge.md`) **§1d** 가 머지 직전에 기계적으로 확인한다.
 
 **두 시점을 갈라 둔 이유가 있다.** 게이트는 머지 버튼 앞에서만 작동한다. 착수 규칙이 없으면
 같은 이슈를 둘이 각자 다 고쳐 놓은 뒤에야 겹침을 알게 된다 — 머지는 막히지만 한쪽 작업은
