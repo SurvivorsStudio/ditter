@@ -82,9 +82,9 @@ class SyncSpec:
 
 def _one(nodes: list[PipelineNode], what: str) -> PipelineNode:
     if not nodes:
-        raise ValidationError(f"{what} 노드가 없습니다 — 이 파이프라인은 실시간 동기화가 아닙니다")
+        raise ValidationError(t("sync.node.missing", name=what))
     if len(nodes) > 1:
-        raise ValidationError(f"{what} 노드가 {len(nodes)}개입니다 — 하나만 지원합니다")
+        raise ValidationError(t("sync.node.too_many", name=what, n=len(nodes)))
     return nodes[0]
 
 
@@ -96,15 +96,15 @@ def extract_sync_spec(definition: PipelineDefinition) -> SyncSpec:
     타깃에서 안 잡힌다 (기획안 §6). 매핑이 없으면 **소문자로 내려 확정하고**, 무엇으로
     등록했는지는 ``stream.config`` 에 남겨 화면에서 보이게 한다 — 조용히 바꾸지 않는다.
     """
-    source = _one([n for n in definition.nodes if n.is_sync_source], "실시간 동기화 소스")
-    target = _one([n for n in definition.nodes if n.is_sync_target], "실시간 동기화 타깃")
+    source = _one([n for n in definition.nodes if n.is_sync_source], t("sync.node.source"))
+    target = _one([n for n in definition.nodes if n.is_sync_target], t("sync.node.target"))
 
     source_conn = str(source.params.get("connection_id") or "")
     if not source_conn:
-        raise ValidationError(f"동기화 소스 '{source.id}' 에 connection_id 가 없습니다")
+        raise ValidationError(t("sync.spec.source_no_connection", name=source.id))
     target_conn = str(target.params.get("connection_id") or "")
     if not target_conn:
-        raise ValidationError(f"동기화 타깃 '{target.id}' 에 connection_id 가 없습니다")
+        raise ValidationError(t("sync.spec.target_no_connection", name=target.id))
 
     source_ns = str(source.params.get("namespace") or symmetric_config.DEFAULT_SOURCE_SCHEMA)
     target_ns = str(target.params.get("namespace") or "")
@@ -117,15 +117,15 @@ def extract_sync_spec(definition: PipelineDefinition) -> SyncSpec:
 
     raw_tables = source.params.get("tables")
     if not isinstance(raw_tables, list) or not raw_tables:
-        raise ValidationError(f"동기화 소스 '{source.id}' 에 동기화할 테이블이 없습니다")
+        raise ValidationError(t("sync.spec.no_tables", name=source.id))
 
     tables: list[symmetric_config.SyncTable] = []
     for item in raw_tables:
         if not isinstance(item, dict):
-            raise ValidationError("테이블 항목은 이름·채널을 담은 객체여야 합니다")
+            raise ValidationError(t("sync.spec.table_bad_shape"))
         name = str(item.get("name") or "").strip()
         if not name:
-            raise ValidationError("테이블 이름이 비어 있습니다")
+            raise ValidationError(t("sync.spec.table_name_empty"))
         mapping = mappings.get(name.casefold(), {})
         tables.append(
             symmetric_config.SyncTable(
@@ -215,7 +215,7 @@ def _sql_connector(session: Session, connection_id: str) -> SqlConnector:
     conn = connection_service.get_connection(session, connection_id)
     connector = connection_service.open_cached_connector(session, conn)
     if not isinstance(connector, SqlConnector):
-        raise ValidationError(f"SQL 연결이 아닙니다: {conn.type}")
+        raise ValidationError(t("sync.conn.not_sql", name=conn.type))
     return connector
 
 
@@ -241,7 +241,7 @@ def _config_connector(
     config["database"] = sync_database
     connector = build(conn.type, config)
     if not isinstance(connector, SqlConnector):
-        raise ValidationError(f"SQL 연결이 아닙니다: {conn.type}")
+        raise ValidationError(t("sync.conn.not_sql", name=conn.type))
     return connector
 
 
@@ -254,7 +254,7 @@ def _wrap(exc: SQLAlchemyError, what: str) -> DependencyError:
     원인이 화면에 닿지 않는 것이 이 래핑이 막으려는 것이다.
     """
     detail = str(getattr(exc, "orig", exc)).splitlines()[0]
-    return DependencyError(f"{what} 실패: {detail}")
+    return DependencyError(t("sync.db.op_failed", name=what, cause=detail))
 
 
 def _release(connector: SqlConnector, sync_database: str) -> None:
@@ -282,7 +282,7 @@ def _execute(connector: SqlConnector, statements: list[symmetric_config.Statemen
             for sql, params in statements:
                 db.execute(text(sql), params)
     except SQLAlchemyError as exc:
-        raise _wrap(exc, "SymmetricDS 설정 반영") from exc
+        raise _wrap(exc, t("sync.db.op.apply_config")) from exc
 
 
 def _fetch(
@@ -294,7 +294,7 @@ def _fetch(
             result = db.execute(text(sql), params)
             return [dict(row) for row in result.mappings()]
     except SQLAlchemyError as exc:
-        raise _wrap(exc, "소스 조회") from exc
+        raise _wrap(exc, t("sync.db.op.query_source")) from exc
 
 
 def _scalar(connector: SqlConnector, sql: str, params: dict[str, Any] | None = None) -> Any:
@@ -302,7 +302,7 @@ def _scalar(connector: SqlConnector, sql: str, params: dict[str, Any] | None = N
         with connector.engine.connect() as db:
             return db.execute(text(sql), params or {}).scalar()
     except SQLAlchemyError as exc:
-        raise _wrap(exc, "소스 조회") from exc
+        raise _wrap(exc, t("sync.db.op.query_source")) from exc
 
 
 # --------------------------------------------------------------------- preflight
@@ -744,7 +744,7 @@ def _unicode_capture_check(connector: SqlConnector, spec: SyncSpec) -> Preflight
 def get_stream(session: Session, stream_id: str) -> CdcStream:
     stream = session.get(CdcStream, stream_id)
     if stream is None:
-        raise NotFoundError(f"동기화 스트림을 찾을 수 없습니다: {stream_id}")
+        raise NotFoundError(t("sync.stream.not_found", name=stream_id))
     return stream
 
 
@@ -816,16 +816,14 @@ def start_stream(session: Session, pipeline_id: str, *, skip_preflight: bool = F
     spec = _with_catalog(spec, source_db)
 
     if active_stream_for(session, pipeline_id) is not None:
-        raise ConflictError("이미 실행 중인 동기화가 있습니다 — 먼저 정지하세요")
+        raise ConflictError(t("sync.stream.already_running"))
     _assert_no_table_conflict(session, spec)
 
     if not skip_preflight:
         result = preflight(session, pipeline_id)
         if not result.ready:
             failed = [c.label for c in result.checks if c.level == "error" and not c.ok]
-            raise ValidationError(
-                "착수 점검을 통과하지 못했습니다: " + ", ".join(failed) + " (점검 결과를 확인하세요)"
-            )
+            raise ValidationError(t("sync.stream.preflight_failed", list=", ".join(failed)))
 
     settings = get_settings()
     stream = CdcStream(
@@ -944,7 +942,7 @@ def pause_stream(session: Session, stream_id: str) -> CdcStream:
     """
     stream = _require_symmetricds(get_stream(session, stream_id))
     if stream.status != CdcStreamStatus.RUNNING:
-        raise ValidationError(f"실행 중인 동기화만 일시정지할 수 있습니다 (현재: {stream.status})")
+        raise ValidationError(t("sync.stream.pause_wrong_status", name=stream.status))
     _set_enabled(session, stream, enabled=False)
     stream.status = CdcStreamStatus.PAUSED
     session.flush()
@@ -954,7 +952,7 @@ def pause_stream(session: Session, stream_id: str) -> CdcStream:
 def resume_stream(session: Session, stream_id: str) -> CdcStream:
     stream = _require_symmetricds(get_stream(session, stream_id))
     if stream.status != CdcStreamStatus.PAUSED:
-        raise ValidationError(f"일시정지된 동기화만 재개할 수 있습니다 (현재: {stream.status})")
+        raise ValidationError(t("sync.stream.resume_wrong_status", name=stream.status))
     _set_enabled(session, stream, enabled=True)
     stream.status = CdcStreamStatus.RUNNING
     session.flush()

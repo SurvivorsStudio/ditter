@@ -161,4 +161,60 @@ sync: dict[str, tuple[str, str]] = {
     # 사이드카 엔진 목록에 들어가는 이름 — `sidecar_engines` 의 `{list}` 로 이어 붙는다.
     "sync.engine.source": ("소스", "source"),
     "sync.engine.target": ("타깃", "target"),
+    # ---- 노드 종류 이름 (아래 `sync.node.*` 문장의 `{name}` 으로 들어간다) ----
+    "sync.node.source": ("실시간 동기화 소스", "real-time sync source"),
+    "sync.node.target": ("실시간 동기화 타깃", "real-time sync target"),
+
+    # ---- 스펙 추출·수명주기 예외 ----
+    "sync.node.missing": (
+        "{name} 노드가 없습니다 — 이 파이프라인은 실시간 동기화가 아닙니다",
+        "There is no {name} node — this is not a real-time sync pipeline",
+    ),
+    "sync.node.too_many": (
+        "{name} 노드가 {n}개입니다 — 하나만 지원합니다",
+        "There are {n} {name} nodes — only one is supported",
+    ),
+    "sync.spec.source_no_connection": (
+        "동기화 소스 '{name}' 에 connection_id 가 없습니다",
+        "The sync source '{name}' has no connection_id",
+    ),
+    "sync.spec.target_no_connection": (
+        "동기화 타깃 '{name}' 에 connection_id 가 없습니다",
+        "The sync target '{name}' has no connection_id",
+    ),
+    "sync.spec.no_tables": (
+        "동기화 소스 '{name}' 에 동기화할 테이블이 없습니다",
+        "The sync source '{name}' has no tables to sync",
+    ),
+    "sync.spec.table_bad_shape": (
+        "테이블 항목은 이름·채널을 담은 객체여야 합니다",
+        "A table entry must be an object with a name and a channel",
+    ),
+    "sync.spec.table_name_empty": ("테이블 이름이 비어 있습니다", "The table name is empty"),
+    "sync.conn.not_sql": ("SQL 연결이 아닙니다: {name}", "Not an SQL connection: {name}"),
+    "sync.stream.not_found": (
+        "동기화 스트림을 찾을 수 없습니다: {name}",
+        "Sync stream not found: {name}",
+    ),
+    "sync.stream.already_running": (
+        "이미 실행 중인 동기화가 있습니다 — 먼저 정지하세요",
+        "A sync is already running — stop it first",
+    ),
+    "sync.stream.preflight_failed": (
+        "착수 점검을 통과하지 못했습니다: {list} (점검 결과를 확인하세요)",
+        "The preflight check did not pass: {list} (see the check results)",
+    ),
+    "sync.stream.pause_wrong_status": (
+        "실행 중인 동기화만 일시정지할 수 있습니다 (현재: {name})",
+        "Only a running sync can be paused (currently: {name})",
+    ),
+    "sync.stream.resume_wrong_status": (
+        "일시정지된 동기화만 재개할 수 있습니다 (현재: {name})",
+        "Only a paused sync can be resumed (currently: {name})",
+    ),
+    # ---- 드라이버 예외 래핑 ----
+    # `{cause}` 는 드라이버가 만든 문장이라 번역되지 않는다 — 그래서 문장 끝에 둔다.
+    "sync.db.op_failed": ("{name} 실패: {cause}", "{name} failed: {cause}"),
+    "sync.db.op.apply_config": ("SymmetricDS 설정 반영", "Applying the SymmetricDS configuration"),
+    "sync.db.op.query_source": ("소스 조회", "Querying the source"),
 }
