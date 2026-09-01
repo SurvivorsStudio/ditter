@@ -136,4 +136,111 @@ dag: dict[str, tuple[str, str]] = {
         "Node result references form a cycle "
         "— if two nodes reference each other, neither can run first",
     ),
+    # ---- API 트리거 변수 바인딩 (bind_variables · _coerce) ----
+    # `${name}` 은 표기다 — SLOT 이 `{name}` 만 치환하므로 앞의 `$` 는 글자로 남는다.
+    "dag.var.undeclared_supplied": (
+        "선언되지 않은 값입니다: {list}. 받을 수 있는 변수: {allowed}",
+        "These values are not declared: {list}. Accepted variables: {allowed}",
+    ),
+    "dag.var.none_allowed": ("(없음)", "(none)"),
+    "dag.var.required_missing": ("필수 값이 없습니다: {name}", "A required value is missing: {name}"),
+    "dag.var.no_value_no_default": (
+        "{name} 값이 없고 기본값도 없습니다 — 값을 보내거나 기본값을 정하세요",
+        "{name} has neither a value nor a default — send a value or set a default",
+    ),
+    "dag.var.not_a_number": ("{name} 은 숫자여야 합니다: {value}", "{name} must be a number: {value}"),
+    "dag.var.not_a_boolean": (
+        "{name} 은 참/거짓이어야 합니다: {value}",
+        "{name} must be true or false: {value}",
+    ),
+    # ---- API 트리거 노드 ----
+    "dag.trigger.only_one": (
+        "API 트리거는 파이프라인당 하나만 둘 수 있습니다 "
+        "— 호출 창구가 여럿이면 어느 변수 묶음으로 도는지 알 수 없습니다",
+        "Only one API trigger is allowed per pipeline "
+        "— with several endpoints there is no telling which set of variables a run uses",
+    ),
+    "dag.trigger.duplicate_variable": (
+        "변수 이름이 중복됩니다: ${name}",
+        "Duplicate variable name: ${name}",
+    ),
+    "dag.trigger.undeclared_variable": (
+        "선언되지 않은 변수입니다: ${name} — API 트리거 노드에 이 변수를 추가하세요",
+        "This variable is not declared: ${name} — add it to the API trigger node",
+    ),
+    "dag.trigger.no_trigger_for_variable": (
+        "`${name}` 을 쓰려면 API 트리거 노드가 필요합니다",
+        "Using `${name}` requires an API trigger node",
+    ),
+    "dag.trigger.unused_variable": (
+        "선언만 하고 쓰지 않는 변수입니다: ${name}",
+        "This variable is declared but never used: ${name}",
+    ),
+    "dag.trigger.optional_without_default": (
+        "${name} 은 선택 변수인데 기본값이 없습니다 — 호출에서 빠지면 실행이 실패합니다",
+        "${name} is optional but has no default — a call that omits it will fail",
+    ),
+    # ---- Python 변환 노드 ----
+    "dag.python.empty": ("Python 코드가 비어 있습니다", "The Python code is empty"),
+    # `{cause}` 는 CPython 이 만든 영어 구문 오류다 — 번역할 수 없어 문장 끝에 둔다.
+    "dag.python.syntax_error": (
+        "Python 구문 오류: {cause} (줄 {line})",
+        "Python syntax error on line {line}: {cause}",
+    ),
+    "dag.python.both_defined": (
+        "transform 과 transform_batch 를 동시에 정의할 수 없습니다",
+        "transform and transform_batch cannot both be defined",
+    ),
+    "dag.python.none_defined": (
+        "transform(row) 또는 transform_batch(df) 함수를 정의해야 합니다",
+        "Define either transform(row) or transform_batch(df)",
+    ),
+    # ---- 스위치(분기) 노드 ----
+    "dag.switch.need_case": (
+        "스위치에 case 가 최소 1개 필요합니다",
+        "A switch needs at least one case",
+    ),
+    "dag.switch.case_no_condition": ("case #{i} 에 조건이 없습니다", "Case #{i} has no conditions"),
+    "dag.switch.case_no_field": (
+        "case #{i} 조건에 field 가 없습니다",
+        "A condition in case #{i} has no field",
+    ),
+    # ---- SAP 소스 ----
+    "dag.sap.unknown_mode": (
+        "알 수 없는 SAP 읽기 모드: {name} ({allowed})",
+        "Unknown SAP read mode: {name} ({allowed})",
+    ),
+    "dag.sap.bapi_needs_function": (
+        "BAPI 모드는 function_name 이 필요합니다",
+        "BAPI mode requires function_name",
+    ),
+    "dag.sap.read_table_needs_table": (
+        "RFC_READ_TABLE 모드는 table 이 필요합니다",
+        "RFC_READ_TABLE mode requires table",
+    ),
+    "dag.sap.no_fields_warning": (
+        "필드를 지정하지 않으면 테이블 전체를 읽습니다. "
+        "폭이 512자를 넘으면 나눠 호출하게 되니 필요한 필드만 고르거나 BAPI 를 쓰세요",
+        "Without a field list the whole table is read. "
+        "Rows wider than 512 characters are split across calls — pick only the fields you "
+        "need, or use a BAPI",
+    ),
+    # ---- 응답 노드 ----
+    "dag.resp.max_rows_not_a_number": (
+        "max_rows 는 숫자여야 합니다: {value}",
+        "max_rows must be a number: {value}",
+    ),
+    "dag.resp.max_rows_too_small": (
+        "max_rows 는 1 이상이어야 합니다",
+        "max_rows must be at least 1",
+    ),
+    "dag.resp.max_rows_too_large": (
+        "max_rows 는 {n} 이하여야 합니다 — 응답 노드는 행을 메모리에 모으므로 상한이 필요합니다",
+        "max_rows must be at most {n} — a response node collects rows in memory, so it needs a cap",
+    ),
+    "dag.resp.columns_not_a_list": (
+        "columns 는 컬럼명 목록이어야 합니다",
+        "columns must be a list of column names",
+    ),
+    "dag.resp.columns_duplicate": ("columns 에 중복이 있습니다", "columns contains duplicates"),
 }

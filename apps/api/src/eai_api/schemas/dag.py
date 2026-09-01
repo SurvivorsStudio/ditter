@@ -218,21 +218,22 @@ def bind_variables(declared: list[TriggerVariable], supplied: dict[str, Any] | N
     unknown = sorted(set(body) - known)
     if unknown:
         raise var_syntax.VariableError(
-            f"선언되지 않은 값입니다: {', '.join(unknown)}. "
-            f"받을 수 있는 변수: {', '.join(sorted(known)) or '(없음)'}"
-        )
+                    t(
+                        "dag.var.undeclared_supplied",
+                        list=", ".join(unknown),
+                        allowed=", ".join(sorted(known)) or t("dag.var.none_allowed"),
+                    )
+                )
 
     for spec in declared:
         if spec.name in body:
             values[spec.name] = _coerce(spec, body[spec.name])
         elif spec.required:
-            raise var_syntax.VariableError(f"필수 값이 없습니다: {spec.name}")
+            raise var_syntax.VariableError(t("dag.var.required_missing", name=spec.name))
         elif spec.default is not None:
             values[spec.name] = _coerce(spec, spec.default)
         else:
-            raise var_syntax.VariableError(
-                f"{spec.name} 값이 없고 기본값도 없습니다 — 값을 보내거나 기본값을 정하세요"
-            )
+            raise var_syntax.VariableError(t("dag.var.no_value_no_default", name=spec.name))
 
     return values
 
@@ -243,7 +244,9 @@ def _coerce(spec: TriggerVariable, raw: Any) -> Any:
         try:
             number = float(raw)
         except (TypeError, ValueError) as exc:
-            raise var_syntax.VariableError(f"{spec.name} 은 숫자여야 합니다: {raw!r}") from exc
+            raise var_syntax.VariableError(
+                t("dag.var.not_a_number", name=spec.name, value=repr(raw))
+            ) from exc
         # 정수로 떨어지면 정수로 — `LIMIT 10.0` 은 SQL 이 거부한다
         return int(number) if number.is_integer() else number
 
@@ -255,7 +258,7 @@ def _coerce(spec: TriggerVariable, raw: Any) -> Any:
             return True
         if text in {"false", "0", "no"}:
             return False
-        raise var_syntax.VariableError(f"{spec.name} 은 참/거짓이어야 합니다: {raw!r}")
+        raise var_syntax.VariableError(t("dag.var.not_a_boolean", name=spec.name, value=repr(raw)))
 
     return str(raw)
 
@@ -770,14 +773,18 @@ def _python_node_issues(node: PipelineNode) -> list[ValidationIssue]:
     """
     code = str(node.params.get("code") or "").strip()
     if not code:
-        return [ValidationIssue(level="error", node_id=node.id, message="Python 코드가 비어 있습니다")]
+        return [_issue("error", "dag.python.empty", node_id=node.id)]
     try:
         tree = ast.parse(code)
     except SyntaxError as exc:
         return [
-            ValidationIssue(
-                level="error", node_id=node.id, message=f"Python 구문 오류: {exc.msg} (줄 {exc.lineno})"
-            )
+            _issue(
+                            "error",
+                            "dag.python.syntax_error",
+                            node_id=node.id,
+                            cause=exc.msg,
+                            line=exc.lineno,
+                        )
         ]
     names = {
         n.name
@@ -788,19 +795,11 @@ def _python_node_issues(node: PipelineNode) -> list[ValidationIssue]:
     has_batch = "transform_batch" in names
     if has_row and has_batch:
         return [
-            ValidationIssue(
-                level="error",
-                node_id=node.id,
-                message="transform 과 transform_batch 를 동시에 정의할 수 없습니다",
-            )
+            _issue("error", "dag.python.both_defined", node_id=node.id)
         ]
     if not has_row and not has_batch:
         return [
-            ValidationIssue(
-                level="error",
-                node_id=node.id,
-                message="transform(row) 또는 transform_batch(df) 함수를 정의해야 합니다",
-            )
+            _issue("error", "dag.python.none_defined", node_id=node.id)
         ]
     return []
 
@@ -813,19 +812,19 @@ def _switch_node_issues(node: PipelineNode) -> list[ValidationIssue]:
     cases = node.params.get("cases")
     if not isinstance(cases, list) or not cases:
         return [
-            ValidationIssue(level="error", node_id=node.id, message="스위치에 case 가 최소 1개 필요합니다")
+            _issue("error", "dag.switch.need_case", node_id=node.id)
         ]
     issues: list[ValidationIssue] = []
     for i, case in enumerate(cases, start=1):
         conds = case.get("conditions") if isinstance(case, dict) else None
         if not isinstance(conds, list) or not conds:
             issues.append(
-                ValidationIssue(level="error", node_id=node.id, message=f"case #{i} 에 조건이 없습니다")
+                _issue("error", "dag.switch.case_no_condition", node_id=node.id, i=i)
             )
             continue
         if any(not (isinstance(c, dict) and c.get("field")) for c in conds):
             issues.append(
-                ValidationIssue(level="error", node_id=node.id, message=f"case #{i} 조건에 field 가 없습니다")
+                _issue("error", "dag.switch.case_no_field", node_id=node.id, i=i)
             )
     return issues
 
@@ -837,38 +836,31 @@ def _sap_issues(node: PipelineNode) -> list[ValidationIssue]:
 
     if mode not in {"read_table", "bapi"}:
         return [
-            ValidationIssue(
-                level="error",
-                node_id=node.id,
-                message=f"알 수 없는 SAP 읽기 모드: {mode} (read_table | bapi)",
-            )
+            _issue(
+                            "error",
+                            "dag.sap.unknown_mode",
+                            node_id=node.id,
+                            name=mode,
+                            allowed="read_table | bapi",
+                        )
         ]
 
     if mode == "bapi":
         if not node.params.get("function_name"):
             issues.append(
-                ValidationIssue(
-                    level="error", node_id=node.id, message="BAPI 모드는 function_name 이 필요합니다"
-                )
+                _issue("error", "dag.sap.bapi_needs_function", node_id=node.id)
             )
         return issues
 
     # read_table 모드
     if not node.params.get("table"):
         issues.append(
-            ValidationIssue(
-                level="error", node_id=node.id, message="RFC_READ_TABLE 모드는 table 이 필요합니다"
-            )
+            _issue("error", "dag.sap.read_table_needs_table", node_id=node.id)
         )
     if not node.params.get("columns"):
         # 전체 필드를 요청하면 512자를 넘겨 분할 호출이 일어난다 — 느리고 행이 어긋날 위험이 있다
         issues.append(
-            ValidationIssue(
-                level="warning",
-                node_id=node.id,
-                message="필드를 지정하지 않으면 테이블 전체를 읽습니다. "
-                "폭이 512자를 넘으면 나눠 호출하게 되니 필요한 필드만 고르거나 BAPI 를 쓰세요",
-            )
+            _issue("warning", "dag.sap.no_fields_warning", node_id=node.id)
         )
     return issues
 
@@ -893,36 +885,32 @@ def _response_node_issues(node: PipelineNode) -> list[ValidationIssue]:
         max_rows = int(raw)
     except (TypeError, ValueError):
         return [
-            ValidationIssue(
-                level="error", node_id=node.id, message=f"max_rows 는 숫자여야 합니다: {raw!r}"
-            )
+            _issue("error", "dag.resp.max_rows_not_a_number", node_id=node.id, value=repr(raw))
         ]
 
     if max_rows < 1:
         issues.append(
-            ValidationIssue(level="error", node_id=node.id, message="max_rows 는 1 이상이어야 합니다")
+            _issue("error", "dag.resp.max_rows_too_small", node_id=node.id)
         )
     elif max_rows > RESPONSE_MAX_ROWS_CAP:
         issues.append(
-            ValidationIssue(
-                level="error",
-                node_id=node.id,
-                message=f"max_rows 는 {RESPONSE_MAX_ROWS_CAP:,} 이하여야 합니다 "
-                "— 응답 노드는 행을 메모리에 모으므로 상한이 필요합니다",
-            )
+            _issue(
+                            "error",
+                            "dag.resp.max_rows_too_large",
+                            node_id=node.id,
+                            n=RESPONSE_MAX_ROWS_CAP,
+                        )
         )
 
     columns = node.params.get("columns")
     if columns is not None:
         if not isinstance(columns, list) or not all(isinstance(c, str) and c for c in columns):
             issues.append(
-                ValidationIssue(
-                    level="error", node_id=node.id, message="columns 는 컬럼명 목록이어야 합니다"
-                )
+                _issue("error", "dag.resp.columns_not_a_list", node_id=node.id)
             )
         elif len(set(columns)) != len(columns):
             issues.append(
-                ValidationIssue(level="error", node_id=node.id, message="columns 에 중복이 있습니다")
+                _issue("error", "dag.resp.columns_duplicate", node_id=node.id)
             )
 
     return issues
@@ -940,11 +928,7 @@ def _api_trigger_issues(nodes: list[PipelineNode]) -> list[ValidationIssue]:
 
     if len(api_triggers) > 1:
         issues.append(
-            ValidationIssue(
-                level="error",
-                message="API 트리거는 파이프라인당 하나만 둘 수 있습니다 "
-                "— 호출 창구가 여럿이면 어느 변수 묶음으로 도는지 알 수 없습니다",
-            )
+            _issue("error", "dag.trigger.only_one")
         )
 
     declared: dict[str, TriggerVariable] = {}
@@ -952,11 +936,7 @@ def _api_trigger_issues(nodes: list[PipelineNode]) -> list[ValidationIssue]:
         for spec in trigger.declared_variables():
             if spec.name in declared:
                 issues.append(
-                    ValidationIssue(
-                        level="error",
-                        node_id=trigger.id,
-                        message=f"변수 이름이 중복됩니다: ${spec.name}",
-                    )
+                    _issue("error", "dag.trigger.duplicate_variable", node_id=trigger.id, name=spec.name)
                 )
             declared[spec.name] = spec
 
@@ -972,38 +952,22 @@ def _api_trigger_issues(nodes: list[PipelineNode]) -> list[ValidationIssue]:
             continue
         if api_triggers:
             issues.append(
-                ValidationIssue(
-                    level="error",
-                    node_id=node_id,
-                    message=f"선언되지 않은 변수입니다: ${name} "
-                    "— API 트리거 노드에 이 변수를 추가하세요",
-                )
+                _issue("error", "dag.trigger.undeclared_variable", node_id=node_id, name=name)
             )
         else:
             issues.append(
-                ValidationIssue(
-                    level="error",
-                    node_id=node_id,
-                    message=f"`${name}` 을 쓰려면 API 트리거 노드가 필요합니다",
-                )
+                _issue("error", "dag.trigger.no_trigger_for_variable", node_id=node_id, name=name)
             )
 
     for name, spec in declared.items():
         if name not in used:
             issues.append(
-                ValidationIssue(
-                    level="warning",
-                    message=f"선언만 하고 쓰지 않는 변수입니다: ${name}",
-                )
+                _issue("warning", "dag.trigger.unused_variable", name=name)
             )
         elif not spec.required and spec.default is None:
             # 선택 변수인데 기본값이 없으면, 호출자가 값을 빼는 순간 실행이 실패한다
             issues.append(
-                ValidationIssue(
-                    level="warning",
-                    message=f"${name} 은 선택 변수인데 기본값이 없습니다 "
-                    "— 호출에서 빠지면 실행이 실패합니다",
-                )
+                _issue("warning", "dag.trigger.optional_without_default", name=name)
             )
 
     return issues
