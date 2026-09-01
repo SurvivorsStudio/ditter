@@ -1966,8 +1966,8 @@ function ColorSwatches({ value, onPick }: { value: unknown; onPick: (key: string
             type="button"
             className={`memo-swatch ${current === c.key ? 'active' : ''}`}
             style={{ background: c.bg, borderColor: current === c.key ? c.dot : undefined }}
-            title={c.label}
-            aria-label={c.label}
+            title={tr(c.label)}
+            aria-label={tr(c.label)}
             onClick={() => onPick(c.key)}
           />
         ))}

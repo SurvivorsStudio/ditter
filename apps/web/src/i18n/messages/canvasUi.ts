@@ -294,4 +294,50 @@ export const canvasUi = {
   'cui.edge.viewFlow': ['이 사이를 흐른 데이터 보기', 'View the data that flowed through here'],
   'cui.edge.morePlus': ['외 {n}개', '+{n} more'],
   'cui.rowsPlus': ['{n}행{plus}', '{n} row{n||s}{plus}'],
+
+  // ---- 메모 색상 (저장되는 것은 key 다 — 라벨은 화면 전용) ----
+  'cui.color.yellow': ['노랑', 'Yellow'],
+  'cui.color.pink': ['분홍', 'Pink'],
+  'cui.color.blue': ['파랑', 'Blue'],
+  'cui.color.green': ['초록', 'Green'],
+  'cui.color.purple': ['보라', 'Purple'],
+  'cui.color.gray': ['회색', 'Grey'],
+
+  // ---- 문장별 연결 마커 오류 (connMarker) — 마커 문법 `-- @conn "이름"` 은 프로토콜이라 그대로 ----
+  'cui.mk.tooMany': [
+    '한 문장에 연결 마커가 {n}개 있습니다 — 하나만 남기세요.',
+    'This statement has {n} connection markers — keep only one.',
+  ],
+  'cui.mk.noName': [
+    '연결 마커에 연결 이름이 없습니다 (`-- @conn "이름"`).',
+    'The connection marker has no name (`-- @conn "name"`).',
+  ],
+  'cui.mk.notFound': [
+    '연결 「{name}」 을(를) 찾을 수 없습니다 — 이름이 바뀌었거나 지워졌습니다.',
+    'Connection 「{name}」 was not found — it was renamed or deleted.',
+  ],
+  'cui.mk.mongo': [
+    '「{name}」 은(는) MongoDB 라 문장별 연결로 지정할 수 없습니다 (문법이 다릅니다).',
+    '「{name}」 is MongoDB, so it cannot be a per-statement connection (different syntax).',
+  ],
+
+  // ---- 연합 조회 시작 문구 (duckRefs) — 표기의 자리 낱말은 문법 안내라 함께 번역한다 ----
+  'cui.duck.starterLead': [
+    '-- 여러 연결의 테이블을 한 번에 조회합니다 (MySQL · PostgreSQL · SQL Server).',
+    '-- Query tables from several connections at once (MySQL · PostgreSQL · SQL Server).',
+  ],
+  'cui.duck.starterMysql': [
+    '--   MySQL             연결이름.데이터베이스.테이블',
+    '--   MySQL             connection.database.table',
+  ],
+  'cui.duck.starterPg': [
+    '--   PostgreSQL·MSSQL  연결이름.데이터베이스.스키마.테이블',
+    '--   PostgreSQL·MSSQL  connection.database.schema.table',
+  ],
+  'cui.duck.starterHint': [
+    '-- 왼쪽 「연결」 트리에서 테이블을 누르면 이름이 커서에 들어옵니다.',
+    '-- Click a table in the 「Connections」 tree on the left to insert its name at the cursor.',
+  ],
+  'cui.duck.partTable': ['테이블', 'table'],
+  'cui.duck.partSchema': ['스키마', 'schema'],
 } as const
