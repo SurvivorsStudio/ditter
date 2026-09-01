@@ -20,9 +20,12 @@ from eai_api.i18n.messages import MODULES
 SRC = Path(__file__).resolve().parents[1] / "src" / "eai_api"
 SLOT = re.compile(r"\{(\w+)(?:\|([^|}]*)\|([^}]*))?\}")
 
-#: 키를 리터럴로 받는 호출들 — 첫 인자(또는 지정 위치)가 사전 키다.
-#: `_issue(level, key, ...)` 는 두 번째, 나머지는 첫 번째.
-_KEY_ARG = {"t": 0, "_issue": 1}
+#: 키를 리터럴로 받는 호출들 — 값은 키가 몇 번째 인자인가.
+#: `_issue(level, key, ...)` 만 두 번째이고 나머지는 첫 번째.
+#:
+#: **래퍼를 새로 만들면 여기 등록해야 한다.** 빠뜨리면 그 래퍼의 키 오타를 아무도 못 잡고
+#: 화면에 키 문자열이 그대로 뜬다 (`_gate_issue` 가 실제로 그렇게 빠져 있었다).
+_KEY_ARG = {"t": 0, "_issue": 1, "_gate_issue": 0}
 
 
 @pytest.fixture(autouse=True)
@@ -116,6 +119,46 @@ def _check_keys() -> set[str]:
             ):
                 found.add(node.args[0].value)
     return found
+
+
+def _call_sites() -> list[tuple[str, str, int, set[str]]]:
+    """`t(...)`·`_issue(...)`·`_gate_issue(...)` 호출의 (파일, 키, 줄, 넘긴 변수 이름)."""
+    out: list[tuple[str, str, int, set[str]]] = []
+    for path in SRC.rglob("*.py"):
+        if "i18n" in path.parts:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+                continue
+            pos = _KEY_ARG.get(node.func.id)
+            if pos is None or len(node.args) <= pos:
+                continue
+            arg = node.args[pos]
+            if not (isinstance(arg, ast.Constant) and isinstance(arg.value, str)):
+                continue
+            names = {k.arg for k in node.keywords if k.arg and k.arg != "node_id"}
+            out.append((path.name, arg.value, node.lineno, names))
+    return out
+
+
+def test_call_sites_supply_every_slot() -> None:
+    """호출부가 넘기는 변수와 사전의 슬롯이 맞는가.
+
+    ko↔en 슬롯 일치(위)는 사전 안쪽만 본다. 호출부가 `{line}` 을 빠뜨리면 화면에
+    `줄 {line}` 이 그대로 뜨는데 그것을 잡는 것이 없었다.
+    """
+    bad: list[str] = []
+    for file, key, line, given in _call_sites():
+        pair = MESSAGES.get(key)
+        if pair is None:
+            continue  # 위 test_every_t_call_uses_a_known_key 가 본다
+        wanted = {m.group(1) for m in SLOT.finditer(pair[0])}
+        if missing := wanted - given:
+            bad.append(f"{file}:{line} {key} — 안 넘긴 슬롯 {sorted(missing)}")
+        if extra := given - wanted:
+            bad.append(f"{file}:{line} {key} — 사전에 없는 변수 {sorted(extra)}")
+    assert not bad, "\n".join(bad)
 
 
 def test_every_preflight_key_has_a_label() -> None:

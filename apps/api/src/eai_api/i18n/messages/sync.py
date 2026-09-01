@@ -5,11 +5,20 @@
 ## 점검 항목의 label 은 key 에서 유도한다
 
 `PreflightCheck` 는 이미 `key`(안정 식별자)를 갖고 있다. 그래서 `_check()` 가 label 을
-인자로 받지 않고 `sync.pre.<key>.label` 을 찾는다 — 호출 31곳에서 label 이 사라졌고,
+인자로 받지 않고 `sync.pre.<key>.label` 을 찾는다 — 호출 26곳에서 label 이 사라졌고,
 같은 항목의 label 이 자리마다 달라질 여지도 없어졌다.
 
-**이 키들은 계산해서 만들므로 `t("리터럴")` AST 검사가 잡지 못한다.** `test_sync_labels.py`
-가 `_check()` 의 첫 인자를 모아 label 키가 실제로 있는지 따로 본다.
+**이 키들은 계산해서 만들므로 `t("리터럴")` AST 검사가 잡지 못한다.**
+`test_i18n.py::test_every_preflight_key_has_a_label` 이 `_check()` 의 첫 인자를 모아
+label 키가 실제로 있는지 따로 본다.
+
+## ⚠️ 이 점검들은 **소스**(원본 MSSQL)를 본다
+
+`tables`·`tables_exist`·`primary_keys`·`trigger_permission`·`unicode_capture` 는 전부
+`_source_checks` 가 **소스 커넥터**로 조회한다. ko 의 "대상 테이블"은 "점검 대상"이라는
+뜻이라 중립이지만, en 에서 Target 이라고 쓰면 같은 모달의 `Target connectivity`
+(= 목적지 PostgreSQL)와 섞여 **방향이 뒤집힌다** — 영어 사용자가 원본의 PK 누락을
+타깃 문제로 진단하게 된다. 그래서 en 은 Source 라고 쓴다.
 
 ## detail 에 남는 한국어
 
@@ -29,7 +38,7 @@ sync: dict[str, tuple[str, str]] = {
     "sync.pre.target_type.label": ("타깃 연결 타입", "Target connection type"),
     "sync.pre.source_reachable.label": ("소스 접속 (TLS·드라이버)", "Source connectivity (TLS, driver)"),
     "sync.pre.target_reachable.label": ("타깃 접속", "Target connectivity"),
-    "sync.pre.tables.label": ("대상 테이블·기본키", "Target tables and primary keys"),
+    "sync.pre.tables.label": ("대상 테이블·기본키", "Source tables and primary keys"),
     "sync.pre.sidecar.label": ("SymmetricDS 사이드카", "SymmetricDS sidecar"),
     "sync.pre.sidecar_engines.label": ("사이드카 엔진 등록", "Sidecar engine registration"),
     "sync.pre.purpose.label": ("복제 데이터의 최종 용도", "What the replicated data is for"),
@@ -46,8 +55,8 @@ sync: dict[str, tuple[str, str]] = {
         "SYM_* 테이블 생성 권한",
         "Permission to create SYM_* tables",
     ),
-    "sync.pre.tables_exist.label": ("대상 테이블 존재", "Target tables exist"),
-    "sync.pre.primary_keys.label": ("대상 테이블 기본키", "Target table primary keys"),
+    "sync.pre.tables_exist.label": ("대상 테이블 존재", "Source tables exist"),
+    "sync.pre.primary_keys.label": ("대상 테이블 기본키", "Source table primary keys"),
     "sync.pre.trigger_permission.label": (
         "원본 트리거 생성 권한",
         "Permission to create triggers on the source",
@@ -136,13 +145,13 @@ sync: dict[str, tuple[str, str]] = {
     ),
     "sync.pre.unicode_capture.none": (
         "대상 테이블에 유니코드 컬럼이 없습니다",
-        "The target tables have no unicode columns",
+        "The source tables have no unicode columns",
     ),
     "sync.pre.unicode_capture.unverified": (
         "{list} 에 유니코드 컬럼이 있습니다 — 소스 엔진 properties 에 "
         "mssql.use.ntypes.for.sync=true 가 켜져 있는지 확인하세요. "
         "이 값은 SYM_* 를 처음 만들 때 반영되므로 시작 전에 켜 두어야 합니다",
-        "{list} have unicode columns — check that mssql.use.ntypes.for.sync=true is set in the "
+        "Unicode columns exist in {list} — check that mssql.use.ntypes.for.sync=true is set in the "
         "source engine properties. It only takes effect when SYM_* is first created, "
         "so it must be on before you start",
     ),
@@ -212,9 +221,14 @@ sync: dict[str, tuple[str, str]] = {
         "일시정지된 동기화만 재개할 수 있습니다 (현재: {name})",
         "Only a paused sync can be resumed (currently: {name})",
     ),
-    # ---- 드라이버 예외 래핑 ----
-    # `{cause}` 는 드라이버가 만든 문장이라 번역되지 않는다 — 그래서 문장 끝에 둔다.
-    "sync.db.op_failed": ("{name} 실패: {cause}", "{name} failed: {cause}"),
-    "sync.db.op.apply_config": ("SymmetricDS 설정 반영", "Applying the SymmetricDS configuration"),
-    "sync.db.op.query_source": ("소스 조회", "Querying the source"),
+    # 드라이버 예외 래핑(`_wrap`)은 **사전에 없다.** 그 문자열이 `cdc_streams.error` 로
+    # 영구 저장되기 때문이다 — 자세한 이유는 `sync_service._wrap` 주석 참조.
+    "sync.stream.no_registered_tables": (
+        "이 스트림에 등록된 테이블 정보가 없습니다 — 원본의 SYM_TRIGGER 를 직접 확인하세요",
+        "This stream has no registered table information — check SYM_TRIGGER on the source",
+    ),
+    "sync.stream.table_conflict": (
+        "같은 테이블을 이미 다른 동기화가 잡고 있습니다: {list} (스트림 {name}) — 먼저 정지하세요",
+        "Another sync already holds the same tables: {list} (stream {name}) — stop it first",
+    ),
 }

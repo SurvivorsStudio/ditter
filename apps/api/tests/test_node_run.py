@@ -135,8 +135,8 @@ class TestStructuralCodesNotMessages:
     def test_gate_ignores_them_regardless_of_message_language(self) -> None:
         """메시지가 영어가 되어도 게이트 판정이 같아야 한다.
 
-        `en` 로케일로 돌려 본다 — 오늘은 이 문구들이 아직 사전에 없어 ko 와 같지만,
-        옮기고 나서 누가 코드 필터를 문자열 매칭으로 되돌리면 여기서 잡힌다.
+        `en` 로케일로 돌려 본다. 이 문구들은 이제 실제로 영어가 되므로, 누가 코드 필터를
+        문자열 매칭으로 되돌리면 무시해야 할 이슈가 차단 이슈로 바뀌어 여기서 잡힌다.
         """
         from eai_api.i18n.locale import _locale
 

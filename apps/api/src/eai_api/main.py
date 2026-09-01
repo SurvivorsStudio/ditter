@@ -100,7 +100,13 @@ async def request_context(request: Request, call_next: Callable[[Request], Await
         response.headers["X-Response-Time-ms"] = f"{elapsed_ms:.1f}"
         # 응답 본문이 언어를 타므로 캐시가 언어별로 갈라야 한다. 지금은 앞에 캐시 계층이
         # 없지만, ALB·CloudFront 가 서는 날 en 사용자의 응답이 ko 사용자에게 나간다.
-        response.headers["Vary"] = "Accept-Language"
+        #
+        # **덮어쓰지 않고 덧붙인다.** `headers["Vary"] = ...` 는 같은 키를 전부 지운다.
+        # 이 미들웨어는 CORSMiddleware 보다 바깥이라, 덮어쓰면 CORS 가 붙인 `Vary: Origin`
+        # 이 사라진다 — `allow_credentials=True` 에 오리진이 구체 목록이라 응답마다
+        # Access-Control-Allow-Origin 이 다른데 캐시가 Origin 으로 갈리지 않게 된다.
+        # 언어가 섞이는 것보다 **A 도메인의 CORS 헤더가 B 도메인에 가는 쪽**이 더 나쁘다.
+        response.headers.append("Vary", "Accept-Language")
     return response
 
 

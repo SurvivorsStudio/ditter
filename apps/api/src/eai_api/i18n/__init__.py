@@ -64,13 +64,22 @@ logger = logging.getLogger(__name__)
 _SLOT = re.compile(r"\{(\w+)(?:\|([^|}]*)\|([^}]*))?\}")
 
 
-def _render(value: Any) -> str:
+#: 자릿수 구분(1,234)을 붙이는 슬롯. **`{n}`(개수) 하나뿐이다.**
+#:
+#: 처음엔 모든 int 에 붙였는데 `{line}`(줄 번호)과 `{i}`(순번)까지 걸렸다 —
+#: `줄 1,024` 는 편집기 go-to-line 에 붙여넣을 수 없고 `case #1,000` 은 개수로 읽힌다.
+#: 게다가 사용자가 보낸 값을 되돌려 주는 `{name}` 에도 붙어(`channel: 1234567` →
+#: `1,234,567`) 보낸 것과 다른 값을 보여 준다.
+_GROUPED_SLOTS = frozenset({"n"})
+
+
+def _render(name: str, value: Any) -> str:
     # bool 은 int 의 하위 타입이라 먼저 걸러야 True 가 "1" 이 되지 않는다.
     if isinstance(value, bool):
         return str(value)
     # ko-KR 과 en-US 는 둘 다 3자리 콤마라 로케일 분기가 필요 없다.
     # float 은 `1,234.0` 이 되어 프론트와 갈리므로 개수 자리에는 int 만 넘긴다.
-    if isinstance(value, int):
+    if name in _GROUPED_SLOTS and isinstance(value, int):
         return f"{value:,}"
     return str(value)
 
@@ -86,7 +95,7 @@ def _interpolate(text: str, vars: dict[str, Any]) -> str:
         value = vars[name]
         if one is not None and many is not None:
             return one if value == 1 else many
-        return _render(value)
+        return _render(name, value)
 
     return _SLOT.sub(sub, text)
 

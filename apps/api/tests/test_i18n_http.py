@@ -197,3 +197,25 @@ def test_gate_wrapper_and_inner_rules_speak_one_language() -> None:
     with pytest.raises(ValidationError) as exc_ko:
         assert_runnable(empty)
     assert _has_hangul(str(exc_ko.value))
+
+
+def test_vary_keeps_origin_from_cors() -> None:
+    """`Vary` 를 덮어쓰지 않고 덧붙이는지.
+
+    `headers["Vary"] = ...` 는 같은 키를 전부 지운다. 이 미들웨어가 CORSMiddleware 보다
+    바깥이라, 덮어쓰면 CORS 가 붙인 `Vary: Origin` 이 사라진다 — `allow_credentials=True`
+    에 오리진이 구체 목록이라 응답마다 Access-Control-Allow-Origin 이 다른데 캐시가
+    Origin 으로 갈리지 않게 된다. 앞에 캐시 계층이 서는 날 조용히 터지는 종류다.
+    """
+    client = TestClient(main.app)
+    origin = {"Origin": "http://localhost:5173"}
+
+    simple = client.get("/", headers=origin)
+    assert "Origin" in simple.headers["Vary"]
+    assert "Accept-Language" in simple.headers["Vary"]
+
+    preflight = client.options(
+        "/pipelines",
+        headers={**origin, "Access-Control-Request-Method": "POST"},
+    )
+    assert "Origin" in preflight.headers["Vary"]

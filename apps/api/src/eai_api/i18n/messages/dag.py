@@ -107,7 +107,7 @@ dag: dict[str, tuple[str, str]] = {
     ),
     "dag.ref.node_not_found": (
         "{ref} 가 가리키는 노드 이름을 찾을 수 없습니다: 「{name}」",
-        "{ref} points at a node name that does not exist: 「{name}」",
+        '{ref} points at a node name that does not exist: "{name}"',
     ),
     "dag.ref.self": (
         "{ref} — 자기 자신의 결과는 참조할 수 없습니다",
@@ -148,9 +148,9 @@ dag: dict[str, tuple[str, str]] = {
         "{name} 값이 없고 기본값도 없습니다 — 값을 보내거나 기본값을 정하세요",
         "{name} has neither a value nor a default — send a value or set a default",
     ),
-    "dag.var.not_a_number": ("{name} 은 숫자여야 합니다: {value}", "{name} must be a number: {value}"),
+    "dag.var.not_a_number": ("{name} 은(는) 숫자여야 합니다: {value}", "{name} must be a number: {value}"),
     "dag.var.not_a_boolean": (
-        "{name} 은 참/거짓이어야 합니다: {value}",
+        "{name} 은(는) 참/거짓이어야 합니다: {value}",
         "{name} must be true or false: {value}",
     ),
     # ---- API 트리거 노드 ----
@@ -177,7 +177,7 @@ dag: dict[str, tuple[str, str]] = {
         "This variable is declared but never used: ${name}",
     ),
     "dag.trigger.optional_without_default": (
-        "${name} 은 선택 변수인데 기본값이 없습니다 — 호출에서 빠지면 실행이 실패합니다",
+        "${name} 은(는) 선택 변수인데 기본값이 없습니다 — 호출에서 빠지면 실행이 실패합니다",
         "${name} is optional but has no default — a call that omits it will fail",
     ),
     # ---- Python 변환 노드 ----

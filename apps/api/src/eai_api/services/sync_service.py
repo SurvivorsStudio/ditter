@@ -166,7 +166,7 @@ def _with_catalog(spec: SyncSpec, source_database: str) -> SyncSpec:
     if not spec.sync_database or not source_database:
         return spec
     return replace(
-        spec, tables=[replace(t, catalog=source_database) for t in spec.tables]
+        spec, tables=[replace(tbl, catalog=source_database) for tbl in spec.tables]
     )
 
 
@@ -201,9 +201,7 @@ def _tables_from_config(stream: CdcStream) -> list[symmetric_config.SyncTable]:
         if isinstance(t, dict) and str(t.get("name", "")).strip()
     ]
     if not tables:
-        raise ValidationError(
-            "이 스트림에 등록된 테이블 정보가 없습니다 — 원본의 SYM_TRIGGER 를 직접 확인하세요"
-        )
+        raise ValidationError(t("sync.stream.no_registered_tables"))
     return tables
 
 
@@ -254,7 +252,16 @@ def _wrap(exc: SQLAlchemyError, what: str) -> DependencyError:
     원인이 화면에 닿지 않는 것이 이 래핑이 막으려는 것이다.
     """
     detail = str(getattr(exc, "orig", exc)).splitlines()[0]
-    return DependencyError(t("sync.db.op_failed", name=what, cause=detail))
+    # **번역하지 않는다.** 이 예외의 문자열은 `start_stream`·`stop_stream` 에서
+    # `cdc_streams.error` 로, `notes` 를 거쳐 `config` jsonb 로 **영구 저장**된다.
+    # 요청 언어로 번역하면 en 사용자가 누른 순간 영어가 DB 에 박히고 나중에 ko 사용자가
+    # 그것을 읽는다 — `i18n/locale.py` 가 워커에 대해 못 박은 규칙이 API 경로에서 깨진다.
+    # 같은 컬럼에 미번역 ko 문구도 들어가므로 한 스트림 안에서 두 언어가 섞이기도 한다.
+    #
+    # 502 응답의 detail 도 이 문자열이라 en 화면에서 한국어로 뜬다. 커넥터 예외(`main.py`
+    # 의 ConnectorError 핸들러)가 이미 그렇고, 저장 문구를 code+params 로 옮기는 것은
+    # 스키마 변경이라 별건이다 (CLAUDE.md §27 「아직 한국어인 것」).
+    return DependencyError(f"{what} 실패: {detail}")
 
 
 def _release(connector: SqlConnector, sync_database: str) -> None:
@@ -282,7 +289,7 @@ def _execute(connector: SqlConnector, statements: list[symmetric_config.Statemen
             for sql, params in statements:
                 db.execute(text(sql), params)
     except SQLAlchemyError as exc:
-        raise _wrap(exc, t("sync.db.op.apply_config")) from exc
+        raise _wrap(exc, "SymmetricDS 설정 반영") from exc
 
 
 def _fetch(
@@ -294,7 +301,7 @@ def _fetch(
             result = db.execute(text(sql), params)
             return [dict(row) for row in result.mappings()]
     except SQLAlchemyError as exc:
-        raise _wrap(exc, t("sync.db.op.query_source")) from exc
+        raise _wrap(exc, "소스 조회") from exc
 
 
 def _scalar(connector: SqlConnector, sql: str, params: dict[str, Any] | None = None) -> Any:
@@ -302,7 +309,7 @@ def _scalar(connector: SqlConnector, sql: str, params: dict[str, Any] | None = N
         with connector.engine.connect() as db:
             return db.execute(text(sql), params or {}).scalar()
     except SQLAlchemyError as exc:
-        raise _wrap(exc, t("sync.db.op.query_source")) from exc
+        raise _wrap(exc, "소스 조회") from exc
 
 
 # --------------------------------------------------------------------- preflight
@@ -362,7 +369,7 @@ def _check(key: str, ok: bool, detail: str, level: str = "error") -> PreflightCh
     네 자리에서 만들어진다).
 
     이 키는 **계산해서 만들므로** `test_i18n.py` 의 AST 검사가 잡지 못한다.
-    `test_sync_labels.py` 가 `_check()` 의 첫 인자를 모아 따로 본다.
+    `test_i18n.py::test_every_preflight_key_has_a_label` 이 `_check()` 의 첫 인자를 모아 따로 본다.
     """
     return PreflightCheck(
         key=key, label=t(f"sync.pre.{key}.label"), ok=ok, detail=detail, level=level
@@ -762,7 +769,7 @@ def _assert_no_table_conflict(session: Session, spec: SyncSpec, exclude_id: str 
     SymmetricDS 는 테이블 하나에 트리거를 여럿 걸 수 있지만, 그렇게 되면 어느 스트림을
     멈춰야 그 테이블이 멈추는지 알 수 없게 된다. 시작 시점에 막는다.
     """
-    wanted = {f"{t.namespace}.{t.name}".casefold() for t in spec.tables}
+    wanted = {f"{tbl.namespace}.{tbl.name}".casefold() for tbl in spec.tables}
     for other in session.query(CdcStream).filter(
         CdcStream.engine == StreamEngine.SYMMETRICDS,
         CdcStream.status.in_(sorted(str(s) for s in CDC_ACTIVE_STATUSES)),
@@ -770,14 +777,13 @@ def _assert_no_table_conflict(session: Session, spec: SyncSpec, exclude_id: str 
         if other.id == exclude_id or other.source_connection_id != spec.source_connection_id:
             continue
         theirs = {
-            f"{t.get('namespace', '')}.{t.get('name', '')}".casefold()
-            for t in (other.config or {}).get("tables") or []
+            f"{row.get('namespace', '')}.{row.get('name', '')}".casefold()
+            for row in (other.config or {}).get("tables") or []
         }
         overlap = sorted(wanted & theirs)
         if overlap:
             raise ConflictError(
-                f"같은 테이블을 이미 다른 동기화가 잡고 있습니다: {', '.join(overlap)} "
-                f"(스트림 {other.id[:8]}) — 먼저 정지하세요"
+                t("sync.stream.table_conflict", list=", ".join(overlap), name=other.id[:8])
             )
 
 

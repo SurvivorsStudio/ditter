@@ -218,12 +218,12 @@ def bind_variables(declared: list[TriggerVariable], supplied: dict[str, Any] | N
     unknown = sorted(set(body) - known)
     if unknown:
         raise var_syntax.VariableError(
-                    t(
-                        "dag.var.undeclared_supplied",
-                        list=", ".join(unknown),
-                        allowed=", ".join(sorted(known)) or t("dag.var.none_allowed"),
-                    )
-                )
+            t(
+                "dag.var.undeclared_supplied",
+                list=", ".join(unknown),
+                allowed=", ".join(sorted(known)) or t("dag.var.none_allowed"),
+            )
+        )
 
     for spec in declared:
         if spec.name in body:
@@ -526,9 +526,7 @@ def validate_definition(definition: PipelineDefinition) -> list[ValidationIssue]
         touching = note_ids & {e.source, e.target}
         if touching:
             issues.append(
-                _issue(
-                    "error", "dag.graph.note_not_connectable", node_id=next(iter(touching))
-                )
+                _issue("error", "dag.graph.note_not_connectable", node_id=next(iter(touching)))
             )
 
     # 타깃은 흐름의 끝이다 — 뒤에 노드를 이을 수 없다.
@@ -711,18 +709,14 @@ def _node_ref_issues(definition: PipelineDefinition) -> list[ValidationIssue]:
     for node in definition.nodes:
         for placeholder in var_syntax.malformed_placeholders(node.params):
             issues.append(
-                _issue(
-                    "warning", "dag.ref.not_a_reference", node_id=node.id, ref=placeholder
-                )
+                _issue("warning", "dag.ref.not_a_reference", node_id=node.id, ref=placeholder)
             )
 
         for ref in var_syntax.extract_node_refs_from_params(node.params):
             target = definition.node_by_label(ref.node)
             if target is None:
                 issues.append(
-                    _issue(
-                        "error", "dag.ref.node_not_found", node_id=node.id, ref=ref, name=ref.node
-                    )
+                    _issue("error", "dag.ref.node_not_found", node_id=node.id, ref=ref, name=ref.node)
                 )
             elif target.id == node.id:
                 issues.append(
@@ -778,13 +772,7 @@ def _python_node_issues(node: PipelineNode) -> list[ValidationIssue]:
         tree = ast.parse(code)
     except SyntaxError as exc:
         return [
-            _issue(
-                            "error",
-                            "dag.python.syntax_error",
-                            node_id=node.id,
-                            cause=exc.msg,
-                            line=exc.lineno,
-                        )
+            _issue("error", "dag.python.syntax_error", node_id=node.id, cause=exc.msg, line=exc.lineno)
         ]
     names = {
         n.name
@@ -836,13 +824,7 @@ def _sap_issues(node: PipelineNode) -> list[ValidationIssue]:
 
     if mode not in {"read_table", "bapi"}:
         return [
-            _issue(
-                            "error",
-                            "dag.sap.unknown_mode",
-                            node_id=node.id,
-                            name=mode,
-                            allowed="read_table | bapi",
-                        )
+            _issue("error", "dag.sap.unknown_mode", node_id=node.id, name=mode, allowed="read_table | bapi")
         ]
 
     if mode == "bapi":
@@ -894,12 +876,7 @@ def _response_node_issues(node: PipelineNode) -> list[ValidationIssue]:
         )
     elif max_rows > RESPONSE_MAX_ROWS_CAP:
         issues.append(
-            _issue(
-                            "error",
-                            "dag.resp.max_rows_too_large",
-                            node_id=node.id,
-                            n=RESPONSE_MAX_ROWS_CAP,
-                        )
+            _issue("error", "dag.resp.max_rows_too_large", node_id=node.id, n=RESPONSE_MAX_ROWS_CAP)
         )
 
     columns = node.params.get("columns")
