@@ -1,106 +1,76 @@
 # STATE
 
-웹 프론트엔드 **다국어(ko/en) 전환** — 2026-09-01 기준. **화면 문구 전환은 끝났다.**
+**다국어(ko/en)** 작업. 2026-09-01 기준. 규칙과 배경은 `CLAUDE.md` §27 에 있다 — 여기는
+"어디까지 했고 다음은 무엇인가"만 적는다.
 
-## 확정된 사실
+## 끝난 것
 
-- **검증은 `npx tsc -b --force` (또는 `npm run build`) 로 한다.**
-  `apps/web/tsconfig.json` 이 `files: []` + project references 라 **`npx tsc --noEmit` 은
-  아무것도 검사하지 않고 조용히 통과한다.** 이걸로 확인하다 `renderMd` 인자 누락(빌드 실패 +
-  빈 메모 셀 렌더 크래시)을 며칠 놓쳤다.
-- 사전은 `src/i18n/messages/*.ts` 의 **[ko, en] 쌍 튜플**, `index.ts` 가 합친다.
-  키 오타는 컴파일에서 잡히지만 **번역 누락은 안 잡힌다** — 문자열을 그대로 두면 통과한다.
-- **`MsgKey` 는 string 서브타입이라 "키를 화면에 그대로 출력하는" 실수를 타입체커가 못 잡는다.**
-  `Record<X, MsgKey>` 상수를 만들었으면 렌더 자리가 `t()`/`tr()` 를 부르는지 눈으로 볼 것.
-- **평가 시점이 전부다.** 모듈 상수·`useMemo`·팩토리 안에서 번역문을 굳히면 언어 전환을
-  못 따라온다. 실제로 걸렸던 곳: `FILTER_OPS`·`MODE_LABEL`(ConfigPanel), `summarize()`
-  (ExplainModal, `useMemo([target])`), `SCOPE_HINT`·`TYPE_LABEL`(TestRunModal),
-  `tableOptions`(SqlEditor, `useMemo([tables])` 안의 팩토리).
-- 마커 렌더러는 **`src/i18n/rich.tsx` 하나**다 — `**굵게**` → `<b>`, `` `코드` `` → `<code>`.
-  짝이 맞는 마커만 바꾸고 짝이 없으면 글자로 남긴다(예전 `split('**')` 은 홀수면 꼬리를
-  통째로 굵게 만들고 아무 신호도 안 냈다).
-- `ConfigPanel.tsx`·`SqlEditor.tsx` 는 `t` 를 **지역 변수로 자주 가린다**(트리거 객체·테이블
-  객체). 컴포넌트 안에서는 `const tr = useT()` 를 쓴다.
-- 한 값을 **`useT()` 로 참조하면 그 함수가 반응형이 된다.** `openJsonFind`(SqlEditor)가
-  ⌘F 리스너의 의존성이라 `useCallback([tr])` 이 필요했다 — lint 가 잡아 준다.
+| 범위 | 상태 |
+|---|---|
+| 프론트 UI 문구 전체 | 완료 (남은 47건은 전부 의도된 것 — 아래 참조) |
+| AI 답변 언어 | 완료 (`AiChatRequest.locale` → `_ANSWER_LANG`) |
+| 백엔드 `schemas/dag.py` | 완료 (파이프라인 검증 문구 전부) |
+| 백엔드 `services/sync_service.py` | 완료 (착수 점검 + 예외) |
+| 백엔드 `services/pipeline_service.py` | 실행 게이트 래퍼만 (나머지는 미착수) |
+| 프론트 → 서버 언어 전달 | 완료 (`client.ts` 의 두 fetch 자리) |
 
-## 내린 결정
+**화면에서 확인되는 것** — EN 으로 바꾼 뒤:
+1. 빈 파이프라인 검증 → "There are no nodes"
+2. 타깃 없이 실행 → "This pipeline cannot run — …"
+3. 동기화 착수 점검 모달 → 항목 이름·설명이 영어
 
-- **AI 프롬프트 시드는 번역하지 않는다** (`AiFixPanel.tsx` 주석이 근거).
-  프론트 시드는 그대로 두고 **답변 언어만 서버에서 정한다** — `AiChatRequest.locale` 로
-  받아 `_ANSWER_LANG` 한 줄을 시스템 프롬프트 끝에 붙인다.
-  `_prompt_*` 본문(되묻는 기준·차트 형식·주입 방어)은 오래 다듬은 것이라 영어로 옮기면
-  결이 바뀐다 — 모델은 한국어 지시를 따르면서 영어로 답할 수 있으므로 바꿀 것은 출력 언어
-  하나다. `_prompt_interpret`·`_prompt_report` 가 본문에 박아 두었던 "한국어로"는 지시가
-  충돌하므로 걷어냈다(테스트가 못박는다).
-  프론트는 `useAiChat` **한 곳**에서 `getLocale()` 을 붙인다 — 호출부(챗·수정·튜닝·노트북
-  셀·인라인 프롬프트)마다 붙이게 두면 한 곳을 빠뜨렸을 때 그 자리만 조용히 한국어로 답한다.
-- 화면 문구만 번역하고 **기술 값·프로토콜은 그대로 둔다** — cron 식, 모드 id
-  (`upsert`·`initial`·`soft`…), `__deleted`, `-- @conn` 마커, `연합 조회`
-  (DUCK_MARKER_NAME), 슬래시 명령 이름, `nodeCatalog` 의 category 식별자
-  (한국어지만 **값**이다 — 화면은 `CATEGORY_KEY` 를 거친다).
-- 문장은 **키 하나**로 유지한다. 조각내면 어순이 다른 언어에서 조립이 안 된다.
-- **같은 문자열을 두 군데 두지 않는다.** `api/types.ts` 의 `SYNC_CHANNELS`·`SYNC_PURPOSES`
-  에서 label/hint 를 걷어냈다(id 만 남김) — 화면은 `sync.channel.*` 사전을 본다.
+## 검증 방법
 
-## 진행 중
-
-없음. 아래 「남은 것」이 다음 후보다.
-
-## 남은 것
-
-### 1. 백엔드 문구는 그대로 한국어다
-
-서버가 내려주는 오류·검증 메시지(`ValidationError`·`dag.py` 검증·`sync_service.preflight`
-항목 label/detail)는 번역 대상 밖이었다. en 화면에서도 그 문구는 한국어로 뜬다.
-프론트만으로는 못 고친다 — 백엔드에 같은 종류의 사전이 필요하다.
-
-### 2. 일부러 한국어로 남긴 것 (검증 도구가 잡으므로 오해 말 것)
-
-전체 스캔에 47건이 남는데 전부 의도된 것이다:
-- `canvas/nodeCatalog.tsx` 36건 — category 식별자(값). 화면은 `CATEGORY_KEY` 로 번역한다.
-- `AiFixPanel`·`NotebookAi` 3건 — AI 프롬프트 시드.
-- `connMarker.ts`·`pages/SqlEditor.tsx` 2건 — `연합 조회`(프로토콜 이름).
-- `App.tsx`·`Login.tsx` 2건 — 언어 토글의 `'한'`(다른 언어의 이름이라 번역 대상이 아니다).
-- `main.tsx`·`api/client.ts` 2건 — 개발자용 콘솔/부팅 오류.
-- `api/auth.ts` 1건 — `EAI_AUTH_ENABLED=false` 로컬 픽스처의 표시 이름.
-- `api/connectorFields.ts` 1건 — `abbr` 폴백. `abbrKey` 가 있어 화면에는 안 나온다.
-
-확인 명령:
-```bash
-cd apps/web && npx tsc -b --force && npm run lint && npm test && npm run build
-```
-
-### 3. 숫자 보간이 자릿수 구분을 붙인다
-
-`i18n/index.ts` 가 number 를 `toLocaleString()` 으로 푼다. UI 에서는 오히려 낫지만
-`AiChatPane` 의 `chat.runTotalNote`·`chat.runResultHead` 는 **모델에 보내는 프롬프트 본문**
-이라 모델이 `1,000행` 을 본다. 무해해 보이지만 확인은 안 했다.
-
-### 4. 파이썬 검증 — 확인 완료, 다만 환경 조건 하나
-
-`uv` 가 이 머신에 없어서(`command not found`) 임시 venv 에 넣어 돌렸다.
-**전역 환경은 건드리지 않았다** — 필요하면 같은 방법을 쓰면 된다:
+`uv` 가 이 머신에 없어 임시 venv 에 넣어 썼다. **전역 환경은 건드리지 않았다.**
 
 ```bash
 python3 -m venv /tmp/toolvenv && /tmp/toolvenv/bin/pip install uv
 cd apps/api && /tmp/toolvenv/bin/uv run --extra dev pytest -q --cov
+cd apps/web && npx tsc -b --force && npm run lint && npm test && npm run build
 ```
 
-실측 결과 (2026-09-01):
+**웹 타입체크는 `npx tsc -b --force` 로 한다.** `tsconfig.json` 이 `files: []` +
+references 라 `tsc --noEmit` 은 아무것도 검사하지 않고 조용히 통과한다.
 
-| 영역 | 테스트 | 커버리지 | ruff |
-|---|---|---|---|
-| api | **546 통과** | 53.11% (하한 50) | 통과 |
-| worker | 211 통과 | 53.10% (하한 51) | 통과 |
-| sap-connector | 83 통과 | 79.04% (하한 76) | 통과 |
-| connectors | 161 통과 / **3 실패** | — | 통과 |
+로컬 실행은 `.env` 가 있어야 한다(`.env.example` 복사 후 `EAI_LOCAL_SECRET_KEY`·
+`EAI_JWT_SECRET` 두 개를 채운다). 이미 만들어 두었고 `EAI_AUTH_ENABLED=false` 다.
 
-**connectors 의 3건은 코드 문제가 아니라 이 머신의 환경 문제다.**
-`tests/test_mssql_mongo.py::TestMsSql` 이 pyodbc 를 임포트하는데
-`libodbc.2.dylib` 이 없다 — unixODBC 미설치다. 고치려면 `brew install unixodbc`.
-그 클래스만 빼면 161개가 전부 통과한다. **코드로는 확인할 수 없는 항목이라
-CI(리눅스)에서는 어떤지 별도로 봐야 한다.**
+```bash
+docker compose up -d postgres redis api web    # web :5173 · api :8000
+```
 
-답변 언어 테스트 4개는 **변경을 되돌리면 실패하는지까지 확인했다**
-(언어 지시 줄을 빼면 3건 실패, 본문의 "한국어로" 를 되살리면 나머지 1건 실패).
+## 남은 것
+
+### 1. 백엔드 나머지 서비스 (다음 배치 후보)
+
+사용자에게 가는 한국어가 남은 곳, 건수 순:
+`connection_service`(48) · `cdc_service`(22) · `duck_service`(21) · `user_service`(9) ·
+`routers/connections`(7) · `routers/auth`·`auth/rbac` 의 `HTTPException` 4곳.
+
+`HTTPException` 4곳은 **아주 싸다** — 발생 시점 번역이라 핸들러가 필요 없다.
+`connection_service` 는 `health_message` 를 DB 에 저장하므로 그 자리만 빼야 한다.
+
+### 2. 저장되는 문구 (별건 — 스키마 변경)
+
+`run_logs.message` · `runs.error` · `sync_streams.error` · `stream.config["notes"]` ·
+`connections.health_message`. 쓰는 시점과 읽는 시점의 사람이 달라 지금 구조로는
+번역이 **틀린다.** code + params 로 저장하고 읽을 때 렌더해야 한다.
+
+### 3. 커넥터 문구 (`apps/connectors/`)
+
+워커와 공유하는 패키지라 2번과 함께 다뤄야 한다. 502 응답은 아직 한국어다.
+
+### 4. 환경 — unixODBC 미설치
+
+`apps/connectors` 의 `test_mssql_mongo.py::TestMsSql` 3건이 이 맥에서 실패한다
+(`pyodbc` 가 `libodbc.2.dylib` 을 못 연다). **코드 문제가 아니다** — CI(ubuntu)는
+`unixodbc-dev` 를 설치하므로 거기서는 통과한다. 로컬에서 돌리려면 `brew install unixodbc`.
+
+### 5. 일부러 한국어로 남긴 것 (스캔에 잡히지만 정상)
+
+- `canvas/nodeCatalog.tsx` 36건 — category 식별자(**값**이다). 화면은 `CATEGORY_KEY` 로 번역한다.
+- `AiFixPanel`·`NotebookAi` 3건 — AI 프롬프트 시드.
+- `연합 조회`(DUCK_MARKER_NAME) 2건 — 프로토콜 이름.
+- 언어 토글의 `'한'` 2건 — 다른 언어의 이름이라 번역 대상이 아니다.
+- `main.tsx`·`api/client.ts` 2건 — 개발자용 콘솔/부팅 오류.
+- 백엔드 `logger` 포맷 문자열 전부 — 운영자용 로그.
