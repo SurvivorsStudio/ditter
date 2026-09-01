@@ -4,7 +4,7 @@ import { auth } from './api/auth'
 import { useCreatePipeline } from './api/hooks'
 import { Banner, Spinner } from './components/common'
 import { Icon } from './components/icons'
-import { setLocale, useLocale, useT, type MsgKey } from './i18n'
+import { switchLocale, useLocale, useT, type MsgKey } from './i18n'
 import { queryClient } from './main'
 import { Canvas } from './pages/Canvas'
 import { Connections } from './pages/Connections'
@@ -20,15 +20,6 @@ const TITLES: { match: RegExp; title: MsgKey; crumb: MsgKey }[] = [
   { match: /^\/connections/, title: 'nav.title.connections', crumb: 'nav.crumb.connections' },
   { match: /^\//, title: 'nav.title.home', crumb: 'nav.crumb.home' },
 ]
-
-/** 언어를 바꾸면 **서버가 만든 문구도 새 언어로 다시 받아야 한다.**
- *  검증 이슈(ValidationIssue.message)·착수 점검(PreflightCheck.label/detail)·오류 detail 은
- *  요청의 Accept-Language 로 정해져 캐시에 그 언어로 굳어 있다 — 화면만 바꾸면
- *  한국어 껍데기에 영어 속이 남는다. 그래서 전환 직후 캐시를 통째로 무효화한다. */
-function switchLocale(next: 'ko' | 'en'): void {
-  setLocale(next)
-  void queryClient.invalidateQueries()
-}
 
 export function App() {
   const location = useLocation()
@@ -81,7 +72,7 @@ export function App() {
         <button
           className="lang-toggle"
           title={t('common.langToggle')}
-          onClick={() => switchLocale(locale === 'ko' ? 'en' : 'ko')}
+          onClick={() => switchLocale(locale === 'ko' ? 'en' : 'ko', queryClient)}
         >
           {locale === 'ko' ? 'EN' : '한'}
         </button>

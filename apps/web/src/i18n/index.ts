@@ -96,3 +96,7 @@ export function useT(): TFunc {
 }
 
 export { getLocale, localeTag, setLocale, useLocale, type Locale } from './locale'
+
+/** 언어 버튼은 `setLocale` 이 아니라 이것을 부른다 — 서버가 만든 문구까지 새 언어로
+ *  다시 받아야 하기 때문이다. 이유와 예외는 `switchLocale.ts` 에 적혀 있다. */
+export { switchLocale } from './switchLocale'

@@ -6,7 +6,7 @@ import { App } from './App'
 import './styles.css'
 
 /** 언어 전환이 서버 문구를 다시 받아오려면 이 클라이언트를 화면 밖에서도 만져야 한다.
- *  (`i18n/locale.ts` 의 setLocale 직후 invalidateQueries → App·Login 의 언어 버튼) */
+ *  (`i18n/switchLocale.ts` — App 레일·로그인 화면의 언어 버튼이 이것을 받는다) */
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
