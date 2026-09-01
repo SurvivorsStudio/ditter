@@ -6,8 +6,9 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
 `/pr` 가 준비해 둔 PR 을 main 으로 **squash 머지**하는 **마지막 얇은 단계**다. 준비(feature 브랜치
 확보·영역별 커밋·변경 영역 테스트·코드 리뷰·push·PR 생성)는 모두 `/pr` 에서 끝나 있어야 한다. 이
 명령은 **머지될 코드를 고치지 않는다** — 사전 게이트가 하나라도 실패하면 **즉시 멈추고 무엇을
-먼저 해야 하는지** 안내한다(대개 `/pr` 로 재준비 — 예외는 1번 머리말). 손대는 것은 딱 하나,
-**자기 계정이 남긴 리뷰 스레드의 해결 표시**뿐이고(2번) 그것도 무엇을 했는지 보고에 남긴다.
+먼저 해야 하는지** 안내한다(대개 `/pr` 로 재준비 — 예외는 1번 머리말). 손대는 것은 하나,
+**리뷰 스레드의 해결 표시**뿐이다(2번) — 자기 계정이 남긴 것은 묻지 않고, 남이 남긴 것은
+**허락받은 것만** 접으며, 어느 쪽이든 무엇을 했는지 보고에 남긴다.
 
 원격은 **GitHub** ([SurvivorsStudio/ditter](https://github.com/SurvivorsStudio/ditter))이라 `gh` 를 쓴다.
 
@@ -200,9 +201,10 @@ grep -rn "§1d" --include="*.md" . | grep -v node_modules
 불편해지면 그때 한 번에 옮긴다.
 
 **이 게이트가 못 잡는 것**: `Closes #N` 없이 본문으로만 이슈를 가리킨 PR 은 걸리지 않는다
-(`closingIssuesReferences` 가 비기 때문). **선언을 남기게 하는 쪽은 `/pr` §6-E**
-(`.claude/commands/pr.md`)이고 규칙 본문은 `docs/conventions/commit-convention.md` §5.1 이다 —
-이 게이트를 넓히거나 좁힐 때는 그쪽도 함께 본다. 넓은 문자열 검색(`gh pr list --search "<번호>"`)으로
+(`closingIssuesReferences` 가 비기 때문). 규칙의 출처가 둘로 갈린다 — **이 게이트 자신의 규칙은
+`docs/conventions/commit-convention.md` §5.1**, 그 판정을 가능하게 하는 **`Closes #N` 선언 규칙은
+같은 문서 §5.2** 다. 선언을 `/pr` 경로에서 챙기는 자리는 **§6-E**(`.claude/commands/pr.md`)이고,
+이 게이트를 넓히거나 좁힐 때는 셋을 함께 본다. 넓은 문자열 검색(`gh pr list --search "<번호>"`)으로
 늘리지 않는 이유는 오탐이다 — `86` 은 줄 번호·버전·해시에도 있고, 멀쩡한 머지를 세우는 편이 더
 나쁘다. 그 구멍은 사람이 보는 자리(`CONTRIBUTING.md` 「메인테이너에게」)에 남겨 두었다.
 
@@ -220,52 +222,10 @@ grep -rn "§1d" --include="*.md" . | grep -v node_modules
 
 **미해결 리뷰 스레드가 남아 있을 때.** `CHANGES_REQUESTED` 는 1b 에서 이미 종료되지만, 승인 없이
 남은 지적은 서버 상태만으로 반영 여부를 알 수 없다. `gh pr view --comments` 는 스레드의 해결
-여부를 보여주지 않으므로 GraphQL 로 판정한다:
+여부를 보여주지 않으므로 GraphQL 로 판정한다.
 
-```bash
-gh api graphql -f query='
-  query($owner:String!, $repo:String!, $pr:Int!) {
-    viewer { login }
-    repository(owner:$owner, name:$repo) {
-      pullRequest(number:$pr) {
-        reviewThreads(first:100) {
-          nodes { isResolved comments(first:1) { nodes { author { login __typename } body } } }
-        }
-      }
-    }
-  }' -F owner=SurvivorsStudio -F repo=ditter -F pr=<n> \
-  --jq '.data as $d | $d.repository.pullRequest.reviewThreads.nodes[]
-        | select(.isResolved == false)
-        | .comments.nodes[0]
-        | select(. != null)
-        | select(.author.__typename != "Bot" and .author.login != $d.viewer.login)'
-```
-
-세지 않는 것은 두 가지다 — 봇이 남긴 것(`__typename == "Bot"`)과 **`gh` 를 실행하는 계정
-(`viewer.login`)이 남긴 것**. "자기 자신"은 PR 작성자가 아니라 viewer 로 못박는다(둘이 대개
-같지만 규칙으로는 다르다). 남는 것은 **사람이 남긴 미반영 지적**뿐이다.
-
-있으면 요약해 보여주고 **"그 스레드도 접어도 되는지"를 묻는다.** 예전에는 "그대로 머지할지"를
-물었는데 그 물음에는 답할 수가 없다 — `required_conversation_resolution` 이 켜져 있어(1b 의 표)
-"머지해라"라고 답해도 GitHub 이 막고, 3번이 **원인을 모른 채** 종료한다. 그 원인은 방금 사용자에게
-보여 준 그 스레드다. **아는 원인을 모른다고 보고하게 되는 물음은 두지 않는다.**
-
-- **접어도 된다**고 하면 아래 resolve 대상에 그 스레드도 포함한다. 남의 지적을 대신 닫는
-  것이므로 **이 허락은 이번 머지 한 번에만 유효하다** — 다음 실행이 물려받지 않는다.
-- **아니라고 하면 종료한다.** 그 사람과 정리한 뒤 다시 부르라고 안내한다.
-- 없으면 묻지 않는다.
-
-#### 자기 계정이 남긴 스레드는 여기서 resolve 한다
-
-위 판정이 **묻지 않는다**고 한 것과 **머지가 된다**는 것은 다른 말이다. `required_conversation_resolution`
-이 켜져 있어(1b 의 표) GitHub 은 **작성자를 가리지 않는다** — 누가 썼든 미해결 스레드가 하나라도
-있으면 `mergeStateStatus` 가 `BLOCKED` 이 된다. 그리고 `/pr` §6-D 는 **매번 인라인 코멘트를 단다**
-(그것이 "리뷰를 돌렸다는 증거"를 Reviews 탭에 남기는 그 절의 목적이다). 그래서 `/pr` → `/pr-merge`
-라는 **정상 경로가 매번 BLOCKED 로 끝난다.**
-
-그러므로 **viewer 가 남긴 미해결 스레드는 여기서 resolve 하고 진행한다.** 묻지 않는다 — 방금
-자기가 남긴 기록을 접을지 확인받는 것은 같은 결정을 두 번 시키는 것이고, 그 창은 습관적으로
-넘기게 되어 정작 **남이 남긴 지적**을 묻는 위 판정까지 무디게 만든다.
+**조회는 한 번뿐이다.** 내 스레드와 남의 스레드를 따로 읽으면 절단 가드도 두 벌이 되어 한쪽만
+고쳐지고, 무엇보다 아래 동의 경로에서 접어야 할 `id` 가 한쪽 조회에만 있게 된다.
 
 ```bash
 gh api graphql -f query='
@@ -275,25 +235,51 @@ gh api graphql -f query='
       pullRequest(number:$pr) {
         reviewThreads(first:100) {
           totalCount
-          nodes { id isResolved path line comments(first:1) { nodes { author { login } } } }
+          nodes { id isResolved path line comments(first:1) { nodes { author { login __typename } body } } }
         }
       }
     }
   }' -F owner=SurvivorsStudio -F repo=ditter -F pr=<n> \
-  --jq '.data as $d | $d.repository.pullRequest.reviewThreads as $t | {total: $t.totalCount, read: ($t.nodes | length), mine: [$t.nodes[] | select(.isResolved == false) | select(.comments.nodes[0].author.login == $d.viewer.login) | {id, at: "\(.path):\(.line // "줄 불명")"}]}'
+  --jq '.data as $d | $d.repository.pullRequest.reviewThreads as $t | [$t.nodes[] | select(.isResolved == false) | select(.comments.nodes[0] != null) | {id, at: "\(.path):\(.line // "줄 불명")", by: .comments.nodes[0].author.login, kind: .comments.nodes[0].author.__typename, body: .comments.nodes[0].body}] as $open | {total: $t.totalCount, read: ($t.nodes | length), mine: [$open[] | select(.by == $d.viewer.login) | {id, at}], others: [$open[] | select(.by != $d.viewer.login and .kind != "Bot") | {id, at, by}]}'
 ```
 
-**읽기 전에 세 가지를 본다** — §1d 가 세워 둔 기준을 여기에도 그대로 적용한다.
+`mine` 은 **`gh` 를 실행하는 계정**(`viewer.login`)이 남긴 미해결 스레드, `others` 는 **사람이
+남긴 미반영 지적**이다. `others` 에서 빼는 것은 봇(`__typename == "Bot"`)과 viewer 자신이다 —
+"자기 자신"은 PR 작성자가 아니라 viewer 로 못박는다(둘이 대개 같지만 규칙으로는 다르다).
 
-- **출력이 아예 없으면 통과가 아니라 실패다.** `{"total":N,"read":N,"mine":[]}` 처럼 무언가
-  출력된 것만 "접을 것이 없다"로 읽는다. 빈 화면은 조회 실패와 구별되지 않는다.
-- **`read` 가 `total` 보다 작으면 목록이 잘린 것이다**(스레드 100건 초과). 그때는 **resolve 하지
-  말고 그 사실을 보고하고 종료한다.** 일부만 접으면 나머지 때문에 3번이 여전히 `BLOCKED` 이고,
-  그 자리에서 "스레드가 원인이 아니었다"고 **틀리게** 안내하게 된다.
+**읽자마자 세 가지를 본다** — §1d 가 세워 둔 기준을 여기에도 그대로 적용한다.
+
+- **출력이 아예 없으면 통과가 아니라 실패다.** `{"total":N,"read":N,"mine":[],"others":[]}` 처럼
+  무언가 출력된 것만 "접을 것도 물을 것도 없다"로 읽는다. 빈 화면은 조회 실패(인증 만료·오타)와
+  구별되지 않는다 — 그것을 "남의 지적이 없다"로 읽으면 물어봤어야 할 것을 묻지 않고 지나간다.
+- **`read` 가 `total` 보다 작으면 목록이 잘린 것이다**(스레드 100건 초과). 그때는 **아무것도
+  접지 말고** 그 사실을 보고하고 종료한다. 일부만 접으면 나머지 때문에 3번이 여전히 `BLOCKED`
+  이고, 그 자리에서 "스레드가 원인이 아니었다"고 **틀리게** 안내하게 된다.
 - **`line` 이 없는 스레드가 있다**(코드가 바뀌어 outdated 가 된 것). 위 표기가 `줄 불명` 으로
   떨어뜨리므로 보고에 그대로 쓴다 — `파일:null` 로 적으면 읽는 사람이 오류로 본다.
 
-`mine` 의 `id` 마다:
+#### `others` 가 있으면 묻는다 — "그 스레드도 접어도 되는지"
+
+요약해 보여주고 **"그 스레드도 접어도 되는지"를 묻는다.** 예전에는 "그대로 머지할지"를 물었는데
+그 물음에는 답할 수가 없다 — `required_conversation_resolution` 이 켜져 있어(1b 의 표)
+"머지해라"라고 답해도 GitHub 이 막고, 3번이 **원인을 모른 채** 종료한다. 그 원인은 방금 사용자에게
+보여 준 그 스레드다. **아는 원인을 모른다고 보고하게 되는 물음은 두지 않는다.**
+
+- **접어도 된다**고 하면 아래 resolve 대상을 `mine + others` 로 한다. 남의 지적을 대신 닫는
+  것이므로 **이 허락은 이번 머지 한 번에만 유효하다** — 다음 실행이 물려받지 않는다.
+- **아니라고 하면 종료한다.** 그 사람과 정리한 뒤 다시 부르라고 안내한다.
+- `others` 가 비어 있으면 묻지 않는다.
+
+#### resolve 하고 진행한다
+
+`required_conversation_resolution` 이 켜져 있어 GitHub 은 **작성자를 가리지 않는다** — 누가 썼든
+미해결 스레드가 하나라도 있으면 `mergeStateStatus` 가 `BLOCKED` 이 된다. 그리고 `/pr` §6-D 는
+**매번 인라인 코멘트를 단다**(그것이 "리뷰를 돌렸다는 증거"를 Reviews 탭에 남기는 그 절의
+목적이다). 그래서 `/pr` → `/pr-merge` 라는 **정상 경로가 매번 BLOCKED 로 끝난다.**
+
+**`mine` 은 묻지 않고 접는다.** 방금 자기가 남긴 기록을 접을지 확인받는 것은 같은 결정을 두 번
+시키는 것이고, 그 창은 습관적으로 넘기게 되어 정작 **남이 남긴 지적**을 묻는 위 물음까지 무디게
+만든다. 대상의 `id` 마다:
 
 ```bash
 gh api graphql -f query='mutation($id:ID!){ resolveReviewThread(input:{threadId:$id}){ thread { isResolved } } }' -F id=<thread-id>
@@ -301,10 +287,11 @@ gh api graphql -f query='mutation($id:ID!){ resolveReviewThread(input:{threadId:
 
 지킬 것 셋:
 
-- **viewer 가 쓴 것만 건드린다.** 남의 스레드를 resolve 하는 것은 남의 지적을 대신 닫는 일이라
-  이 명령이 할 일이 아니다. 위 판정에서 그것이 남아 있으면 이미 사용자에게 물었다.
+- **묻지 않고 접는 것은 `mine` 뿐이다.** `others` 는 위 물음에서 **허락받은 것만** 접고, 그
+  허락은 이번 실행에만 유효하다. 허락 없이 남의 지적을 대신 닫지 않는다.
 - **무엇을 resolve 했는지 5번 보고에 반드시 남긴다.** 조용히 접으면 리뷰 기록이 사라진 것처럼
-  보인다. resolve 는 글을 지우지 않고 'Resolved' 로 접을 뿐이라는 것도 함께 적는다.
+  보인다. resolve 는 글을 지우지 않고 'Resolved' 로 접을 뿐이라는 것도 함께 적는다. 남의
+  스레드를 접었다면 **허락받아 접었다는 사실과 그 목록**을 따로 적는다.
 - **resolve 가 실패해도 머지를 강행하지 않는다.** 그대로 두면 3번 직전 재확인에서 `BLOCKED` 로
   걸리므로, 실패한 스레드를 보고하고 종료한다.
 
@@ -373,9 +360,11 @@ gh pr merge <n> --squash --delete-branch --subject "<타입>: <제목>" --body "
 - 머지된 PR 번호·제목, main 의 새 squash 커밋 해시, 삭제한 브랜치(원격·로컬)를 보고한다.
 - 1d 가 **판정할 근거 없이** 통과했다면(대상 PR 이 닫는 이슈가 없음) 그 한 줄을 함께 남긴다 —
   "겹치는 PR 이 없음을 확인했다"와 "확인할 이슈가 없었다"는 다른 말이다.
-- 2번에서 **resolve 한 리뷰 스레드**가 있으면 몇 건을 어디(`파일:줄`)에서 접었는지 남기고,
-  글이 지워진 것이 아니라 'Resolved' 로 접힌 것임을 함께 적는다. 이것은 이 명령이 PR 상태를
-  건드린 **유일한 자리**라 보고에서 빠지면 안 된다.
+- 2번에서 **resolve 한 리뷰 스레드**가 있으면 몇 건을 어디(`파일:줄`, 없으면 `줄 불명`)에서
+  접었는지 남기고, 글이 지워진 것이 아니라 'Resolved' 로 접힌 것임을 함께 적는다. 이것은 이
+  명령이 PR 상태를 건드린 **유일한 자리**라 보고에서 빠지면 안 된다.
+  **남이 남긴 스레드를 접었다면 그 목록을 따로, 허락받아 접었다는 사실과 함께 적는다** —
+  내 기록을 접은 것과 남의 지적을 대신 닫은 것은 무게가 다르다.
 
 ## Notes
 - PR 타깃은 항상 `main`. 머지 전략은 **squash 고정**(`docs/conventions/commit-convention.md`
@@ -386,8 +375,8 @@ gh pr merge <n> --squash --delete-branch --subject "<타입>: <제목>" --body "
   말해 주는 자리다 — GitHub 이 주는 신호는 `BLOCKED` 하나뿐이라 원인을 알려 주지 않는다.
 - **이 명령이 PR 상태를 건드리는 자리는 하나뿐이다** — 2번에서 **자기 계정이 남긴** 미해결
   리뷰 스레드를 resolve 한다(`required_conversation_resolution` 이 켜져 있어 그것이 없으면
-  `/pr` → `/pr-merge` 정상 경로가 매번 BLOCKED 로 끝난다). 남의 스레드는 건드리지 않고 묻는다.
-  무엇을 resolve 했는지는 5번 보고에 남긴다.
+  `/pr` → `/pr-merge` 정상 경로가 매번 BLOCKED 로 끝난다). 남의 스레드는 **먼저 묻고 허락받은
+  것만** 접으며, 그 허락은 이번 실행에만 유효하다. 무엇을 resolve 했는지는 5번 보고에 남긴다.
 - 머지 명령이 실패해도 **재호출 전 서버 상태(MERGED)를 먼저 확인**한다(step 3). 강제·우회 옵션 금지.
 - **`/pr-merge` 호출이 곧 머지 승인이다.** 게이트를 통과하면 되묻지 않는다 — 묻는 경우는 대상 PR
   이 하나로 안 좁혀질 때(step 0)와 사람의 미해결 리뷰 스레드가 남았을 때(step 2)뿐이다. 사용자에게
