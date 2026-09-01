@@ -37,7 +37,6 @@ def chat(
         error=payload.error,
         explain=payload.explain,
         include_samples=payload.include_samples,
-        locale=payload.locale,
     )
     return AiChatResponse(
         message=AiChatMessage(role="assistant", content=result.content),

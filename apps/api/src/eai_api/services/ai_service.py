@@ -16,6 +16,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from ..i18n import get_locale
 from .connection_service import (
     discover_schema,
     get_connection,
@@ -282,7 +283,6 @@ def chat(
     error: str | None = None,
     explain: str | None = None,
     include_samples: bool = False,
-    locale: str = "ko",
 ) -> AiChatResult:
     if intent not in _INTENTS:
         raise ValidationError(f"알 수 없는 intent: {intent} (가능: {', '.join(supported_intents())})")
@@ -303,8 +303,10 @@ def chat(
         session, db_connection_id, convo_text, include_samples=include_samples
     )
     system = _INTENTS[intent](dialect, schema_text, sql, error, explain)
+    # 답변 언어는 인자가 아니라 **요청 스코프**에서 읽는다 — 화면 언어는 이미
+    # Accept-Language 로 와 있고(`i18n.locale`), 본문에도 두면 두 값이 갈릴 수 있다.
     # 모르는 언어 코드는 ko 로 떨어뜨린다 — 지시를 아예 빼면 모델이 제멋대로 고른다.
-    system += _ANSWER_LANG.get(locale, _ANSWER_LANG["ko"])
+    system += _ANSWER_LANG.get(get_locale(), _ANSWER_LANG["ko"])
 
     result = connector.generate(list(messages), system=system)  # ConnectorError 는 전역 핸들러가 처리
     return AiChatResult(

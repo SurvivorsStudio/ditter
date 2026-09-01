@@ -29,9 +29,8 @@ class AiChatRequest(BaseModel):
     #: 언급된 테이블의 예시 행을 프롬프트에 넣어 값→컬럼 매핑 정확도를 높인다.
     #: 실제 데이터가 AI 프로바이더로 전송되므로 기본은 꺼짐 — 프론트가 토글로 켠다.
     include_samples: bool = False
-    #: 답변 언어. 화면의 언어 설정을 그대로 보낸다 — 서버는 요청마다 다를 수 있다고 본다
-    #: (한 브라우저가 언어를 바꾸면 다음 요청부터 바뀐다). 모르는 값은 서비스가 ko 로 떨군다.
-    locale: Literal["ko", "en"] = "ko"
+    # 답변 언어는 본문에 없다 — 요청의 ``Accept-Language`` 하나로 정해진다
+    # (`i18n.locale`). 같은 결정을 본문과 헤더 두 군데서 하면 반드시 갈린다.
 
 
 class AiChatResponse(BaseModel):
