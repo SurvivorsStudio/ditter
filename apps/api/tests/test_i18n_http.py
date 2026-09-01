@@ -93,3 +93,78 @@ def test_middleware_is_registered_on_the_production_app() -> None:
         getattr(m, "kwargs", {}).get("dispatch") is main.request_context
         for m in main.app.user_middleware
     ), "request_context 가 운영 앱의 미들웨어 스택에 없다"
+
+
+# ---------------------------------------------------------------- 운영 앱의 실제 응답
+
+
+class _FakeSession:
+    """`session.get(Pipeline, pk)` 만 하는 최소 스텁.
+
+    운영 코드가 DB 를 요구해서 지금까지 아무도 `TestClient` 를 쓰지 않았다. 그런데
+    이 배치의 핵심 주장("문구의 절반 이상이 예외가 아니라 200 응답 본문이다")은
+    **응답 본문을 실제로 봐야** 증명된다. 스텁 몇 줄이면 그 증명이 선다.
+
+    (모델이 JSONB 를 쓰므로 SQLite `create_all` 로는 안 되고, 스텁이 맞다.)
+    """
+
+    def __init__(self, pipeline: object | None) -> None:
+        self._pipeline = pipeline
+
+    def get(self, _model: object, _pk: str) -> object | None:
+        return self._pipeline
+
+
+def _app_with(pipeline: object | None) -> TestClient:
+    from eai_api.db import get_db
+
+    main.app.dependency_overrides[get_db] = lambda: _FakeSession(pipeline)
+    return TestClient(main.app)
+
+
+def _empty_pipeline() -> object:
+    from eai_api.models import Pipeline
+
+    return Pipeline(id="p1", name="p", definition={"nodes": [], "edges": [], "variables": {}})
+
+
+@pytest.fixture
+def app_client():
+    client = _app_with(_empty_pipeline())
+    yield client
+    main.app.dependency_overrides.clear()
+
+
+def test_validate_body_is_translated(app_client: TestClient) -> None:
+    """**200 응답 본문**이 언어를 따라온다 — 예외 핸들러만 번역했다면 여기는 한국어다.
+
+    이 테스트가 "발생 시점에 번역한다"는 설계 결정의 존재 이유다.
+    """
+    ko = app_client.post("/pipelines/p1/validate").json()
+    assert ko["issues"][0]["message"] == "노드가 없습니다"
+
+    en = app_client.post("/pipelines/p1/validate", headers={"Accept-Language": "en"}).json()
+    assert en["issues"][0]["message"] == "There are no nodes"
+    # 코드는 언어를 타지 않는다 — 코드로 분기하는 쪽이 안전한 이유다.
+    assert en["issues"][0]["code"] == ko["issues"][0]["code"] == "dag.graph.empty"
+
+
+def test_no_header_keeps_todays_korean(app_client: TestClient) -> None:
+    # 헤더를 안 보내는 기존 클라이언트는 오늘과 바이트 동일한 응답을 받는다.
+    body = app_client.post("/pipelines/p1/validate").json()
+    assert body["issues"][0]["message"] == "노드가 없습니다"
+
+
+def test_service_error_detail_is_translated() -> None:
+    """예외 경로 — 아직 이 문구는 사전에 없어 두 언어가 같다.
+
+    지금 확인하는 것은 **`detail` 이 그대로 나온다는 것**(회귀 방지)이고,
+    이 문구가 옮겨지면 여기서 영어가 되어야 한다.
+    """
+    client = _app_with(None)
+    try:
+        res = client.post("/pipelines/ghost/validate", headers={"Accept-Language": "en"})
+        assert res.status_code == 404
+        assert "ghost" in res.json()["detail"]
+    finally:
+        main.app.dependency_overrides.clear()

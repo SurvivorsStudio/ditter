@@ -81,9 +81,28 @@ def test_every_t_call_uses_a_known_key() -> None:
     assert not unknown, f"사전에 없는 키를 쓴다: {unknown}"
 
 
+def _all_string_literals() -> set[str]:
+    """소스에 나오는 **모든** 문자열 리터럴.
+
+    고아 검사는 이쪽을 본다. 키가 `t(...)` 에 직접 들어가지 않는 자리가 정상적으로
+    있기 때문이다 — 모듈 상수(`STRUCTURAL_SOURCE_ORPHAN`)로 두거나, 분기를 키로
+    올리느라 변수에 담았다가(`key = ... if ... else ...`) 넘기는 경우.
+    좁게 보면 그런 키를 전부 고아로 오인한다.
+    """
+    found: set[str] = set()
+    for path in SRC.rglob("*.py"):
+        if "i18n" in path.parts:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                found.add(node.value)
+    return found
+
+
 def test_no_orphan_keys() -> None:
     # 사전만 남고 코드에서 사라진 문구 — 없애지 않으면 사전이 썩는다.
-    orphans = sorted(set(MESSAGES) - _literal_keys())
+    orphans = sorted(set(MESSAGES) - _all_string_literals())
     assert not orphans, f"아무도 쓰지 않는 키: {orphans}"
 
 

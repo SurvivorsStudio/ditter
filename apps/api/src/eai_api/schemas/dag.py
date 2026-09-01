@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from ..i18n import t
 from . import variables as var_syntax
 
 
@@ -449,6 +450,22 @@ class ValidationIssue(BaseModel):
     code: str | None = None
 
 
+def _issue(
+    level: Literal["error", "warning"],
+    key: str,
+    *,
+    node_id: str | None = None,
+    **vars: object,
+) -> ValidationIssue:
+    """검증 항목 하나. **키가 곧 코드다.**
+
+    `code` 와 `message` 를 따로 쓰게 두면 둘이 어긋난다. 여기서 한 번에 채우면
+    "메시지 본문을 보고 분기하는" 수법(예전 `pipeline_service` 의 부분 문자열 매칭)이
+    구조적으로 불가능해진다 — 걸러야 할 것이 있으면 코드로 거른다.
+    """
+    return ValidationIssue(level=level, node_id=node_id, code=key, message=t(key, **vars))
+
+
 def topological_order(nodes: list[PipelineNode], edges: list[PipelineEdge]) -> list[str]:
     """Kahn 알고리즘. 순환이 있으면 ValueError.
 
@@ -475,7 +492,7 @@ def topological_order(nodes: list[PipelineNode], edges: list[PipelineEdge]) -> l
 
     if len(order) != len(nodes):
         stuck = sorted(set(indegree) - set(order))
-        raise ValueError(f"DAG 에 순환이 있습니다: {stuck}")
+        raise ValueError(t("dag.graph.cycle", list=stuck))
     return order
 
 
@@ -485,14 +502,14 @@ def validate_definition(definition: PipelineDefinition) -> list[ValidationIssue]
     nodes = definition.nodes
 
     if not nodes:
-        return [ValidationIssue(level="error", message="노드가 없습니다")]
+        return [_issue("error", "dag.graph.empty")]
 
     sources = [n for n in nodes if n.is_source]
     targets = [n for n in nodes if n.is_target]
     if not sources:
-        issues.append(ValidationIssue(level="error", message="소스 노드가 최소 1개 필요합니다"))
+        issues.append(_issue("error", "dag.graph.need_source"))
     if not targets:
-        issues.append(ValidationIssue(level="error", message="타깃 노드가 최소 1개 필요합니다"))
+        issues.append(_issue("error", "dag.graph.need_target"))
 
     issues.extend(_cdc_pipeline_issues(nodes, sources))
     issues.extend(_sync_pipeline_issues(definition, sources))
@@ -506,10 +523,8 @@ def validate_definition(definition: PipelineDefinition) -> list[ValidationIssue]
         touching = note_ids & {e.source, e.target}
         if touching:
             issues.append(
-                ValidationIssue(
-                    level="error",
-                    node_id=next(iter(touching)),
-                    message="메모 노드는 다른 노드와 연결할 수 없습니다",
+                _issue(
+                    "error", "dag.graph.note_not_connectable", node_id=next(iter(touching))
                 )
             )
 
@@ -524,21 +539,13 @@ def validate_definition(definition: PipelineDefinition) -> list[ValidationIssue]
     for e in definition.edges:
         if e.source in target_ids:
             issues.append(
-                ValidationIssue(
-                    level="error",
-                    node_id=e.source,
-                    message="타깃 뒤에는 노드를 이을 수 없습니다 — 타깃은 흐름의 끝입니다",
-                )
+                _issue("error", "dag.graph.after_target", node_id=e.source)
             )
         # 반대쪽 규칙 — 트리거는 흐름의 시작이라 받을 것이 없다.
         # 들어오는 엣지가 있어도 엔진은 트리거를 실행 대상으로 보지 않아 데이터가 조용히 사라진다.
         if e.target in trigger_ids:
             issues.append(
-                ValidationIssue(
-                    level="error",
-                    node_id=e.target,
-                    message="트리거 앞에는 노드를 둘 수 없습니다 — 트리거는 흐름의 시작입니다",
-                )
+                _issue("error", "dag.graph.before_trigger", node_id=e.target)
             )
         # 소스도 받을 것이 없다. **트리거만 예외**다 (언제 도는지를 정해 준다).
         #
@@ -547,12 +554,7 @@ def validate_definition(definition: PipelineDefinition) -> list[ValidationIssue]
         # 보이고 실행도 성공하는데 상류 데이터만 조용히 사라지는, 가장 찾기 어려운 종류다.
         if e.target in source_ids and e.source not in trigger_ids:
             issues.append(
-                ValidationIssue(
-                    level="error",
-                    node_id=e.target,
-                    message="소스 앞에는 트리거 외에 노드를 둘 수 없습니다 "
-                    "— 소스는 스스로 읽어 오므로 들어온 데이터가 사라집니다",
-                )
+                _issue("error", "dag.graph.before_source", node_id=e.target)
             )
 
     upstream = definition.upstream_map()
@@ -567,7 +569,7 @@ def validate_definition(definition: PipelineDefinition) -> list[ValidationIssue]
                     level="error",
                     node_id=node.id,
                     code=STRUCTURAL_SOURCE_ORPHAN,
-                    message="소스가 어디에도 연결되지 않았습니다",
+                    message=t(STRUCTURAL_SOURCE_ORPHAN),
                 )
             )
         if node.is_target and not upstream[node.id]:
@@ -576,7 +578,7 @@ def validate_definition(definition: PipelineDefinition) -> list[ValidationIssue]
                     level="error",
                     node_id=node.id,
                     code=STRUCTURAL_TARGET_NO_INPUT,
-                    message="타깃에 들어오는 입력이 없습니다",
+                    message=t(STRUCTURAL_TARGET_NO_INPUT),
                 )
             )
         if node.kind in TRANSFORM_KINDS and not upstream[node.id]:
@@ -585,7 +587,7 @@ def validate_definition(definition: PipelineDefinition) -> list[ValidationIssue]
                     level="error",
                     node_id=node.id,
                     code=STRUCTURAL_TRANSFORM_NO_INPUT,
-                    message="변환 노드에 입력이 없습니다",
+                    message=t(STRUCTURAL_TRANSFORM_NO_INPUT),
                 )
             )
         if node.kind is NodeKind.TRANSFORM_PYTHON:
@@ -595,9 +597,7 @@ def validate_definition(definition: PipelineDefinition) -> list[ValidationIssue]
         needs_connection = (node.is_source or node.is_target) and node.kind not in CONNECTORLESS_TARGET_KINDS
         if needs_connection and not node.params.get("connection_id"):
             issues.append(
-                ValidationIssue(
-                    level="error", node_id=node.id, message="connection_id 가 지정되지 않았습니다"
-                )
+                _issue("error", "dag.node.connection_required", node_id=node.id)
             )
         if node.kind is NodeKind.SOURCE_SAP:
             issues.extend(_sap_issues(node))
@@ -609,12 +609,12 @@ def validate_definition(definition: PipelineDefinition) -> list[ValidationIssue]
             # Mongo 는 query 가 SQL 이 아니라 필터라서 컬렉션 지정을 대신할 수 없다
             if not node.params.get("table"):
                 issues.append(
-                    ValidationIssue(level="error", node_id=node.id, message="컬렉션(table)이 필요합니다")
+                    _issue("error", "dag.node.collection_required", node_id=node.id)
                 )
             issues.extend(_mongo_filter_issues(node))
         elif node.is_source and not (node.params.get("table") or node.params.get("query")):
             issues.append(
-                ValidationIssue(level="error", node_id=node.id, message="table 또는 query 가 필요합니다")
+                _issue("error", "dag.node.table_or_query_required", node_id=node.id)
             )
 
         if node.kind in SYNC_TARGET_KINDS:
@@ -624,33 +624,33 @@ def validate_definition(definition: PipelineDefinition) -> list[ValidationIssue]
         elif node.kind is NodeKind.TARGET_DB and node.params.get("table_mappings") is not None:
             issues.extend(_cdc_target_mapping_issues(node))
         elif node.kind in {NodeKind.TARGET_DB, NodeKind.TARGET_MONGO}:
-            label = "컬렉션" if node.kind is NodeKind.TARGET_MONGO else "table"
+            # 낱말을 문장에 끼우지 않는다 — 분기를 키로 올린다. 영어는 어순이 달라
+            # `타깃 {label} 이(가) 필요합니다` 같은 조립이 성립하지 않는다.
             if not node.params.get("table"):
-                issues.append(
-                    ValidationIssue(level="error", node_id=node.id, message=f"타깃 {label} 이(가) 필요합니다")
+                key = (
+                    "dag.node.target_collection_required"
+                    if node.kind is NodeKind.TARGET_MONGO
+                    else "dag.node.target_table_required"
                 )
+                issues.append(_issue("error", key, node_id=node.id))
             if node.params.get("mode") == "upsert" and not node.params.get("key_columns"):
-                issues.append(
-                    ValidationIssue(
-                        level="error", node_id=node.id, message="upsert 모드는 key_columns 가 필요합니다"
-                    )
-                )
+                issues.append(_issue("error", "dag.node.upsert_needs_key_columns", node_id=node.id))
 
         if node.kind in OBJECT_TARGET_KINDS and node.params.get("mode") == "upsert":
-            label = "S3" if node.kind is NodeKind.TARGET_S3 else "로컬 파일"
-            issues.append(
-                ValidationIssue(
-                    level="error",
-                    node_id=node.id,
-                    message=f"{label} 은(는) upsert 를 지원하지 않습니다 — append 또는 overwrite 를 쓰세요",
-                )
+            # 여기도 조립을 키로 올렸다. en 은 수 일치까지 다르다 —
+            # "S3 does not support" ↔ "Local files do not support".
+            key = (
+                "dag.node.s3_no_upsert"
+                if node.kind is NodeKind.TARGET_S3
+                else "dag.node.file_no_upsert"
             )
+            issues.append(_issue("error", key, node_id=node.id))
 
         if node.kind is NodeKind.TARGET_RESPONSE:
             issues.extend(_response_node_issues(node))
 
         if node.kind is NodeKind.SCHEDULE and not node.params.get("cron"):
-            issues.append(ValidationIssue(level="error", node_id=node.id, message="cron 식이 필요합니다"))
+            issues.append(_issue("error", "dag.node.cron_required", node_id=node.id))
 
         # SQL 소스에서만 해당 — Mongo·SAP·CDC 는 증분키 개념이 다르다
         if (
@@ -662,16 +662,12 @@ def validate_definition(definition: PipelineDefinition) -> list[ValidationIssue]
             and node.params.get("query")
         ):
             issues.append(
-                ValidationIssue(
-                    level="warning",
-                    node_id=node.id,
-                    message="query 모드에서는 증분키가 무시됩니다 — table 모드를 쓰세요",
-                )
+                _issue("warning", "dag.node.query_ignores_incremental", node_id=node.id)
             )
 
     trigger_count = sum(1 for n in nodes if n.is_trigger)
     if trigger_count == 0:
-        issues.append(ValidationIssue(level="warning", message="트리거가 없어 수동 실행만 가능합니다"))
+        issues.append(_issue("warning", "dag.graph.no_trigger"))
     return issues
 
 
@@ -694,11 +690,7 @@ def _duplicate_label_issues(nodes: list[PipelineNode]) -> list[ValidationIssue]:
         key = name.casefold()
         if key in seen:
             issues.append(
-                ValidationIssue(
-                    level="warning",
-                    node_id=n.id,
-                    message=f"노드 이름 '{name}' 이(가) 다른 노드와 겹칩니다",
-                )
+                _issue("warning", "dag.node.duplicate_label", node_id=n.id, name=name)
             )
         seen.add(key)
     return issues
@@ -716,13 +708,8 @@ def _node_ref_issues(definition: PipelineDefinition) -> list[ValidationIssue]:
     for node in definition.nodes:
         for placeholder in var_syntax.malformed_placeholders(node.params):
             issues.append(
-                ValidationIssue(
-                    level="warning",
-                    node_id=node.id,
-                    message=(
-                        f"{placeholder} 는 변수도 노드 참조도 아니라 글자 그대로 남습니다 "
-                        "— $이름 또는 ${노드이름.컬럼} 형태여야 합니다"
-                    ),
+                _issue(
+                    "warning", "dag.ref.not_a_reference", node_id=node.id, ref=placeholder
                 )
             )
 
@@ -730,52 +717,29 @@ def _node_ref_issues(definition: PipelineDefinition) -> list[ValidationIssue]:
             target = definition.node_by_label(ref.node)
             if target is None:
                 issues.append(
-                    ValidationIssue(
-                        level="error",
-                        node_id=node.id,
-                        message=f"{ref} 가 가리키는 노드 이름을 찾을 수 없습니다: 「{ref.node}」",
+                    _issue(
+                        "error", "dag.ref.node_not_found", node_id=node.id, ref=ref, name=ref.node
                     )
                 )
             elif target.id == node.id:
                 issues.append(
-                    ValidationIssue(
-                        level="error",
-                        node_id=node.id,
-                        message=f"{ref} — 자기 자신의 결과는 참조할 수 없습니다",
-                    )
+                    _issue("error", "dag.ref.self", node_id=node.id, ref=ref)
                 )
             elif target.is_trigger or target.is_note:
                 issues.append(
-                    ValidationIssue(
-                        level="error",
-                        node_id=node.id,
-                        message=f"{ref} — 트리거·메모 노드는 결과를 내지 않습니다",
-                    )
+                    _issue("error", "dag.ref.trigger_or_note", node_id=node.id, ref=ref)
                 )
             elif target.is_target:
                 issues.append(
-                    ValidationIssue(
-                        level="error",
-                        node_id=node.id,
-                        message=f"{ref} — 타깃 노드는 입력만 있고 출력이 없습니다",
-                    )
+                    _issue("error", "dag.ref.target", node_id=node.id, ref=ref)
                 )
             elif target.is_cdc_source:
                 issues.append(
-                    ValidationIssue(
-                        level="error",
-                        node_id=node.id,
-                        message=f"{ref} — CDC 소스는 상시 스트림이라 '첫 행'이 정해지지 않습니다",
-                    )
+                    _issue("error", "dag.ref.cdc_source", node_id=node.id, ref=ref)
                 )
             elif target.is_sync_source:
                 issues.append(
-                    ValidationIssue(
-                        level="error",
-                        node_id=node.id,
-                        message=f"{ref} — 동기화 소스는 행을 우리 쪽으로 읽어 오지 않습니다 "
-                        "(SymmetricDS 가 타깃 DB 로 직접 보냅니다)",
-                    )
+                    _issue("error", "dag.ref.sync_source", node_id=node.id, ref=ref)
                 )
 
     deps = definition.node_ref_dependencies()
@@ -791,11 +755,7 @@ def _node_ref_issues(definition: PipelineDefinition) -> list[ValidationIssue]:
             topological_order(definition.nodes, definition.edges + extra)
         except ValueError:
             issues.append(
-                ValidationIssue(
-                    level="error",
-                    message="노드 결과 참조가 순환합니다 "
-                    "— 서로의 결과를 참조하면 어느 쪽도 먼저 실행할 수 없습니다",
-                )
+                _issue("error", "dag.ref.cycle")
             )
 
     return issues
