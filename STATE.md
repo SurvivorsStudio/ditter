@@ -77,12 +77,30 @@ cd apps/web && npx tsc -b --force && npm run lint && npm test && npm run build
 `AiChatPane` 의 `chat.runTotalNote`·`chat.runResultHead` 는 **모델에 보내는 프롬프트 본문**
 이라 모델이 `1,000행` 을 본다. 무해해 보이지만 확인은 안 했다.
 
-### 4. 이 세션에서 **돌려보지 못한 것**
+### 4. 파이썬 검증 — 확인 완료, 다만 환경 조건 하나
 
-`uv` 가 이 머신에 없어(`command not found`) 파이썬 테스트를 한 번도 돌리지 못했다.
-`apps/api/tests/test_ai_service.py` 에 답변 언어 테스트 4개를 새로 넣었는데 **구문 검사만
-했다** (`python3 -m py_compile`). 다음에 `uv` 가 있는 환경에서 반드시 확인할 것:
+`uv` 가 이 머신에 없어서(`command not found`) 임시 venv 에 넣어 돌렸다.
+**전역 환경은 건드리지 않았다** — 필요하면 같은 방법을 쓰면 된다:
 
 ```bash
-cd apps/api && uv run --extra dev pytest -q
+python3 -m venv /tmp/toolvenv && /tmp/toolvenv/bin/pip install uv
+cd apps/api && /tmp/toolvenv/bin/uv run --extra dev pytest -q --cov
 ```
+
+실측 결과 (2026-09-01):
+
+| 영역 | 테스트 | 커버리지 | ruff |
+|---|---|---|---|
+| api | **546 통과** | 53.11% (하한 50) | 통과 |
+| worker | 211 통과 | 53.10% (하한 51) | 통과 |
+| sap-connector | 83 통과 | 79.04% (하한 76) | 통과 |
+| connectors | 161 통과 / **3 실패** | — | 통과 |
+
+**connectors 의 3건은 코드 문제가 아니라 이 머신의 환경 문제다.**
+`tests/test_mssql_mongo.py::TestMsSql` 이 pyodbc 를 임포트하는데
+`libodbc.2.dylib` 이 없다 — unixODBC 미설치다. 고치려면 `brew install unixodbc`.
+그 클래스만 빼면 161개가 전부 통과한다. **코드로는 확인할 수 없는 항목이라
+CI(리눅스)에서는 어떤지 별도로 봐야 한다.**
+
+답변 언어 테스트 4개는 **변경을 되돌리면 실패하는지까지 확인했다**
+(언어 지시 줄을 빼면 3건 실패, 본문의 "한국어로" 를 되살리면 나머지 1건 실패).
