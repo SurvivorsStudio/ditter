@@ -1,6 +1,6 @@
 import type { z } from 'zod'
 import { auth } from './auth'
-import { t } from '../i18n'
+import { getLocale, t } from '../i18n'
 
 /** 개발 중에는 vite 프록시(/api)를, 배포 시에는 빌드 타임 주입값을 쓴다 */
 const RAW_BASE = import.meta.env.VITE_API_BASE ?? '/api'
@@ -23,10 +23,19 @@ type RequestOptions = {
   signal?: AbortSignal
 }
 
+/** 서버 문구의 언어는 **화면 언어를 그대로** 따른다.
+ *
+ *  브라우저는 이 헤더를 자동으로도 붙인다. 그대로 두면 영어 OS 를 쓰는 한국인이 UI 는
+ *  한국어인데 서버 오류만 영어로 받는다 — `i18n/locale.ts` 가 `navigator.language` 를
+ *  일부러 보지 않는 것과 같은 이유다. 그래서 **항상 덮어쓴다.**
+ *
+ *  붙이는 자리는 `request` 와 `download` **두 곳**이다. 내보내기 실패도 `detail` 을
+ *  그대로 화면에 올리므로 한쪽만 붙이면 그 자리만 조용히 언어가 갈린다.
+ */
 async function request(path: string, options: RequestOptions = {}): Promise<unknown> {
   const { method = 'GET', body, signal } = options
 
-  const headers: Record<string, string> = {}
+  const headers: Record<string, string> = { 'Accept-Language': getLocale() }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const token = auth.token
   if (token) headers.Authorization = `Bearer ${token}`
@@ -101,7 +110,10 @@ async function parsed<S extends z.ZodTypeAny>(
  * (내보내기처럼 응답이 파일인 엔드포인트용. `request` 는 JSON 을 가정하므로 못 쓴다.)
  */
 async function download(path: string, body: unknown, filename: string): Promise<void> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Accept-Language': getLocale(),
+  }
   const token = auth.token
   if (token) headers.Authorization = `Bearer ${token}`
 

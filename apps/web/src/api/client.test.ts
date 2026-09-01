@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
+import { setLocale } from '../i18n'
 import { ApiError, api, runStreamUrl } from './client'
 
 const originalFetch = globalThis.fetch
@@ -38,7 +39,22 @@ describe('api.request', () => {
     await api.request('/connections')
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(init.body).toBeUndefined()
-    expect(init.headers).toEqual({})
+    // Accept-Language 는 본문과 무관하게 **항상** 간다 (아래 참조).
+    expect(init.headers).toEqual({ 'Accept-Language': 'ko' })
+  })
+
+  it('서버 문구의 언어를 화면 언어로 지정한다', async () => {
+    // 브라우저가 이 헤더를 자동으로도 붙인다. 명시적으로 덮어쓰지 않으면 영어 OS 를 쓰는
+    // 한국인이 UI 는 한국어인데 서버 오류만 영어로 받는다.
+    const fetchMock = mockFetch(200, [])
+    setLocale('en')
+    try {
+      await api.request('/connections')
+      const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+      expect((init.headers as Record<string, string>)['Accept-Language']).toBe('en')
+    } finally {
+      setLocale('ko')
+    }
   })
 
   it('204 는 본문 파싱 없이 null 을 돌려준다', async () => {
