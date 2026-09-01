@@ -100,9 +100,41 @@ def _all_string_literals() -> set[str]:
     return found
 
 
+def _check_keys() -> set[str]:
+    """`_check("<리터럴>", ...)` 의 첫 인자 — 착수 점검 항목의 key."""
+    found: set[str] = set()
+    for path in SRC.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "_check"
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+            ):
+                found.add(node.args[0].value)
+    return found
+
+
+def test_every_preflight_key_has_a_label() -> None:
+    """`_check` 는 label 을 `sync.pre.<key>.label` 로 **계산해서** 찾는다.
+
+    계산 키라 위 AST 검사가 잡지 못한다 — 오타가 나면 화면에 키 문자열이 그대로 뜬다.
+    그 구멍을 여기서 막는다.
+    """
+    keys = _check_keys()
+    assert keys, "_check 호출을 하나도 못 찾았다 — 검사가 무력해졌다"
+    missing = sorted(f"sync.pre.{k}.label" for k in keys if f"sync.pre.{k}.label" not in MESSAGES)
+    assert not missing, f"label 이 없는 점검 항목: {missing}"
+
+
 def test_no_orphan_keys() -> None:
     # 사전만 남고 코드에서 사라진 문구 — 없애지 않으면 사전이 썩는다.
-    orphans = sorted(set(MESSAGES) - _all_string_literals())
+    # 계산해서 만드는 label 키는 위 검사가 따로 지킨다.
+    computed = {f"sync.pre.{k}.label" for k in _check_keys()}
+    orphans = sorted(set(MESSAGES) - _all_string_literals() - computed)
     assert not orphans, f"아무도 쓰지 않는 키: {orphans}"
 
 

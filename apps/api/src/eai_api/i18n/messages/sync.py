@@ -158,4 +158,7 @@ sync: dict[str, tuple[str, str]] = {
         "one '?' per character. Turn on mssql.use.ntypes.for.sync=true in the source engine "
         "and recreate {name}_*",
     ),
+    # 사이드카 엔진 목록에 들어가는 이름 — `sidecar_engines` 의 `{list}` 로 이어 붙는다.
+    "sync.engine.source": ("소스", "source"),
+    "sync.engine.target": ("타깃", "target"),
 }
