@@ -7,8 +7,8 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
 확보·영역별 커밋·변경 영역 테스트·코드 리뷰·push·PR 생성)는 모두 `/pr` 에서 끝나 있어야 한다. 이
 명령은 **머지될 코드를 고치지 않는다** — 사전 게이트가 하나라도 실패하면 **즉시 멈추고 무엇을
 먼저 해야 하는지** 안내한다(대개 `/pr` 로 재준비 — 예외는 1번 머리말). 손대는 것은 하나,
-**리뷰 스레드의 해결 표시**뿐이다(2번) — 자기 계정이 남긴 것은 묻지 않고, 남이 남긴 것은
-**허락받은 것만** 접으며, 어느 쪽이든 무엇을 했는지 보고에 남긴다.
+**리뷰 스레드의 해결 표시**뿐이다(2번) — 무엇을 묻지 않고 접고 무엇을 허락받아 접는지는
+**그 절이 정한다.** 어느 쪽이든 무엇을 했는지 보고에 남긴다.
 
 원격은 **GitHub** ([SurvivorsStudio/ditter](https://github.com/SurvivorsStudio/ditter))이라 `gh` 를 쓴다.
 
@@ -221,9 +221,14 @@ grep -rn "§1d" --include="*.md" . | grep -v node_modules
 진행 직전에는 **묻지 말고 고지만** 한다 — PR 번호·제목·소스 브랜치, main 으로 **squash 머지** +
 머지 후 브랜치 삭제.
 
-여기서 멈추고 묻는 경우는 **하나뿐**이다 — 사용자가 명령할 때는 알 수 없었고, 답에 따라 **머지
-여부가 달라지는** 정보이기 때문이다. (대상 PR 이 여럿이라 하나로 좁혀지지 않는 경우는 0번에서
-이미 처리된다.)
+여기서 **멈추고 묻게 되는** 상황은 하나뿐이다 — 사용자가 명령할 때는 알 수 없었고, 답에 따라
+**머지 여부가 달라지는** 정보이기 때문이다. (대상 PR 이 여럿이라 하나로 좁혀지지 않는 경우는
+0번에서 이미 처리된다. 답과 무관하게 멈추는 자리는 따로 있고, 각 가드가 그 자리에서 정한다 —
+여기서 세지 않는다.)
+
+**무엇을 몇 번 묻는지는 아래 물음 절이 정한다.** 여기서 세지 않는다 — 해당하는 목록이 있는
+것만 묻되, **판정하지 못한 스레드는 나머지와 한 번의 「예」로 묶지 않는다.** 상황이 하나라는
+것을 물음도 하나라는 뜻으로 읽으면 그 금지를 그대로 어기게 된다.
 
 **미해결 리뷰 스레드가 남아 있을 때.** `CHANGES_REQUESTED` 는 1b 에서 이미 종료되지만, 승인 없이
 남은 지적은 서버 상태만으로 반영 여부를 알 수 없다. `gh pr view --comments` 는 스레드의 해결
@@ -240,20 +245,23 @@ gh api graphql -f query='
       pullRequest(number:$pr) {
         reviewThreads(first:100) {
           totalCount
-          nodes { id isResolved path line comments(first:100) { nodes { author { login __typename } } } }
+          nodes { id isResolved path line comments(first:100) { totalCount nodes { author { login __typename } } } }
         }
       }
     }
   }' -F owner=SurvivorsStudio -F repo=ditter -F pr=<n> \
-  --jq '.data as $d | $d.repository.pullRequest.reviewThreads as $t | [$t.nodes[] | select(.isResolved == false) | {id, at: "\(.path):\(.line // "줄 불명")", outsiders: [.comments.nodes[].author | {by: (.login // "(삭제된 계정)"), kind: (.__typename // "User")} | select(.by != $d.viewer.login)]}] as $open | {total: $t.totalCount, read: ($t.nodes | length), mine: [$open[] | select(.outsiders | length == 0) | {id, at}], others: [$open[] | select(.outsiders | any(.kind != "Bot")) | {id, at, by: [.outsiders[].by]}], bots: [$open[] | select((.outsiders | length > 0) and (.outsiders | all(.kind == "Bot"))) | {id, at, by: [.outsiders[].by]}]}'
+  --jq '.data as $d | $d.repository.pullRequest.reviewThreads as $t | [$t.nodes[] | select(.isResolved == false) | {id, at: "\(.path):\(.line // "줄 불명")", cread: (.comments.nodes | length), ctotal: .comments.totalCount, outsiders: [.comments.nodes[].author | {by: (.login // "(삭제된 계정)"), kind: (.__typename // "User")} | select(.by != $d.viewer.login)]} | . + {blind: (.cread == 0 or .cread < .ctotal)}] as $open | {total: $t.totalCount, read: ($t.nodes | length), mine: [$open[] | select((.blind | not) and (.outsiders | length == 0)) | {id, at}], others: [$open[] | select(.blind or (.outsiders | any(.kind != "Bot"))) | {id, at, by: [.outsiders[].by], why: ([(if (.outsiders | any(.kind != "Bot")) then "사람 참여" else empty end), (if .cread == 0 then "코멘트 없음" elif .cread < .ctotal then "코멘트 \(.cread)/\(.ctotal) 잘림" else empty end)] | join(" · "))}], bots: [$open[] | select((.blind | not) and (.outsiders | length > 0) and (.outsiders | all(.kind == "Bot"))) | {id, at, by: [.outsiders[].by]}]}'
 ```
 
 미해결 스레드를 셋으로 가른다. **기준은 "누가 열었나"가 아니라 "누가 참여했나"다** —
 스레드의 코멘트 작성자를 전부 본다.
 
 - `mine` — **`gh` 를 실행하는 계정**(`viewer.login`)이 열고 **아무도 답하지 않은** 스레드.
-- `others` — 참여자에 viewer 아닌 **사람**이 하나라도 있는 스레드.
-- `bots` — viewer 밖 참여자가 **전부 리뷰 봇**(`__typename == "Bot"`)인 스레드.
+  참여자를 **끝까지 읽었고 코멘트가 최소 한 건 있는** 것만 여기 담는다(아래 「판정 근거가 없는 스레드」).
+- `others` — 참여자에 viewer 아닌 **사람**이 하나라도 있거나, **판정 근거가 없는** 스레드.
+- `bots` — viewer 밖 참여자가 **전부 리뷰 봇**(`__typename == "Bot"`)인 스레드. `mine` 과 같은
+  전제가 걸린다 — **끝까지 읽은** 것만 여기 담기고, 잘린 스레드는 읽은 범위가 전부 봇이어도
+  `others` 로 간다(101번째가 사람일 수 있다).
 
 "자기 자신"은 PR 작성자가 아니라 viewer 로 못박는다(둘이 대개 같지만 규칙으로는 다르다).
 
@@ -267,6 +275,32 @@ gh api graphql -f query='
 않으므로 봇 스레드 하나로도 머지가 막힌다. 목록에서 빼 버리면 2번은 아무것도 접지 않고 3번이
 `BLOCKED` 로 끝나며 "원인을 판정하지 못한다"고 보고하는데, 원인은 방금 읽은 조회 안에 있었다 —
 이 절이 없애겠다고 한 모양 그대로다. 이 저장소에 아직 리뷰 봇은 없지만, 붙는 순간 이 경로가 산다.
+
+**판정 근거가 없는 스레드는 `mine` 이 아니다.** 참여자로 가르는 이상 **참여자를 못 읽은** 스레드는
+판정할 수가 없는데, `outsiders` 가 비었다는 사실만 보면 그것이 **"남이 없다"와 구별되지 않는다.**
+둘이 있다.
+
+- **코멘트가 0건인 스레드.** `outsiders` 가 비어 그대로 `mine` 으로 떨어진다. GitHub 이 마지막
+  코멘트가 지워진 스레드를 함께 지우므로 도달 경로를 구성하지는 못했다. 그래도 막아 두는 것은
+  이 절이 세운 원칙("묻지 않고 접는 것은 내 것뿐")이 **빈 스레드에서만 조용히 깨지는** 모양이기
+  때문이다.
+- **코멘트가 100건을 넘어 잘린 스레드.** 101번째가 사람의 반대여도 앞의 100건이 전부 viewer
+  것이면 `mine` 으로 읽힌다. 그래서 `comments` 에도 `totalCount` 를 받아 스레드마다
+  `cread`(읽은 수)와 `ctotal`(전체 수)을 비교한다.
+
+**둘 다 `others` 로 보내 물어보게 한다.** `mine` 에서 빼기만 하면 어느 바구니에도 없어 2번이
+아무것도 접지 못하고 3번이 `BLOCKED` 로 끝난다 — 봇을 목록에서 뺐을 때와 **똑같은 실수**다.
+`why` 가 그 이유(`코멘트 없음` · `코멘트 N/M 잘림`)를 담으므로 물을 때 그대로 보여 준다.
+**사람 참여와 배타가 아니다** — 잘린 스레드의 읽은 범위 안에 사람이 있으면 둘 다 붙는다
+(`사람 참여 · 코멘트 2/150 잘림`). 하나만 고르게 하면 앞의 것이 뒤의 것을 가리는데, 가려지는
+쪽이 하필 **사람의 반대**다.
+
+**스레드 목록의 `read`/`total` 가드를 스레드 안쪽에 한 번 더 적용하는 것**이고 방향도 같다 —
+확인할 근거가 없는 것을 "확인했다"로 읽지 않는다. 다만 여기서는 **종료하지 않고 물어본다.**
+목록이 잘리면 무엇이 안 보이는지조차 모르지만, 스레드 하나가 잘린 것은 그 스레드를 PR 페이지에서
+열어 보면 사람이 즉시 판정할 수 있기 때문이다. **그 전제는 아래 물음이 실제로 지킨다** — 판정하지
+못한 항목은 따로 모아 열어 보라고 안내하고 답을 따로 받는다. 그 절차가 없으면 이 문단은
+"열어 볼 수 있으니 괜찮다"고 말만 하고 아무도 열지 않는다.
 
 **읽자마자 세 가지를 본다** — §1d 가 세워 둔 기준을 여기에도 그대로 적용한다.
 
@@ -295,8 +329,25 @@ gh api graphql -f query='
 
 - **접어도 된다**고 하면 아래 resolve 대상을 `mine + others + bots` 로 한다. 남의 지적을 대신
   닫는 것이므로 **이 허락은 이번 머지 한 번에만 유효하다** — 다음 실행이 물려받지 않는다.
+  아래 「판정하지 못한 것」이 있으면 그것만 **답을 따로 받아** 가른다. **판정하지 못한 쪽에
+  「아니오」가 오면 그 목록을 원인으로 적고 종료한다** — 나머지를 접고 3번으로 넘기면
+  `BLOCKED` 의 원인을 이미 아는데도 "판정하지 못한다"고 보고하게 되고, 그것이 바로 위 물음의
+  형태를 바꾼 이유다.
 - **아니라고 하면 종료한다.** 그 사람과 정리한 뒤 다시 부르라고 안내한다.
 - **둘 다 비어 있으면 묻지 않는다.** 봇 스레드만 있을 때도 묻는다 — 접는 판단은 사람이 한다.
+- **`why` 를 함께 보여 준다.** `others` 항목마다 왜 거기 있는지를 담는다(`bots` 에는 이 키가
+  없다 — 정의상 언제나 봇 참여다). `사람 참여` 는 남의 지적이 있다는 뜻이고,
+  `코멘트 없음`·`코멘트 N/M 잘림` 은 **판정하지 못했다**는 뜻이다. **둘은 함께 붙을 수 있고,
+  그때는 둘 다 사실이다** — `by` 도 차 있다. `by` 가 비는 것은 판정 사유만 붙은 경우다.
+  적힌 대로 옮긴다 — 판정 사유를 "남이 남긴 지적"으로 소개하면 없는 반대를 찾게 되고,
+  반대로 사람이 든 스레드를 "확인이 안 됐을 뿐"으로 소개하면 **있는 반대를 지나친다.**
+  **`by` 가 차 있다고 사람은 아니다** — 잘린 봇 스레드가 여기 오므로, `why` 에 `사람 참여` 가
+  없으면 그 이름은 봇이다.
+- **판정하지 못한 것은 따로 모아 묻는다.** `why` 에 `코멘트 없음`·`잘림` 이 붙은 항목은 목록을
+  나눠 보여 주고 **PR 페이지에서 열어 본 뒤 답해 달라고 안내한다.** 목록 절단과 달리 여기서
+  종료하지 않는 근거가 "사람이 열어 보면 즉시 판정할 수 있다" **하나뿐**이라, 안내하지 않으면
+  그 정당화가 성립하지 않는다. 나머지와 한 번의 「예」로 묶으면 **아무도 읽지 못한 반대가 정상
+  항목들과 함께 접힌다** — 이 절이 없애겠다고 한 모양 그대로다.
 
 #### resolve 하고 진행한다
 
@@ -307,11 +358,38 @@ gh api graphql -f query='
 
 **`mine` 은 묻지 않고 접는다.** 방금 자기가 남긴 기록을 접을지 확인받는 것은 같은 결정을 두 번
 시키는 것이고, 그 창은 습관적으로 넘기게 되어 정작 **남이 남긴 지적**을 묻는 위 물음까지 무디게
-만든다. 대상의 `id` 마다:
+만든다. 대상의 `id` 마다 아래를 **한 번에** 돌린다 — 셸 상태는 호출 사이에 남지 않으므로
+접을 목록을 heredoc 으로 함께 넣는다(위 조회의 `id` 와 `at` 을 한 줄씩).
 
 ```bash
-gh api graphql -f query='mutation($id:ID!){ resolveReviewThread(input:{threadId:$id}){ thread { isResolved } } }' -F id=<thread-id>
+ok=0; fail=0
+while read -r id at; do
+  [ -n "$id" ] || continue
+  got=$(gh api graphql -f query='mutation($id:ID!){ resolveReviewThread(input:{threadId:$id}){ thread { isResolved } } }' -F id="$id" --jq '.data.resolveReviewThread.thread.isResolved' 2>&1)
+  case "$got" in
+    true) ok=$((ok+1));   echo "resolved  $at" ;;
+    *)    fail=$((fail+1)); echo "FAILED    $at  ($id) — $got" ;;
+  esac
+done <<'THREADS'
+PRRT_kwDO…AAA apps/web/src/pages/SqlEditor.tsx:120
+PRRT_kwDO…BBB docs/conventions/commit-convention.md:줄 불명
+THREADS
+echo "resolve: 성공 $ok · 실패 $fail"
 ```
+
+**손으로 단어 분할을 하지 않는다.** `id` 와 위치를 한 문자열에 담아 `set -- $pair` 로 가르는 흔한
+형태는 **zsh 에서 나뉘지 않는다** — 이 저장소의 기본 셸이 `/bin/zsh` 다.
+
+```bash
+zsh  -c 'p="A B"; set -- $p; echo "1=[$1] 2=[$2]"'   # 1=[A B] 2=[]
+bash -c 'p="A B"; set -- $p; echo "1=[$1] 2=[$2]"'   # 1=[A] 2=[B]
+```
+
+PR #110 을 머지하며 실제로 밟았다. 9건 전부 `NOT_FOUND` 로 떨어져 **아무것도 변경되지 않았고**
+피해는 없었지만, 부분 성공했다면 보고와 실제가 갈렸을 것이다. 위 형태는 나누는 일을 `read` 에
+맡기므로 zsh·bash 양쪽에서 같게 동작한다(`at` 은 마지막 변수라 `줄 불명` 의 공백까지 그대로 들어간다).
+**heredoc 은 파이프가 아니라 리다이렉션이라** 두 셸 모두 `ok`·`fail` 이 루프 밖에서 살아남는다 —
+`... | while read` 로 바꾸면 bash 에서 집계가 0 이 된다.
 
 지킬 것 셋:
 
@@ -321,7 +399,10 @@ gh api graphql -f query='mutation($id:ID!){ resolveReviewThread(input:{threadId:
   보인다. resolve 는 글을 지우지 않고 'Resolved' 로 접을 뿐이라는 것도 함께 적는다. 남의
   스레드를 접었다면 **허락받아 접었다는 사실과 그 목록**을 따로 적는다.
 - **resolve 가 실패해도 머지를 강행하지 않는다.** 그대로 두면 3번 직전 재확인에서 `BLOCKED` 로
-  걸리므로, 실패한 스레드를 보고하고 종료한다.
+  걸리므로, 실패한 스레드를 보고하고 종료한다. **판정은 `fail` 로 한다** — 뮤테이션이 한 건씩
+  나가므로 **부분 실패가 정상적으로 가능하다.** `fail` 이 0 이 아니면 접힌 것이 있어도 진행하지
+  않고, 5번 보고에 **접힌 목록과 실패한 목록을 나눠** 적는다. 하나로 뭉뚱그리면 다음 사람이
+  어디부터 다시 해야 하는지 알 수 없다.
 
 그 외에는 묻지 않는다. 특히 **"되돌리기 어려운 작업이니 한 번 더 확인"** 을 이유로 되묻지 않는다 —
 명시적 호출 + 게이트 통과가 곧 승인이다.
@@ -401,15 +482,17 @@ gh pr merge <n> --squash --delete-branch --subject "<타입>: <제목>" --body "
   같다고 가정하지 않는다.
 - **이 저장소에는 브랜치 보호가 걸려 있다**(1b 의 표). 게이트는 유일한 방어선이 아니라 먼저
   말해 주는 자리다 — GitHub 이 주는 신호는 `BLOCKED` 하나뿐이라 원인을 알려 주지 않는다.
-- **이 명령이 PR 상태를 건드리는 자리는 하나뿐이다** — 2번에서 **자기 계정이 남긴** 미해결
-  리뷰 스레드를 resolve 한다(`required_conversation_resolution` 이 켜져 있어 그것이 없으면
-  `/pr` → `/pr-merge` 정상 경로가 매번 BLOCKED 로 끝난다). 남의 스레드는 **먼저 묻고 허락받은
-  것만** 접으며, 그 허락은 이번 실행에만 유효하다. 무엇을 resolve 했는지는 5번 보고에 남긴다.
+- **이 명령이 PR 상태를 건드리는 자리는 하나뿐이다** — 2번에서 미해결 리뷰 스레드를 resolve
+  한다(`required_conversation_resolution` 이 켜져 있어 그것이 없으면 `/pr` → `/pr-merge` 정상
+  경로가 매번 BLOCKED 로 끝난다). **어느 것을 묻지 않고 접고 어느 것을 허락받아 접는지는 2번이
+  정한다** — 허락받아 접는 것은 그 허락이 이번 실행에만 유효하다. 무엇을 resolve 했는지는
+  5번 보고에 남긴다.
 - 머지 명령이 실패해도 **재호출 전 서버 상태(MERGED)를 먼저 확인**한다(step 3). 강제·우회 옵션 금지.
-- **`/pr-merge` 호출이 곧 머지 승인이다.** 게이트를 통과하면 되묻지 않는다 — 묻는 경우는 대상 PR
-  이 하나로 안 좁혀질 때(step 0)와 **남이 남긴**(사람·봇) 미해결 리뷰 스레드가 남았을 때
-  (step 2)뿐이다. 사용자에게
-  되물어야 할 것은 "이미 지시한 일을 해도 되는지"가 아니라 **"지시만으로는 정해지지 않는 것"** 이다.
+- **`/pr-merge` 호출이 곧 머지 승인이다.** 게이트를 통과하면 되묻지 않는다 — **묻는 경우는
+  0번과 2번이 각각 정한다.** 여기서 세지 않는다: 세어 두면 그 절에 물음이 늘거나 줄 때 이
+  요약만 옛 개수를 들고 있게 되고, 요약을 계약으로 읽는 쪽은 새로 생긴 물음을 건너뛴다.
+  사용자에게 되물어야 할 것은 "이미 지시한 일을 해도 되는지"가 아니라 **"지시만으로는
+  정해지지 않는 것"** 이다.
 - **같은 이슈를 다루는 다른 열린 PR 이 있으면 머지하지 않는다**(step 1d, SSOT 는
   `docs/conventions/commit-convention.md` §5.1). 이 게이트는 묻지 않고 종료한다 — 필요한 것이
   허락이 아니라 **그 PR 에 알리는 일**이라서다. 통과용 우회 인자는 없고, 조율이 끝나면 게이트가
