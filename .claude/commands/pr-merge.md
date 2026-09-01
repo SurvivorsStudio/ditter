@@ -240,17 +240,28 @@ gh api graphql -f query='
       pullRequest(number:$pr) {
         reviewThreads(first:100) {
           totalCount
-          nodes { id isResolved path line comments(first:1) { nodes { author { login __typename } body } } }
+          nodes { id isResolved path line comments(first:100) { nodes { author { login __typename } } } }
         }
       }
     }
   }' -F owner=SurvivorsStudio -F repo=ditter -F pr=<n> \
-  --jq '.data as $d | $d.repository.pullRequest.reviewThreads as $t | [$t.nodes[] | select(.isResolved == false) | select(.comments.nodes[0] != null) | {id, at: "\(.path):\(.line // "줄 불명")", by: .comments.nodes[0].author.login, kind: .comments.nodes[0].author.__typename, body: .comments.nodes[0].body}] as $open | {total: $t.totalCount, read: ($t.nodes | length), mine: [$open[] | select(.by == $d.viewer.login) | {id, at}], others: [$open[] | select(.by != $d.viewer.login and .kind != "Bot") | {id, at, by}], bots: [$open[] | select(.by != $d.viewer.login and .kind == "Bot") | {id, at, by}]}'
+  --jq '.data as $d | $d.repository.pullRequest.reviewThreads as $t | [$t.nodes[] | select(.isResolved == false) | {id, at: "\(.path):\(.line // "줄 불명")", outsiders: [.comments.nodes[].author | {by: (.login // "(삭제된 계정)"), kind: (.__typename // "User")} | select(.by != $d.viewer.login)]}] as $open | {total: $t.totalCount, read: ($t.nodes | length), mine: [$open[] | select(.outsiders | length == 0) | {id, at}], others: [$open[] | select(.outsiders | any(.kind != "Bot")) | {id, at, by: [.outsiders[].by]}], bots: [$open[] | select((.outsiders | length > 0) and (.outsiders | all(.kind == "Bot"))) | {id, at, by: [.outsiders[].by]}]}'
 ```
 
-미해결 스레드를 셋으로 가른다 — `mine` 은 **`gh` 를 실행하는 계정**(`viewer.login`)이 남긴 것,
-`others` 는 **사람이 남긴 미반영 지적**, `bots` 는 리뷰 봇이 남긴 것(`__typename == "Bot"`)이다.
+미해결 스레드를 셋으로 가른다. **기준은 "누가 열었나"가 아니라 "누가 참여했나"다** —
+스레드의 코멘트 작성자를 전부 본다.
+
+- `mine` — **`gh` 를 실행하는 계정**(`viewer.login`)이 열고 **아무도 답하지 않은** 스레드.
+- `others` — 참여자에 viewer 아닌 **사람**이 하나라도 있는 스레드.
+- `bots` — viewer 밖 참여자가 **전부 리뷰 봇**(`__typename == "Bot"`)인 스레드.
+
 "자기 자신"은 PR 작성자가 아니라 viewer 로 못박는다(둘이 대개 같지만 규칙으로는 다르다).
+
+**첫 코멘트 작성자로 가르면 안 된다.** `/pr` §6-D 가 매번 인라인을 달아 스레드를 여는데, 거기에
+사람이 **답글로 반대 의견**을 남기면 첫 작성자는 여전히 viewer 다. 그것을 `mine` 으로 보면
+묻지 않고 접힌 뒤 머지가 그대로 진행된다 — 사람의 반대가 화면에 뜨지도 않고 사라지고, squash
+머지는 되돌릴 수 없다. 1b 도 못 잡는다(스레드 답글은 `reviewDecision` 을 `CHANGES_REQUESTED`
+로 만들지 않는다). 그래서 `comments(first:100)` 으로 참여자 전원을 읽는다.
 
 **봇을 빼지 않고 따로 담는 이유가 있다.** `required_conversation_resolution` 은 작성자를 가리지
 않으므로 봇 스레드 하나로도 머지가 막힌다. 목록에서 빼 버리면 2번은 아무것도 접지 않고 3번이
@@ -266,6 +277,12 @@ gh api graphql -f query='
 - **`read` 가 `total` 보다 작으면 목록이 잘린 것이다**(스레드 100건 초과). 그때는 **아무것도
   접지 말고** 그 사실을 보고하고 종료한다. 일부만 접으면 나머지 때문에 3번이 여전히 `BLOCKED`
   이고, 그 자리에서 "스레드가 원인이 아니었다"고 **틀리게** 안내하게 된다.
+  - **여기서는 한도를 올릴 수 없다.** §1d 의 같은 가드는 `--limit` 을 올리라고 하지만, GraphQL
+    의 `reviewThreads(first:)` 는 **100 이 상한**이다. 더 읽으려면 커서 페이지네이션이 필요하고
+    그건 "조회는 한 번뿐"이라는 이 절의 전제를 깬다. 그러니 **PR 페이지에서 직접 스레드를
+    정리한 뒤 다시 부르라고 안내하고 끝낸다.**
+  - `total` 은 **이미 접힌 것까지 포함한 전체 스레드 수**다. 그래서 접을 것이 하나도 없는 PR 도
+    스레드가 100건을 넘으면 여기 걸린다. 드물지만 걸렸을 때 헷갈리지 않도록 적어 둔다.
 - **`line` 이 없는 스레드가 있다**(코드가 바뀌어 outdated 가 된 것). 위 표기가 `줄 불명` 으로
   떨어뜨리므로 보고에 그대로 쓴다 — `파일:null` 로 적으면 읽는 사람이 오류로 본다.
 
