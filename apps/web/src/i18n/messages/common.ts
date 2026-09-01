@@ -22,4 +22,10 @@ export const common = {
     'MySQL.customers · 증분(updated_at)',
     'MySQL.customers · incremental (updated_at)',
   ],
+
+  // api/client.ts — 서버가 응답하지 못했을 때의 폴백 (서버 오류 문구는 detail 그대로 표시)
+  'api.noServer': ['서버에 연결할 수 없습니다 ({base})', 'Cannot reach the server ({base})'],
+  'api.requestFailed': ['요청 실패 ({status})', 'Request failed ({status})'],
+  'api.badResponse': ['응답 형식이 올바르지 않습니다: {path}', 'Malformed response: {path}'],
+  'api.exportFailed': ['내보내기 실패 ({status})', 'Export failed ({status})'],
 } as const

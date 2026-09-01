@@ -15,6 +15,7 @@ import { AiChart, parseChart } from '../components/AiChart'
 import { useConnections, useAiChat, useConnectionSchema, useRunQuery } from '../api/hooks'
 import { setAiDefault, useAiConn } from '../api/aiDefault'
 import { specFor } from '../api/connectorFields'
+import { t, useT, type MsgKey } from '../i18n'
 import {
   type ChatIntent,
   type ChatMessage,
@@ -26,6 +27,15 @@ import {
 
 //: 대상 DB 로 쓸 수 있는(스키마 문맥·실행) 커넥터 타입 — 백엔드 ai_service._DIALECT_BY_TYPE 와 맞춘다.
 const DB_TARGET_TYPES = new Set(['postgres', 'mysql', 'mssql'])
+
+// 결과 기반 작업 — SQL 을 대상 DB 에서 실제로 실행하고, 그 결과를 AI 에 보낸다.
+// intent 에 따라 해석(prose)·차트(```chart)·보고서(markdown)로 갈린다.
+// 번역된 문자열이 아니라 키를 담는다 — 언어 전환을 따라오게 사용 시점에 t() 로 푼다.
+const RUN_ASK: Record<'sql.interpret' | 'data.chart' | 'data.report', MsgKey> = {
+  'sql.interpret': 'chat.askInterpret',
+  'data.chart': 'chat.askChart',
+  'data.report': 'chat.askReport',
+}
 
 type OpenAsQuery = (p: { connId: string; mode: 'sql'; text: string; title: string }) => void
 
@@ -62,6 +72,7 @@ export function AiChatPane({
   onFocus: () => void
 }) {
   const navigate = useNavigate()
+  const tr = useT() // mentionItems 안의 지역 변수 t(테이블)와 겹쳐 tr 로 둔다
   const { data: conns = [] } = useConnections()
   const chat = useAiChat()
   const runQuery = useRunQuery()
@@ -132,10 +143,10 @@ export function AiChatPane({
       .map((t) => ({
         insert: t.qualified_name,
         label: t.name,
-        hint: `${t.namespace ? t.namespace + ' · ' : ''}${t.columns.length}열`,
+        hint: `${t.namespace ? t.namespace + ' · ' : ''}${tr('chat.colCount', { n: t.columns.length })}`,
         kind: 'table' as const,
       }))
-  }, [ment, schemaQ.data])
+  }, [ment, schemaQ.data, tr])
 
   // 후보 수가 바뀌면 선택 인덱스를 범위 안으로 되돌린다.
   useEffect(() => {
@@ -192,11 +203,11 @@ export function AiChatPane({
           <div className="ai-empty-icon">
             <Icon.bolt />
           </div>
-          <h3>등록된 AI 연결이 없습니다</h3>
-          <p>「연결 관리」에서 AI 모델(Gemini)을 먼저 등록하세요.</p>
+          <h3>{tr('chat.noAiTitle')}</h3>
+          <p>{tr('chat.noAiDesc')}</p>
           <button className="btn primary" onClick={() => navigate('/connections?add=gemini')}>
             <Icon.plus />
-            AI 모델 등록하기
+            {tr('chat.registerAi')}
           </button>
         </div>
       </div>
@@ -209,15 +220,15 @@ export function AiChatPane({
     hint: specFor(c.type).label,
   }))
   const dbOptions: SelectOption[] = [
-    { value: '', label: '대상 DB 없음', hint: '일반 SQL' },
+    { value: '', label: tr('chat.noDbTarget'), hint: tr('chat.plainSql') },
     ...dbConns.map((c) => ({ value: c.id, label: c.name, hint: specFor(c.type).label })),
   ]
 
   // 초기 화면(대화 없음)에서 입력창 위에 보여줄 추천 시작 프롬프트. 클릭하면 입력창에 채운다.
   const suggestions = [
-    { label: '테이블 목록 보기', prompt: '이 데이터베이스에 어떤 테이블들이 있는지 목록을 보여줘' },
-    { label: '테이블 구조 설명', prompt: '주요 테이블의 컬럼 구조와 의미를 설명해줘' },
-    { label: '분석 아이디어 추천', prompt: '이 데이터베이스로 할 수 있는 유용한 분석을 추천해줘' },
+    { label: tr('chat.suggestTablesLabel'), prompt: tr('chat.suggestTablesPrompt') },
+    { label: tr('chat.suggestSchemaLabel'), prompt: tr('chat.suggestSchemaPrompt') },
+    { label: tr('chat.suggestIdeasLabel'), prompt: tr('chat.suggestIdeasPrompt') },
   ]
   const applySuggestion = (prompt: string) => {
     sendText(prompt) // 클릭 즉시 전송
@@ -255,7 +266,7 @@ export function AiChatPane({
           const asst: ChatMessage = {
             id: chatUid(),
             role: 'assistant',
-            content: err instanceof Error ? err.message : 'AI 호출에 실패했습니다.',
+            content: err instanceof Error ? err.message : tr('chat.callFailed'),
             error: true,
           }
           setState((s) => ({ ...s, messages: [...s.messages, asst] }))
@@ -270,13 +281,6 @@ export function AiChatPane({
     onOpenAsQuery({ connId: state.dbConnId, mode: 'sql', text: sql, title: 'AI SQL' })
   }
 
-  // 결과 기반 작업 — SQL 을 대상 DB 에서 실제로 실행하고, 그 결과를 AI 에 보낸다.
-  // intent 에 따라 해석(prose)·차트(```chart)·보고서(markdown)로 갈린다.
-  const RUN_ASK: Record<'sql.interpret' | 'data.chart' | 'data.report', string> = {
-    'sql.interpret': '결과를 해석해 주세요.',
-    'data.chart': '이 결과를 가장 잘 드러내는 차트로 표현해 주세요.',
-    'data.report': '이 결과로 분석 보고서를 작성해 주세요.',
-  }
   const runAndAsk = (sql: string, intent: 'sql.interpret' | 'data.chart' | 'data.report') => {
     if (!state.dbConnId || !aiConnId || chat.isPending || runQuery.isPending) return
     const dbId = state.dbConnId
@@ -287,12 +291,14 @@ export function AiChatPane({
         onSuccess: (res) => {
           const shownRows = res.rows.length
           const totalNote =
-            res.total != null && res.total > shownRows ? ` / 총 ${res.total}행` : ''
+            res.total != null && res.total > shownRows
+              ? tr('chat.runTotalNote', { n: res.total })
+              : ''
           const table = formatResultForAi(res.columns, res.rows)
           const userContent =
-            `방금 실행한 SQL 과 그 결과입니다. ${RUN_ASK[intent]}\n\n` +
+            `${tr('chat.runIntro', { ask: tr(RUN_ASK[intent]) })}\n\n` +
             `\`\`\`sql\n${sql}\n\`\`\`\n\n` +
-            `실행 결과 (${shownRows}행${totalNote}):\n${table}`
+            `${tr('chat.runResultHead', { rows: shownRows, total: totalNote })}\n${table}`
           const userMsg: ChatMessage = {
             id: chatUid(),
             role: 'user',
@@ -332,7 +338,7 @@ export function AiChatPane({
                     {
                       id: chatUid(),
                       role: 'assistant',
-                      content: err instanceof Error ? err.message : 'AI 호출에 실패했습니다.',
+                      content: err instanceof Error ? err.message : tr('chat.callFailed'),
                       error: true,
                     },
                   ],
@@ -348,7 +354,9 @@ export function AiChatPane({
               {
                 id: chatUid(),
                 role: 'assistant',
-                content: `쿼리 실행에 실패해 해석할 수 없습니다: ${err instanceof Error ? err.message : String(err)}`,
+                content: tr('chat.runFailed', {
+                  error: err instanceof Error ? err.message : String(err),
+                }),
                 error: true,
               },
             ],
@@ -369,8 +377,8 @@ export function AiChatPane({
       <div className="ai-messages" ref={listRef}>
         {state.messages.length === 0 && (
           <div className="ai-hint">
-            <p>자연어로 물어보세요. 예: “최근 7일 주문을 고객별로 합계 내줘”.</p>
-            {!state.dbConnId && <p className="ai-hint-dim">대상 DB 를 고르면 스키마에 맞춘 SQL 을 만듭니다.</p>}
+            <p>{tr('chat.emptyHint')}</p>
+            {!state.dbConnId && <p className="ai-hint-dim">{tr('chat.emptyHintDb')}</p>}
           </div>
         )}
         {state.messages.map((m) => (
@@ -414,12 +422,12 @@ export function AiChatPane({
         {mentionOpen && (
           <div className="ai-mention" role="listbox">
             {!state.dbConnId ? (
-              <div className="ai-mention-empty">대상 DB 를 먼저 고르세요</div>
+              <div className="ai-mention-empty">{tr('chat.pickDbFirst')}</div>
             ) : schemaQ.isLoading ? (
-              <div className="ai-mention-empty">스키마 불러오는 중…</div>
+              <div className="ai-mention-empty">{tr('chat.mentionLoading')}</div>
             ) : mentionItems.length === 0 ? (
               <div className="ai-mention-empty">
-                {schemaQ.isError ? '스키마를 불러오지 못했습니다' : '일치하는 항목이 없습니다'}
+                {schemaQ.isError ? tr('chat.mentionError') : tr('chat.mentionNone')}
               </div>
             ) : (
               mentionItems.map((it, i) => (
@@ -438,7 +446,7 @@ export function AiChatPane({
                   <Icon.table />
                   <span className="ai-mention-label">{it.label}</span>
                   <span className={`ai-mention-kind ${it.kind}`}>
-                    {it.kind === 'table' ? '테이블' : '컬럼'}
+                    {it.kind === 'table' ? tr('chat.kindTable') : tr('chat.kindColumn')}
                   </span>
                   <span className="ai-mention-hint">{it.hint}</span>
                 </button>
@@ -485,7 +493,7 @@ export function AiChatPane({
               send()
             }
           }}
-          placeholder={state.intent === 'sql.tune' ? '튜닝할 SQL 과 요청을 적어주세요…' : 'SQL 로 만들 내용을 적어주세요… (@ 로 테이블·컬럼 참조 · Enter 전송)'}
+          placeholder={state.intent === 'sql.tune' ? tr('chat.inputTune') : tr('chat.inputGenerate')}
           rows={1}
         />
         {/* 하단 컨트롤 바 — 왼쪽: 대상 DB·의도·예시 / 오른쪽: 모델·전송 (Claude Code 식) */}
@@ -495,7 +503,7 @@ export function AiChatPane({
               value={state.dbConnId ?? ''}
               options={dbOptions}
               onChange={(v) => setState((s) => ({ ...s, dbConnId: v || undefined }))}
-              placeholder="대상 DB"
+              placeholder={tr('chat.targetDb')}
             />
             <div className="ai-intent">
               {(['sql.generate', 'sql.tune'] as ChatIntent[]).map((it) => (
@@ -504,7 +512,7 @@ export function AiChatPane({
                   className={`ai-intent-btn ${state.intent === it ? 'on' : ''}`}
                   onClick={() => setState((s) => ({ ...s, intent: it }))}
                 >
-                  {it === 'sql.generate' ? '생성' : '튜닝'}
+                  {it === 'sql.generate' ? tr('chat.generate') : tr('chat.tune')}
                 </button>
               ))}
             </div>
@@ -513,7 +521,9 @@ export function AiChatPane({
               <button
                 className={`ai-icon-btn ${state.samples === true ? 'on' : ''}`}
                 onClick={() => setState((s) => ({ ...s, samples: s.samples === true ? false : true }))}
-                title={`예시 데이터 ${state.samples === true ? '켜짐' : '꺼짐'} — 언급한 테이블의 실제 행을 AI 에 보내 정확도를 높입니다(데이터가 전송됩니다)`}
+                title={tr('chat.samplesTitle', {
+                  state: tr(state.samples === true ? 'chat.on' : 'chat.off'),
+                })}
               >
                 <Icon.table />
               </button>
@@ -521,7 +531,7 @@ export function AiChatPane({
           </div>
           <div className="ai-composer-right">
             {state.messages.length > 0 && (
-              <button className="ai-icon-btn" onClick={clearAll} title="대화 비우기">
+              <button className="ai-icon-btn" onClick={clearAll} title={tr('chat.clear')}>
                 <Icon.trash />
               </button>
             )}
@@ -529,14 +539,14 @@ export function AiChatPane({
               value={aiConnId}
               options={aiOptions}
               onChange={setAiDefault}
-              placeholder="AI 모델"
+              placeholder={tr('chat.aiModel')}
               align="right"
             />
             <button
               className="ai-send-btn"
               onClick={send}
               disabled={chat.isPending || !input.trim()}
-              title="전송 (Enter)"
+              title={tr('chat.sendTitle')}
             >
               ↵
             </button>
@@ -614,18 +624,23 @@ function AiProgress({
   samples: boolean
   running?: boolean
 }) {
+  const tr = useT()
   // 응답이 SQL 일지 되묻는 질문일지는 미리 알 수 없으므로 마지막 단계는 중립적으로 둔다.
   // running=true 면 결과 해석 흐름 — 먼저 쿼리를 실행하고, 그 결과를 AI 가 해석한다.
   const steps = useMemo(
     () =>
-      [
-        running ? '쿼리 실행 중' : '요청 준비 중',
-        running ? '실행 결과 정리 중' : hasDb ? '스키마 문맥 구성 중' : null,
-        !running && hasDb && samples ? '예시 데이터 읽는 중' : null,
-        'AI 모델에 질의 중',
-        running ? '결과 해석 중' : '응답 생성 중',
-      ].filter((s): s is string => Boolean(s)),
-    [hasDb, samples, running],
+      (
+        [
+          running ? 'chat.stepRunningQuery' : 'chat.stepPreparing',
+          running ? 'chat.stepCollectResult' : hasDb ? 'chat.stepSchema' : null,
+          !running && hasDb && samples ? 'chat.stepSamples' : null,
+          'chat.stepAsking',
+          running ? 'chat.stepInterpreting' : 'chat.stepGenerating',
+        ] as (MsgKey | null)[]
+      )
+        .filter((s): s is MsgKey => Boolean(s))
+        .map((k) => tr(k)),
+    [hasDb, samples, running, tr],
   )
   const [i, setI] = useState(0)
   useEffect(() => {
@@ -662,6 +677,7 @@ function ChatBubble({
   onRun: (sql: string, intent: 'sql.interpret' | 'data.chart' | 'data.report') => void
   onPick: (text: string) => void
 }) {
+  const tr = useT()
   const [copied, setCopied] = useState(false)
   const [otherOpen, setOtherOpen] = useState(false)
   const [otherText, setOtherText] = useState('')
@@ -730,7 +746,7 @@ function ChatBubble({
             {!otherOpen ? (
               <button className="ai-option ai-option-other" onClick={() => setOtherOpen(true)}>
                 <span className="ai-option-no">＋</span>
-                <span className="ai-option-label">기타 — 직접 입력</span>
+                <span className="ai-option-label">{tr('chat.otherOption')}</span>
               </button>
             ) : (
               <div className="ai-option-input">
@@ -741,14 +757,14 @@ function ChatBubble({
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && otherText.trim()) onPick(otherText.trim())
                   }}
-                  placeholder="직접 답변을 입력하세요…"
+                  placeholder={tr('chat.otherPlaceholder')}
                 />
                 <button
                   className="btn sm primary"
                   disabled={!otherText.trim()}
                   onClick={() => otherText.trim() && onPick(otherText.trim())}
                 >
-                  보내기
+                  {tr('chat.send')}
                 </button>
               </div>
             )}
@@ -759,39 +775,39 @@ function ChatBubble({
             <pre>{msg.sql}</pre>
             <div className="ai-code-actions">
               <button className="btn sm" onClick={() => copy(msg.sql!)}>
-                <Icon.copy /> {copied ? '복사됨' : '복사'}
+                <Icon.copy /> {copied ? tr('chat.copied') : tr('chat.copy')}
               </button>
               <button
                 className="btn sm primary"
                 onClick={() => onOpenSql(msg.sql!)}
                 disabled={!canOpen}
-                title={canOpen ? '새 쿼리 탭에서 실행' : '대상 DB 를 먼저 고르세요'}
+                title={canOpen ? tr('chat.openTabTitle') : tr('chat.pickDbFirst')}
               >
-                <Icon.play /> 새 쿼리 탭
+                <Icon.play /> {tr('chat.openTab')}
               </button>
               <button
                 className="btn sm"
                 onClick={() => onRun(msg.sql!, 'sql.interpret')}
                 disabled={!canOpen || busy}
-                title={canOpen ? '이 SQL 을 실행하고 결과를 AI 가 해석합니다' : '대상 DB 를 먼저 고르세요'}
+                title={canOpen ? tr('chat.interpretTitle') : tr('chat.pickDbFirst')}
               >
-                <Icon.bolt /> 결과 해석
+                <Icon.bolt /> {tr('chat.interpret')}
               </button>
               <button
                 className="btn sm"
                 onClick={() => onRun(msg.sql!, 'data.chart')}
                 disabled={!canOpen || busy}
-                title={canOpen ? '이 SQL 을 실행하고 결과를 차트로 그립니다' : '대상 DB 를 먼저 고르세요'}
+                title={canOpen ? tr('chat.chartTitle') : tr('chat.pickDbFirst')}
               >
-                <Icon.chart /> 차트
+                <Icon.chart /> {tr('chat.chart')}
               </button>
               <button
                 className="btn sm"
                 onClick={() => onRun(msg.sql!, 'data.report')}
                 disabled={!canOpen || busy}
-                title={canOpen ? '이 SQL 을 실행하고 결과로 보고서를 작성합니다' : '대상 DB 를 먼저 고르세요'}
+                title={canOpen ? tr('chat.reportTitle') : tr('chat.pickDbFirst')}
               >
-                <Icon.file /> 보고서
+                <Icon.file /> {tr('chat.report')}
               </button>
             </div>
           </div>
@@ -845,9 +861,9 @@ function formatResultForAi(columns: string[], rows: Record<string, unknown>[]): 
     .map((r) => cols.map((c) => cell(r[c])).join(' | '))
     .join('\n')
   const notes: string[] = []
-  if (rows.length > MAX_ROWS) notes.push(`(상위 ${MAX_ROWS}행만 표시)`)
-  if (columns.length > MAX_COLS) notes.push(`(앞 ${MAX_COLS}개 컬럼만 표시)`)
-  if (rows.length === 0) return '(결과 0행 — 조건에 맞는 데이터가 없습니다)'
+  if (rows.length > MAX_ROWS) notes.push(t('chat.tableTruncRows', { n: MAX_ROWS }))
+  if (columns.length > MAX_COLS) notes.push(t('chat.tableTruncCols', { n: MAX_COLS }))
+  if (rows.length === 0) return t('chat.tableEmpty')
   return [header, '-'.repeat(Math.min(header.length, 80)), body, ...notes].join('\n')
 }
 

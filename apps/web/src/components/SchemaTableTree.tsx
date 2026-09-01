@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Icon } from './icons'
+import { useT } from '../i18n'
 
 export type TreeTable = { name: string; namespace: string | null }
 
@@ -28,6 +29,7 @@ export function SchemaTableTree({
   /** hideSearch 일 때 외부에서 내려주는 검색어. */
   filter?: string
 }) {
+  const tr = useT() // 지역 변수 t(TreeTable)와의 충돌을 피한다
   const [query, setQuery] = useState('')
   const groups = useMemo(() => {
     const m = new Map<string, TreeTable[]>()
@@ -56,12 +58,16 @@ export function SchemaTableTree({
       {!hideSearch && (
         <div className="tree-search">
           <Icon.search />
-          <input value={query} placeholder="테이블 검색…" onChange={(e) => setQuery(e.target.value)} />
+          <input
+            value={query}
+            placeholder={tr('navi.searchTables')}
+            onChange={(e) => setQuery(e.target.value)}
+          />
         </div>
       )}
       <div className="tree-body">
-        {loading && <div className="tree-empty">불러오는 중…</div>}
-        {!loading && groups.length === 0 && <div className="tree-empty">테이블이 없습니다</div>}
+        {loading && <div className="tree-empty">{tr('runs.loading')}</div>}
+        {!loading && groups.length === 0 && <div className="tree-empty">{tr('navi.noTables')}</div>}
         {!loading &&
           groups.map(([ns, ts]) => {
             const matched = q ? ts.filter((t) => t.name.toLowerCase().includes(q)) : ts
@@ -78,7 +84,7 @@ export function SchemaTableTree({
                     <Icon.chevron />
                   </span>
                   <Icon.stack />
-                  <span className="tree-name">{ns || '(기본)'}</span>
+                  <span className="tree-name">{ns || tr('navi.defaultSchema')}</span>
                   <span className="tree-count">{q ? matched.length : ts.length}</span>
                 </button>
                 {open && (

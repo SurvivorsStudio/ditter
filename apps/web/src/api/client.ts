@@ -1,5 +1,6 @@
 import type { z } from 'zod'
 import { auth } from './auth'
+import { t } from '../i18n'
 
 /** 개발 중에는 vite 프록시(/api)를, 배포 시에는 빌드 타임 주입값을 쓴다 */
 const RAW_BASE = import.meta.env.VITE_API_BASE ?? '/api'
@@ -42,7 +43,7 @@ async function request(path: string, options: RequestOptions = {}): Promise<unkn
     // 사용자가 취소(AbortController)한 경우는 그대로 전파해 호출부가 조용히 처리하게 한다
     if (e instanceof DOMException && e.name === 'AbortError') throw e
     // 네트워크 자체가 끊긴 경우 — status 0 으로 서버 응답과 구분해서 알린다
-    throw new ApiError(0, `서버에 연결할 수 없습니다 (${API_BASE})`, undefined)
+    throw new ApiError(0, t('api.noServer', { base: API_BASE }), undefined)
   }
 
   const requestId = response.headers.get('X-Request-ID') ?? undefined
@@ -68,7 +69,7 @@ async function request(path: string, options: RequestOptions = {}): Promise<unkn
     const detail =
       typeof payload === 'object' && payload !== null && 'detail' in payload
         ? String((payload as { detail: unknown }).detail)
-        : `요청 실패 (${response.status})`
+        : t('api.requestFailed', { status: String(response.status) })
     throw new ApiError(response.status, detail, requestId)
   }
 
@@ -90,7 +91,7 @@ async function parsed<S extends z.ZodTypeAny>(
   const result = schema.safeParse(raw)
   if (!result.success) {
     console.error('API 응답 스키마 불일치', path, result.error.issues, raw)
-    throw new ApiError(500, `응답 형식이 올바르지 않습니다: ${path}`)
+    throw new ApiError(500, t('api.badResponse', { path }))
   }
   return result.data
 }
@@ -108,12 +109,12 @@ async function download(path: string, body: unknown, filename: string): Promise<
   try {
     res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers, body: JSON.stringify(body) })
   } catch {
-    throw new ApiError(0, `서버에 연결할 수 없습니다 (${API_BASE})`)
+    throw new ApiError(0, t('api.noServer', { base: API_BASE }))
   }
   if (res.status === 401 && token) auth.logout()
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    let detail = `내보내기 실패 (${res.status})`
+    let detail = t('api.exportFailed', { status: String(res.status) })
     try {
       const p = JSON.parse(text)
       if (p && typeof p === 'object' && 'detail' in p) detail = String((p as { detail: unknown }).detail)

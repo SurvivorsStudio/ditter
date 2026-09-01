@@ -14,17 +14,25 @@
  *  번역된 문자열을 모듈 상수에 담아 두면 언어 전환을 따라오지 못한다 — 라벨 맵은
  *  `Record<X, MsgKey>` 로 두고 조회 함수에서 t() 를 부른다.
  */
+import { ai } from './messages/ai'
+import { aiChat } from './messages/aiChat'
 import { canvas } from './messages/canvas'
 import { canvasPage } from './messages/canvasPage'
+import { canvasUi } from './messages/canvasUi'
 import { common } from './messages/common'
+import { configPanel } from './messages/configPanel'
 import { connections } from './messages/connections'
 import { connectors } from './messages/connectors'
 import { home } from './messages/home'
 import { login } from './messages/login'
 import { monitor } from './messages/monitor'
 import { nav } from './messages/nav'
+import { navigator } from './messages/navigator'
 import { nodes } from './messages/nodes'
+import { notebook } from './messages/notebook'
 import { runs } from './messages/runs'
+import { saved } from './messages/saved'
+import { sqlEditor } from './messages/sqlEditor'
 import { sqlPage } from './messages/sqlPage'
 import { statements } from './messages/statements'
 import { status } from './messages/status'
@@ -45,6 +53,14 @@ const MESSAGES = {
   ...connections,
   ...canvasPage,
   ...sqlPage,
+  ...saved,
+  ...navigator,
+  ...notebook,
+  ...ai,
+  ...sqlEditor,
+  ...canvasUi,
+  ...aiChat,
+  ...configPanel,
 } as const
 
 export type MsgKey = keyof typeof MESSAGES

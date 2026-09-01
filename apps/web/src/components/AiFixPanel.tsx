@@ -24,6 +24,7 @@ import { Markdown } from './Markdown'
 import { useAiChat, useConnections, useExplain } from '../api/hooks'
 import { useAiConn } from '../api/aiDefault'
 import { specFor } from '../api/connectorFields'
+import { useT } from '../i18n'
 
 /** EXPLAIN [ANALYZE] 텍스트에서 총 실행 시간(ms)과 예상 비용을 뽑는다 (MySQL·PostgreSQL). */
 function parsePerf(plan: string): { timeMs: number | null; cost: number | null } {
@@ -38,20 +39,22 @@ function parsePerf(plan: string): { timeMs: number | null; cost: number | null }
 
 const fmtMs = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(2)} s` : `${n.toFixed(0)} ms`)
 
+// 라벨은 MsgKey 로만 들고 렌더 시점에 t() 로 푼다 — 모듈 상수에 번역문을 담으면 언어 전환을 못 따라온다.
+// userMsg 는 화면이 아니라 **AI 에게 보내는 프롬프트 시드**라 번역하지 않는다.
 const MODE_CFG = {
   fix: {
     intent: 'sql.fix' as const,
-    title: 'AI 수정',
-    loading: '오류를 분석하는 중…',
+    title: 'ai.fixTitle' as const,
+    loading: 'ai.fixLoading' as const,
     userMsg: '이 쿼리의 오류를 고쳐줘.',
-    apply: '편집기에 적용',
+    apply: 'ai.fixApply' as const,
   },
   tune: {
     intent: 'sql.tune' as const,
-    title: 'AI 튜닝',
-    loading: '실행 계획을 분석하는 중…',
+    title: 'ai.tuneTitle' as const,
+    loading: 'ai.tuneLoading' as const,
     userMsg: '실행 계획을 근거로 이 쿼리를 튜닝해줘.',
-    apply: '튜닝된 쿼리 적용',
+    apply: 'ai.tuneApply' as const,
   },
 }
 
@@ -82,6 +85,7 @@ export function AiFixPanel({
   onClose: () => void
 }) {
   const cfg = MODE_CFG[mode]
+  const t = useT()
   const { data: conns = [] } = useConnections()
   const aiConns = useMemo(() => conns.filter((c) => specFor(c.type).category === 'ai'), [conns])
   // 시작 모델사는 툴바의 AI 기본 연결. 칩으로 바꾸면 이 패널에서만 그 선택을 쓴다.
@@ -114,7 +118,7 @@ export function AiFixPanel({
         onSuccess: (r) =>
           setPerf({ asis: parsePerf(explain ?? ''), tobe: parsePerf(r.plan) }),
         onError: (e) =>
-          setPerfErr(e instanceof Error ? e.message : '튜닝 쿼리 성능 분석에 실패했습니다.'),
+          setPerfErr(e instanceof Error ? e.message : t('ai.perfAnalyzeFailed')),
       },
     )
   }
@@ -150,7 +154,7 @@ export function AiFixPanel({
         },
         onError: (e) => {
           if (mine === seq.current)
-            setFailed(e instanceof Error ? e.message : 'AI 호출에 실패했습니다.')
+            setFailed(e instanceof Error ? e.message : t('ai.callFailed'))
         },
       },
     )
@@ -191,11 +195,11 @@ export function AiFixPanel({
       <div className="ai-fix">
         <div className="ai-fix-head">
           <Icon.bolt />
-          <span>{cfg.title}</span>
-          <button className="ai-fix-x" onClick={onClose} title="닫기">×</button>
+          <span>{t(cfg.title)}</span>
+          <button className="ai-fix-x" onClick={onClose} title={t('common.close')}>×</button>
         </div>
         <div className="ai-fix-body ai-fix-empty">
-          「연결 관리」에서 AI 모델(Gemini·Bedrock)을 먼저 등록하세요.
+          {t('ai.registerFirst')}
         </div>
       </div>
     )
@@ -205,9 +209,9 @@ export function AiFixPanel({
     <div className="ai-fix">
       <div className="ai-fix-head">
         <Icon.bolt />
-        <span>{cfg.title}</span>
+        <span>{t(cfg.title)}</span>
         <div className="ai-fix-head-right">
-          <div className="ai-vendors" role="group" aria-label="모델사">
+          <div className="ai-vendors" role="group" aria-label={t('ai.vendorsAria')}>
             {aiConns.map((c) => {
               const on = c.id === active
               return (
@@ -219,8 +223,8 @@ export function AiFixPanel({
                   onClick={() => pick(c.id)}
                   title={
                     on
-                      ? `${specFor(c.type).label} · 지금 이 모델사로 실행되었습니다`
-                      : `${specFor(c.type).label} 로 다시 분석`
+                      ? t('ai.vendorActiveTitle', { name: specFor(c.type).label })
+                      : t('ai.vendorRerunTitle', { name: specFor(c.type).label })
                   }
                 >
                   {c.name}
@@ -228,7 +232,7 @@ export function AiFixPanel({
               )
             })}
           </div>
-          <button className="ai-fix-x" onClick={onClose} title="닫기">×</button>
+          <button className="ai-fix-x" onClick={onClose} title={t('common.close')}>×</button>
         </div>
       </div>
 
@@ -237,16 +241,17 @@ export function AiFixPanel({
         {pendingDefault && (
           <div className="ai-fix-notice">
             <span>
-              기본 모델사가 <b>{aiConns.find((c) => c.id === pendingDefault)?.name ?? '다른 연결'}</b>
-              (으)로 바뀌었습니다. 지금 답은 이전 모델사의 것입니다.
+              {t('ai.defaultChangedPrefix')}
+              <b>{aiConns.find((c) => c.id === pendingDefault)?.name ?? t('ai.otherConn')}</b>
+              {t('ai.defaultChangedSuffix')}
             </span>
             <button className="btn sm" onClick={() => run(pendingDefault)}>
-              <Icon.refresh /> 다시 분석
+              <Icon.refresh /> {t('ai.reanalyze')}
             </button>
             <button
               className="ai-fix-notice-x"
               onClick={() => setPendingDefault('')}
-              title="이 안내 닫기"
+              title={t('ai.dismissNotice')}
             >
               ×
             </button>
@@ -255,7 +260,7 @@ export function AiFixPanel({
         {chat.isPending ? (
           <div className="ai-fix-loading">
             <span className="ai-progress-spin" />
-            {cfg.loading}
+            {t(cfg.loading)}
           </div>
         ) : failed ? (
           <div className="ai-fix-error">{failed}</div>
@@ -264,29 +269,29 @@ export function AiFixPanel({
             <Markdown text={result.text} />
             <div className="ai-fix-actions">
               {result.sql && (
-                <button className="btn sm primary" onClick={() => onApply(result.sql!)} title="결과 쿼리를 편집기에 넣습니다(되돌리기 가능)">
-                  <Icon.check /> {cfg.apply}
+                <button className="btn sm primary" onClick={() => onApply(result.sql!)} title={t('ai.applyTitle')}>
+                  <Icon.check /> {t(cfg.apply)}
                 </button>
               )}
               <button
                 className="btn sm"
                 onClick={() => onEscalate({ sql, error, explain, assistant: result.text })}
-                title="AI 어시스턴트 탭에서 대화로 이어갑니다"
+                title={t('ai.escalateTitle')}
               >
-                <Icon.bolt /> AI 탭에서 이어가기
+                <Icon.bolt /> {t('ai.escalate')}
               </button>
               {mode === 'tune' && dbConnId && result.sql && (
                 <button
                   className="btn sm"
                   onClick={() => compare(result.sql!)}
                   disabled={explainMut.isPending}
-                  title="튜닝된 쿼리를 EXPLAIN ANALYZE 로 재보고 원본과 비교합니다"
+                  title={t('ai.perfCompareTitle')}
                 >
-                  <Icon.chart /> {explainMut.isPending ? '분석 중…' : '성능 비교'}
+                  <Icon.chart /> {explainMut.isPending ? t('ai.analyzing') : t('ai.perfCompare')}
                 </button>
               )}
-              <button className="btn sm" onClick={() => run(active)} title="다시 분석">
-                <Icon.refresh /> 다시
+              <button className="btn sm" onClick={() => run(active)} title={t('ai.reanalyze')}>
+                <Icon.refresh /> {t('ai.again')}
               </button>
             </div>
             {perfErr && <div className="ai-fix-error" style={{ marginTop: 8 }}>{perfErr}</div>}
@@ -308,6 +313,7 @@ function PerfCompare({
   tobe: { timeMs: number | null; cost: number | null }
   analyzed?: boolean
 }) {
+  const t = useT()
   // 개선률을 부호로 갈라 셀 내용·색을 정한다.
   // 양수(빨라짐/비용↓) → 초록 '↓ N%', 음수(느려짐/비용↑) → 앰버 '↑ N% 느려짐', 0/판정불가 → '—'.
   const delta = (
@@ -319,31 +325,31 @@ function PerfCompare({
     const pct = Math.round(((a - b) / a) * 100)
     if (pct > 0) return { text: `↓ ${pct}%`, cls: 'ai-perf-good' }
     if (pct < 0) return { text: `↑ ${-pct}% ${worseLabel}`, cls: 'ai-perf-bad' }
-    return { text: '변화 없음', cls: '' }
+    return { text: t('ai.noChange'), cls: '' }
   }
-  const timeImp = delta(asis.timeMs, tobe.timeMs, '느려짐')
-  const costImp = delta(asis.cost, tobe.cost, '늘어남')
+  const timeImp = delta(asis.timeMs, tobe.timeMs, t('ai.slower'))
+  const costImp = delta(asis.cost, tobe.cost, t('ai.grew'))
   return (
     <div className="ai-perf">
-      <div className="ai-perf-title">성능 비교</div>
+      <div className="ai-perf-title">{t('ai.perfCompare')}</div>
       <table className="ai-perf-table">
         <thead>
           <tr>
             <th />
-            <th>AS-IS (원본)</th>
-            <th>TO-BE (튜닝)</th>
-            <th>개선</th>
+            <th>{t('ai.perfAsis')}</th>
+            <th>{t('ai.perfTobe')}</th>
+            <th>{t('ai.perfImprove')}</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td className="ai-perf-metric">실행 시간</td>
+            <td className="ai-perf-metric">{t('ai.perfTime')}</td>
             <td>{asis.timeMs != null ? fmtMs(asis.timeMs) : '—'}</td>
             <td>{tobe.timeMs != null ? fmtMs(tobe.timeMs) : '—'}</td>
             <td className={timeImp.cls}>{timeImp.text}</td>
           </tr>
           <tr>
-            <td className="ai-perf-metric">예상 비용</td>
+            <td className="ai-perf-metric">{t('ai.perfCost')}</td>
             <td>{asis.cost != null ? asis.cost.toLocaleString() : '—'}</td>
             <td>{tobe.cost != null ? tobe.cost.toLocaleString() : '—'}</td>
             <td className={costImp.cls}>{costImp.text}</td>
@@ -352,8 +358,10 @@ function PerfCompare({
       </table>
       {asis.timeMs == null && (
         <div className="ai-perf-note">
-          원본을 <b>성능 분석(EXPLAIN ANALYZE)</b> 으로 실행하면 실제 실행 시간까지 비교됩니다
-          {analyzed === false ? ' (지금은 추정 계획이라 비용만 비교).' : '.'}
+          {t('ai.perfNotePrefix')}
+          <b>{t('ai.perfNoteBold')}</b>
+          {t('ai.perfNoteSuffix')}
+          {analyzed === false ? t('ai.perfNoteEstimated') : '.'}
         </div>
       )}
     </div>

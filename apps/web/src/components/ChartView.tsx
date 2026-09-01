@@ -19,6 +19,7 @@ import {
   Tooltip,
   Legend,
 } from 'recharts'
+import { useT, type MsgKey } from '../i18n'
 
 export type ChartKind = 'bar' | 'line' | 'area' | 'pie' | 'scatter'
 export type AggFn = 'none' | 'sum' | 'avg' | 'count' | 'min' | 'max'
@@ -30,11 +31,21 @@ const COLORS = [
   '#6d28d9', '#0ea5e9', '#22c55e', '#f59e0b', '#ef4444',
   '#14b8a6', '#ec4899', '#8b5cf6', '#84cc16', '#f97316',
 ]
-const KIND_LABEL: Record<ChartKind, string> = {
-  bar: '막대', line: '선', area: '영역', pie: '원', scatter: '산점도',
+// 라벨은 MsgKey 로 두고 렌더 시점에 t() 로 푼다 — 모듈 상수에 번역을 담으면 언어 전환을 못 따라온다.
+const KIND_LABEL: Record<ChartKind, MsgKey> = {
+  bar: 'navi.chart.bar',
+  line: 'navi.chart.line',
+  area: 'navi.chart.area',
+  pie: 'navi.chart.pie',
+  scatter: 'navi.chart.scatter',
 }
-const AGG_LABEL: Record<AggFn, string> = {
-  none: '원시값', sum: '합계', avg: '평균', count: '개수', min: '최소', max: '최대',
+const AGG_LABEL: Record<AggFn, MsgKey> = {
+  none: 'navi.agg.none',
+  sum: 'navi.agg.sum',
+  avg: 'navi.agg.avg',
+  count: 'navi.agg.count',
+  min: 'navi.agg.min',
+  max: 'navi.agg.max',
 }
 // 카테고리/포인트 상한 — 너무 많으면 차트가 읽히지 않으므로 앞에서 자르고 안내한다.
 const MAX_POINTS = 200
@@ -132,6 +143,7 @@ export function ChartView({
   config: ChartConfig
   onConfigChange: (c: ChartConfig) => void
 }) {
+  const t = useT()
   const numericCols = useMemo(() => columns.filter((c) => isNumericCol(rows, c)), [columns, rows])
   const singleY = config.kind === 'pie' || config.kind === 'scatter'
   const { data, truncated } = useMemo(() => buildData(rows, config), [rows, config])
@@ -170,7 +182,7 @@ export function ChartView({
               className={`nb-chart-kind ${config.kind === k ? 'on' : ''}`}
               onClick={() => setKind(k)}
             >
-              {KIND_LABEL[k]}
+              {t(KIND_LABEL[k])}
             </button>
           ))}
         </div>
@@ -184,16 +196,16 @@ export function ChartView({
         </label>
         {config.kind !== 'scatter' && (
           <label className="nb-chart-field">
-            <span>집계</span>
+            <span>{t('navi.chartAgg')}</span>
             <select value={config.agg} onChange={(e) => set({ agg: e.target.value as AggFn })}>
               {(['none', 'sum', 'avg', 'count', 'min', 'max'] as AggFn[]).map((a) => (
-                <option key={a} value={a}>{AGG_LABEL[a]}</option>
+                <option key={a} value={a}>{t(AGG_LABEL[a])}</option>
               ))}
             </select>
           </label>
         )}
         <div className="nb-chart-ys">
-          <span>{singleY ? 'Y(값)' : 'Y(값, 복수 선택)'}</span>
+          <span>{singleY ? t('navi.chartY') : t('navi.chartYMulti')}</span>
           <div className="nb-chart-ychips">
             {(config.agg === 'count' && !singleY ? columns : numericCols).map((c) => (
               <button
@@ -209,11 +221,11 @@ export function ChartView({
       </div>
 
       {noNumeric && config.agg !== 'count' ? (
-        <div className="nb-chart-empty">숫자 컬럼이 없어 차트를 그릴 수 없습니다. (집계=개수 는 가능)</div>
+        <div className="nb-chart-empty">{t('navi.chartNoNumeric')}</div>
       ) : needY ? (
-        <div className="nb-chart-empty">그릴 Y(값) 컬럼을 하나 이상 선택하세요.</div>
+        <div className="nb-chart-empty">{t('navi.chartPickY')}</div>
       ) : data.length === 0 ? (
-        <div className="nb-chart-empty">표시할 데이터가 없습니다.</div>
+        <div className="nb-chart-empty">{t('navi.chartNoData')}</div>
       ) : (
         <div className="nb-chart-canvas">
           <ResponsiveContainer width="100%" height={320}>
@@ -223,7 +235,7 @@ export function ChartView({
       )}
       {truncated && (
         <div className="nb-chart-note">
-          많은 값이라 앞 {config.kind === 'pie' ? MAX_PIE : MAX_POINTS}개만 표시합니다 — 집계하거나 필터로 줄여 보세요.
+          {t('navi.chartTruncated', { n: config.kind === 'pie' ? MAX_PIE : MAX_POINTS })}
         </div>
       )}
     </div>

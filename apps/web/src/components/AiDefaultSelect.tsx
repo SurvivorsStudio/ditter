@@ -13,9 +13,11 @@ import { MiniSelect } from '../canvas/AiChatPane'
 import { useConnections } from '../api/hooks'
 import { setAiDefault, useAiConn } from '../api/aiDefault'
 import { specFor } from '../api/connectorFields'
+import { useT } from '../i18n'
 import type { SelectOption } from './SearchSelect'
 
 export function AiDefaultSelect() {
+  const t = useT()
   const { data: conns = [] } = useConnections()
   const aiConns = useMemo(() => conns.filter((c) => specFor(c.type).category === 'ai'), [conns])
   const current = useAiConn(aiConns)
@@ -31,14 +33,14 @@ export function AiDefaultSelect() {
   return (
     <div
       className="sql-ai-default"
-      title="AI 기본 연결 — 이 브라우저의 AI 어시스턴트·AI 수정·AI 튜닝이 이 연결로 답합니다"
+      title={t('ai.defaultSelectTitle')}
     >
       <Icon.bolt />
       <MiniSelect
         value={current}
         options={options}
         onChange={setAiDefault}
-        placeholder="AI 연결"
+        placeholder={t('ai.connPlaceholder')}
         up={false}
       />
     </div>
