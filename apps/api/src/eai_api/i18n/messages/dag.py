@@ -243,4 +243,181 @@ dag: dict[str, tuple[str, str]] = {
         "columns must be a list of column names",
     ),
     "dag.resp.columns_duplicate": ("columns 에 중복이 있습니다", "columns contains duplicates"),
+    # ---- 정의 자체의 형식 (pydantic 검증기 — RequestValidationError 로 나간다) ----
+    "dag.def.self_edge": ("자기 자신을 가리키는 엣지: {name}", "An edge points at itself: {name}"),
+    "dag.def.duplicate_node_id": ("중복된 노드 id: {list}", "Duplicate node ids: {list}"),
+    "dag.def.edge_unknown_node": (
+        "존재하지 않는 노드를 참조하는 엣지: {list}",
+        "Edges reference nodes that do not exist: {list}",
+    ),
+    # ---- CDC 파이프라인 ----
+    "dag.cdc.mixed_sources": (
+        "CDC 소스와 배치 소스를 한 파이프라인에 섞을 수 없습니다 — 분리하세요",
+        "CDC sources and batch sources cannot share a pipeline — split them",
+    ),
+    "dag.cdc.batch_trigger": (
+        "CDC 파이프라인에는 스케줄·수동 트리거를 쓸 수 없습니다 (CDC 트리거만)",
+        "A CDC pipeline cannot use schedule or manual triggers (CDC trigger only)",
+    ),
+    "dag.cdc.source_without_trigger": (
+        "CDC 소스에 CDC 트리거가 연결되지 않았습니다",
+        "The CDC source has no CDC trigger connected",
+    ),
+    "dag.cdc.trigger_without_source": (
+        "CDC 트리거는 CDC 소스가 있어야 의미가 있습니다",
+        "A CDC trigger is only meaningful with a CDC source",
+    ),
+    "dag.cdc.tables_not_a_list": ("tables 는 목록이어야 합니다", "tables must be a list"),
+    "dag.cdc.tables_required": (
+        "캡처할 테이블(table 또는 tables)이 필요합니다",
+        "Tables to capture are required (table or tables)",
+    ),
+    "dag.cdc.unknown_delete_mode": (
+        "알 수 없는 삭제 처리 방식: {name} ({allowed})",
+        "Unknown delete handling: {name} ({allowed})",
+    ),
+    "dag.cdc.unknown_snapshot": (
+        "알 수 없는 스냅샷 모드: {name} ({allowed})",
+        "Unknown snapshot mode: {name} ({allowed})",
+    ),
+    # ---- CDC 다중 테이블 매핑 ----
+    "dag.cdcmap.empty": (
+        "테이블 매핑이 비어 있습니다 (최소 1개 필요)",
+        "The table mapping is empty (at least one is required)",
+    ),
+    "dag.cdcmap.bad_shape": ("매핑 #{i}: 형식이 올바르지 않습니다", "Mapping #{i}: malformed"),
+    "dag.cdcmap.source_required": (
+        "매핑 #{i}: 소스 테이블이 필요합니다",
+        "Mapping #{i}: a source table is required",
+    ),
+    "dag.cdcmap.target_required": (
+        "매핑 #{i}: 타깃 테이블이 필요합니다",
+        "Mapping #{i}: a target table is required",
+    ),
+    "dag.cdcmap.columns_not_a_list": (
+        "매핑 #{i}: columns 는 목록이어야 합니다",
+        "Mapping #{i}: columns must be a list",
+    ),
+    "dag.cdcmap.column_names_required": (
+        "매핑 #{i}: 컬럼 매핑에는 원본·대상 이름이 모두 필요합니다 (제외 항목은 원본만 있어도 됩니다)",
+        "Mapping #{i}: a column mapping needs both source and target names "
+        "(an excluded column only needs the source)",
+    ),
+    "dag.cdcmap.unknown_cast": (
+        "매핑 #{i}: 지원하지 않는 변환 {name} ({allowed})",
+        "Mapping #{i}: unsupported cast {name} ({allowed})",
+    ),
+    "dag.cdcmap.no_key_columns": (
+        "매핑 #{i}: 키 컬럼이 없어 append 로 적재됩니다 (upsert·삭제 반영 불가)",
+        "Mapping #{i}: without key columns this loads as append (no upsert, no deletes)",
+    ),
+    # ---- Mongo 필터 ----
+    "dag.mongo.filter_not_json": (
+        "필터가 올바른 JSON 이 아닙니다: {cause}",
+        "The filter is not valid JSON: {cause}",
+    ),
+    "dag.mongo.filter_not_object": (
+        "필터는 JSON 객체여야 합니다",
+        "The filter must be a JSON object",
+    ),
+    # ---- 실시간 동기화 파이프라인 ----
+    "dag.sync.source_with_others": (
+        "실시간 동기화 소스는 다른 소스와 한 파이프라인에 둘 수 없습니다 — 분리하세요",
+        "A real-time sync source cannot share a pipeline with other sources — split them",
+    ),
+    "dag.sync.target_with_others": (
+        "실시간 동기화 타깃 외의 타깃을 함께 둘 수 없습니다 "
+        "— SymmetricDS 는 타깃 DB 하나로만 밀어 넣습니다",
+        "No other target may sit alongside the real-time sync target "
+        "— SymmetricDS pushes into exactly one target DB",
+    ),
+    "dag.sync.no_source": (
+        "실시간 동기화 소스가 없습니다 — 소스·타깃이 한 쌍이어야 합니다",
+        "There is no real-time sync source — source and target must come as a pair",
+    ),
+    "dag.sync.too_many_sources": (
+        "동기화 소스가 {n}개입니다 — 노드 그룹 링크가 소스↔타깃 한 쌍이라 소스는 하나여야 합니다",
+        "There are {n} sync sources — the node group link is one source to one target, "
+        "so there can be only one",
+    ),
+    "dag.sync.no_target": (
+        "실시간 동기화 타깃이 없습니다 — 어느 DB 로 밀어 넣을지 정해야 합니다",
+        "There is no real-time sync target — pick the DB to push into",
+    ),
+    "dag.sync.too_many_targets": (
+        "동기화 타깃이 {n}개입니다 — 타깃도 하나여야 합니다",
+        "There are {n} sync targets — there can be only one target as well",
+    ),
+    "dag.sync.no_transform": (
+        "실시간 동기화 파이프라인에는 변환 노드를 둘 수 없습니다 "
+        "— 데이터가 워커를 지나지 않아 변환이 적용되지 않습니다",
+        "A real-time sync pipeline cannot contain transform nodes "
+        "— the data never passes through a worker, so nothing would be applied",
+    ),
+    "dag.sync.only_sync_trigger": (
+        "실시간 동기화 파이프라인에는 동기화 트리거만 쓸 수 있습니다",
+        "A real-time sync pipeline can only use a sync trigger",
+    ),
+    "dag.sync.source_without_trigger": (
+        "실시간 동기화 소스에 동기화 트리거가 연결되지 않았습니다",
+        "The real-time sync source has no sync trigger connected",
+    ),
+    "dag.sync.source_edge": (
+        "동기화 소스는 동기화 타깃에만 이을 수 있습니다 — 사이에 다른 노드를 두면 조용히 무시됩니다",
+        "A sync source may only connect to a sync target — anything in between is silently ignored",
+    ),
+    "dag.sync.target_edge": (
+        "동기화 타깃에는 동기화 소스만 이을 수 있습니다",
+        "Only a sync source may connect to a sync target",
+    ),
+    # ---- 동기화 소스의 테이블 목록 ----
+    "dag.synctbl.required": (
+        "동기화할 테이블이 지정되지 않았습니다",
+        "No tables to sync are specified",
+    ),
+    "dag.synctbl.bad_shape": (
+        "테이블 #{i}: 이름·채널을 담은 객체여야 합니다",
+        "Table #{i}: must be an object with a name and a channel",
+    ),
+    "dag.synctbl.name_empty": ("테이블 #{i}: 이름이 비어 있습니다", "Table #{i}: the name is empty"),
+    "dag.synctbl.duplicate": (
+        "테이블 #{i}: {name} 이(가) 중복입니다",
+        "Table #{i}: {name} is a duplicate",
+    ),
+    "dag.synctbl.unknown_channel": (
+        "테이블 #{i}: 알 수 없는 채널 {name} ({allowed})",
+        "Table #{i}: unknown channel {name} ({allowed})",
+    ),
+    "dag.synctbl.load_order_not_int": (
+        "테이블 #{i}: 초기 적재 순서는 정수여야 합니다",
+        "Table #{i}: the initial load order must be an integer",
+    ),
+    "dag.synctbl.row_filter_not_str": (
+        "테이블 #{i}: 행 필터는 문자열이어야 합니다",
+        "Table #{i}: the row filter must be a string",
+    ),
+    "dag.synctbl.unknown_purpose": (
+        "알 수 없는 복제본 용도 {name} ({allowed})",
+        "Unknown replica purpose {name} ({allowed})",
+    ),
+    # ---- 동기화 타깃의 테이블명 매핑 ----
+    "dag.synctgt.no_mapping": (
+        "타깃 테이블명 매핑이 없습니다 "
+        "— PostgreSQL 은 대문자 식별자를 소문자로 접으므로 명시하는 편이 안전합니다",
+        "There is no target table name mapping "
+        "— PostgreSQL folds upper-case identifiers to lower case, so it is safer to be explicit",
+    ),
+    "dag.synctgt.not_a_list": (
+        "table_mappings 는 목록이어야 합니다",
+        "table_mappings must be a list",
+    ),
+    "dag.synctgt.bad_shape": ("매핑 #{i}: 객체여야 합니다", "Mapping #{i}: must be an object"),
+    "dag.synctgt.source_required": (
+        "매핑 #{i}: source_table 이 필요합니다",
+        "Mapping #{i}: source_table is required",
+    ),
+    "dag.synctgt.duplicate": (
+        "매핑 #{i}: {name} 매핑이 중복입니다",
+        "Mapping #{i}: the mapping for {name} is a duplicate",
+    ),
 }
