@@ -246,7 +246,7 @@ gh api graphql -f query='
       }
     }
   }' -F owner=SurvivorsStudio -F repo=ditter -F pr=<n> \
-  --jq '.data as $d | $d.repository.pullRequest.reviewThreads as $t | [$t.nodes[] | select(.isResolved == false) | {id, at: "\(.path):\(.line // "줄 불명")", cread: (.comments.nodes | length), ctotal: .comments.totalCount, outsiders: [.comments.nodes[].author | {by: (.login // "(삭제된 계정)"), kind: (.__typename // "User")} | select(.by != $d.viewer.login)]} | . + {blind: (.cread == 0 or .cread < .ctotal)}] as $open | {total: $t.totalCount, read: ($t.nodes | length), mine: [$open[] | select((.blind | not) and (.outsiders | length == 0)) | {id, at}], others: [$open[] | select(.blind or (.outsiders | any(.kind != "Bot"))) | {id, at, by: [.outsiders[].by], why: (if .cread == 0 then "코멘트 없음" elif .cread < .ctotal then "코멘트 \(.cread)/\(.ctotal) 잘림" else "사람 참여" end)}], bots: [$open[] | select((.blind | not) and (.outsiders | length > 0) and (.outsiders | all(.kind == "Bot"))) | {id, at, by: [.outsiders[].by]}]}'
+  --jq '.data as $d | $d.repository.pullRequest.reviewThreads as $t | [$t.nodes[] | select(.isResolved == false) | {id, at: "\(.path):\(.line // "줄 불명")", cread: (.comments.nodes | length), ctotal: .comments.totalCount, outsiders: [.comments.nodes[].author | {by: (.login // "(삭제된 계정)"), kind: (.__typename // "User")} | select(.by != $d.viewer.login)]} | . + {blind: (.cread == 0 or .cread < .ctotal)}] as $open | {total: $t.totalCount, read: ($t.nodes | length), mine: [$open[] | select((.blind | not) and (.outsiders | length == 0)) | {id, at}], others: [$open[] | select(.blind or (.outsiders | any(.kind != "Bot"))) | {id, at, by: [.outsiders[].by], why: ([(if (.outsiders | any(.kind != "Bot")) then "사람 참여" else empty end), (if .cread == 0 then "코멘트 없음" elif .cread < .ctotal then "코멘트 \(.cread)/\(.ctotal) 잘림" else empty end)] | join(" · "))}], bots: [$open[] | select((.blind | not) and (.outsiders | length > 0) and (.outsiders | all(.kind == "Bot"))) | {id, at, by: [.outsiders[].by]}]}'
 ```
 
 미해결 스레드를 셋으로 가른다. **기준은 "누가 열었나"가 아니라 "누가 참여했나"다** —
@@ -285,11 +285,16 @@ gh api graphql -f query='
 **둘 다 `others` 로 보내 물어보게 한다.** `mine` 에서 빼기만 하면 어느 바구니에도 없어 2번이
 아무것도 접지 못하고 3번이 `BLOCKED` 로 끝난다 — 봇을 목록에서 뺐을 때와 **똑같은 실수**다.
 `why` 가 그 이유(`코멘트 없음` · `코멘트 N/M 잘림`)를 담으므로 물을 때 그대로 보여 준다.
+**사람 참여와 배타가 아니다** — 잘린 스레드의 읽은 범위 안에 사람이 있으면 둘 다 붙는다
+(`사람 참여 · 코멘트 2/150 잘림`). 하나만 고르게 하면 앞의 것이 뒤의 것을 가리는데, 가려지는
+쪽이 하필 **사람의 반대**다.
 
 **스레드 목록의 `read`/`total` 가드를 스레드 안쪽에 한 번 더 적용하는 것**이고 방향도 같다 —
 확인할 근거가 없는 것을 "확인했다"로 읽지 않는다. 다만 여기서는 **종료하지 않고 물어본다.**
 목록이 잘리면 무엇이 안 보이는지조차 모르지만, 스레드 하나가 잘린 것은 그 스레드를 PR 페이지에서
-열어 보면 사람이 즉시 판정할 수 있기 때문이다.
+열어 보면 사람이 즉시 판정할 수 있기 때문이다. **그 전제는 아래 물음이 실제로 지킨다** — 판정하지
+못한 항목은 따로 모아 열어 보라고 안내하고 답을 따로 받는다. 그 절차가 없으면 이 문단은
+"열어 볼 수 있으니 괜찮다"고 말만 하고 아무도 열지 않는다.
 
 **읽자마자 세 가지를 본다** — §1d 가 세워 둔 기준을 여기에도 그대로 적용한다.
 
@@ -318,11 +323,20 @@ gh api graphql -f query='
 
 - **접어도 된다**고 하면 아래 resolve 대상을 `mine + others + bots` 로 한다. 남의 지적을 대신
   닫는 것이므로 **이 허락은 이번 머지 한 번에만 유효하다** — 다음 실행이 물려받지 않는다.
+  아래 「판정하지 못한 것」이 있으면 그것만 **답을 따로 받아** 가른다.
 - **아니라고 하면 종료한다.** 그 사람과 정리한 뒤 다시 부르라고 안내한다.
 - **둘 다 비어 있으면 묻지 않는다.** 봇 스레드만 있을 때도 묻는다 — 접는 판단은 사람이 한다.
-- **`why` 를 함께 보여 준다.** `사람 참여` 가 아닌 것(`코멘트 없음` · `코멘트 N/M 잘림`)은 남의
-  지적이 있다는 뜻이 아니라 **판정하지 못했다**는 뜻이고, `by` 가 비어 있는 이유이기도 하다.
-  그대로 적어 준다 — "남이 남긴 지적"으로 소개하면 사용자가 없는 반대를 찾게 된다.
+- **`why` 를 함께 보여 준다.** `others` 항목마다 왜 거기 있는지를 담는다(`bots` 에는 이 키가
+  없다 — 정의상 언제나 봇 참여다). `사람 참여` 는 남의 지적이 있다는 뜻이고,
+  `코멘트 없음`·`코멘트 N/M 잘림` 은 **판정하지 못했다**는 뜻이다. **둘은 함께 붙을 수 있고,
+  그때는 둘 다 사실이다** — `by` 도 차 있다. `by` 가 비는 것은 판정 사유만 붙은 경우다.
+  적힌 대로 옮긴다 — 판정 사유를 "남이 남긴 지적"으로 소개하면 없는 반대를 찾게 되고,
+  반대로 사람이 든 스레드를 "확인이 안 됐을 뿐"으로 소개하면 **있는 반대를 지나친다.**
+- **판정하지 못한 것은 따로 모아 묻는다.** `why` 에 `코멘트 없음`·`잘림` 이 붙은 항목은 목록을
+  나눠 보여 주고 **PR 페이지에서 열어 본 뒤 답해 달라고 안내한다.** 목록 절단과 달리 여기서
+  종료하지 않는 근거가 "사람이 열어 보면 즉시 판정할 수 있다" **하나뿐**이라, 안내하지 않으면
+  그 정당화가 성립하지 않는다. 나머지와 한 번의 「예」로 묶으면 **아무도 읽지 못한 반대가 정상
+  항목들과 함께 접힌다** — 이 절이 없애겠다고 한 모양 그대로다.
 
 #### resolve 하고 진행한다
 
