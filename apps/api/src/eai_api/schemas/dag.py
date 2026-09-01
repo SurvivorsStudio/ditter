@@ -423,10 +423,30 @@ class PipelineDefinition(BaseModel):
         return [n for n in self.nodes if not n.is_trigger and not n.is_note]
 
 
+#: 단일 노드 실행에서 **무시하는** 구조 규칙들의 코드.
+#:
+#: 그래프 전체로 보면 오류지만 "이 노드 하나만 돌려 본다"는 문맥에서는 뜻이 없다 —
+#: 아직 하류를 안 그렸어도 소스 하나는 읽어 볼 수 있어야 한다.
+#: `pipeline_service.assert_node_runnable` 이 이 집합을 쓴다.
+STRUCTURAL_SOURCE_ORPHAN = "dag.graph.source_orphan"
+STRUCTURAL_TARGET_NO_INPUT = "dag.graph.target_no_input"
+STRUCTURAL_TRANSFORM_NO_INPUT = "dag.graph.transform_no_input"
+
+#: 단일 노드 실행 게이트가 건너뛸 코드들.
+SINGLE_NODE_IGNORED_CODES = frozenset(
+    {STRUCTURAL_SOURCE_ORPHAN, STRUCTURAL_TARGET_NO_INPUT, STRUCTURAL_TRANSFORM_NO_INPUT}
+)
+
+
 class ValidationIssue(BaseModel):
     level: Literal["error", "warning"]
     node_id: str | None = None
     message: str
+    #: 규칙의 안정 식별자. **코드가 메시지 본문을 보고 분기하지 않게 하려고 있다.**
+    #: `pipeline_service.assert_node_runnable` 이 단일 노드 실행에서 무시할 구조 규칙을
+    #: 고를 때 이것을 본다 — 예전에는 한국어 부분 문자열로 골랐다.
+    #: 문구를 다국어로 옮기면 그 매칭이 조용히 어긋난다(en 에서만 실행이 막힌다).
+    code: str | None = None
 
 
 def topological_order(nodes: list[PipelineNode], edges: list[PipelineEdge]) -> list[str]:
@@ -543,15 +563,30 @@ def validate_definition(definition: PipelineDefinition) -> list[ValidationIssue]
     for node in nodes:
         if node.is_source and not downstream[node.id]:
             issues.append(
-                ValidationIssue(level="error", node_id=node.id, message="소스가 어디에도 연결되지 않았습니다")
+                ValidationIssue(
+                    level="error",
+                    node_id=node.id,
+                    code=STRUCTURAL_SOURCE_ORPHAN,
+                    message="소스가 어디에도 연결되지 않았습니다",
+                )
             )
         if node.is_target and not upstream[node.id]:
             issues.append(
-                ValidationIssue(level="error", node_id=node.id, message="타깃에 들어오는 입력이 없습니다")
+                ValidationIssue(
+                    level="error",
+                    node_id=node.id,
+                    code=STRUCTURAL_TARGET_NO_INPUT,
+                    message="타깃에 들어오는 입력이 없습니다",
+                )
             )
         if node.kind in TRANSFORM_KINDS and not upstream[node.id]:
             issues.append(
-                ValidationIssue(level="error", node_id=node.id, message="변환 노드에 입력이 없습니다")
+                ValidationIssue(
+                    level="error",
+                    node_id=node.id,
+                    code=STRUCTURAL_TRANSFORM_NO_INPUT,
+                    message="변환 노드에 입력이 없습니다",
+                )
             )
         if node.kind is NodeKind.TRANSFORM_PYTHON:
             issues.extend(_python_node_issues(node))

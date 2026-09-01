@@ -17,6 +17,7 @@ from ..models import (
     Run,
 )
 from ..schemas.dag import (
+    SINGLE_NODE_IGNORED_CODES,
     PipelineDefinition,
     ValidationIssue,
     topological_order,
@@ -340,12 +341,16 @@ def assert_node_runnable(pipeline: Pipeline, node_id: str) -> PipelineDefinition
         raise ValidationError("이 노드는 실행할 수 없습니다 (트리거·메모는 실행 대상이 아닙니다)")
 
     scope = _ancestors(definition, node_id)
-    # 단일 노드 범위에서 무의미한 구조 규칙 — 하류 연결 여부는 여기서 따지지 않는다
-    ignore = ("연결되지 않았습니다", "들어오는 입력이 없습니다", "입력이 없습니다")
+    # 단일 노드 범위에서 무의미한 구조 규칙 — 하류 연결 여부는 여기서 따지지 않는다.
+    #
+    # 예전에는 한국어 부분 문자열로 골랐다(`"입력이 없습니다" in i.message`). 문구를
+    # 다국어로 옮기면 그 매칭이 조용히 어긋나 **무시해야 할 이슈가 차단 이슈로 바뀐다** —
+    # en 에서만 단일 노드 실행이 막히고, 화면에는 "이 노드를 실행할 수 없습니다"만 뜬다.
+    # 규칙의 안정 식별자(`code`)로 고르면 그 사고가 구조적으로 불가능하다.
     blocking = [
         i
         for i in validate_definition(definition)
-        if i.level == "error" and i.node_id in scope and not any(term in i.message for term in ignore)
+        if i.level == "error" and i.node_id in scope and i.code not in SINGLE_NODE_IGNORED_CODES
     ]
     if blocking:
         problems = "; ".join(f"{_node_label(definition, i.node_id)}: {i.message}" for i in blocking)

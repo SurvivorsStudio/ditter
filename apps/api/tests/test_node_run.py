@@ -91,3 +91,60 @@ class TestAssertNodeRunnable:
             [{"source": "src", "target": "tgt"}],
         )
         assert_node_runnable(p, "tgt")  # broken 은 스코프 밖이라 무시
+
+
+class TestStructuralCodesNotMessages:
+    """단일 노드 게이트는 **코드**로 구조 규칙을 거른다 — 한국어 본문으로 고르지 않는다.
+
+    예전에는 `"입력이 없습니다" in i.message` 였다. 문구를 다국어로 옮기면 그 매칭이
+    어긋나 무시해야 할 이슈가 차단 이슈로 바뀌고, **en 에서만** 단일 노드 실행이 막힌다.
+    아무 테스트도 빨개지지 않는 종류라 여기서 못박는다.
+    """
+
+    def test_ignored_codes_are_actually_emitted(self) -> None:
+        """게이트가 무시하는 코드가 실제로 발생하는 코드여야 한다.
+
+        오타로 집합에만 있고 아무도 안 만드는 코드가 되면 게이트가 조용히 무력해진다.
+        """
+        from eai_api.schemas.dag import (
+            SINGLE_NODE_IGNORED_CODES,
+            PipelineDefinition,
+            validate_definition,
+        )
+
+        definition = PipelineDefinition.model_validate(
+            {
+                "nodes": [
+                    {"id": "src", "kind": "source.postgres", "params": {"connection_id": CONN, "table": "t"}},
+                    {"id": "tgt", "kind": "target.file", "params": {"connection_id": CONN}},
+                    {
+                        "id": "map",
+                        "kind": "transform.map",
+                        "params": {"mappings": [{"source": "a", "target": "b"}]},
+                    },
+                ],
+                "edges": [],
+                "variables": {},
+            }
+        )
+        emitted = {i.code for i in validate_definition(definition) if i.code}
+        assert emitted >= SINGLE_NODE_IGNORED_CODES, (
+            f"무시 목록에 있는데 발생하지 않는 코드: {sorted(SINGLE_NODE_IGNORED_CODES - emitted)}"
+        )
+
+    def test_gate_ignores_them_regardless_of_message_language(self) -> None:
+        """메시지가 영어가 되어도 게이트 판정이 같아야 한다.
+
+        `en` 로케일로 돌려 본다 — 오늘은 이 문구들이 아직 사전에 없어 ko 와 같지만,
+        옮기고 나서 누가 코드 필터를 문자열 매칭으로 되돌리면 여기서 잡힌다.
+        """
+        from eai_api.i18n.locale import _locale
+
+        p = pipeline(
+            [{"id": "src", "kind": "source.postgres", "params": {"connection_id": CONN, "table": "t"}}]
+        )
+        token = _locale.set("en")
+        try:
+            assert_node_runnable(p, "src")  # 하류가 없어도 통과 — 구조 규칙은 무시된다
+        finally:
+            _locale.reset(token)
