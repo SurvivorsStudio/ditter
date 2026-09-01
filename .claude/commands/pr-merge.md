@@ -35,7 +35,8 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
 
 ### 1. 사전 게이트 (모두 통과해야 함 — 첫 실패에서 종료)
 
-이 명령은 게이트 안에서 무엇도 고치지 않는다. 게이트가 실패하면 사용자의 다음 단계는 **대개**
+이 명령은 **1번 게이트 안에서는** 무엇도 고치지 않는다(2번은 자기 스레드를 접는다 — 그 절 참고).
+게이트가 실패하면 사용자의 다음 단계는 **대개**
 `/pr` 로 재준비다 — **1b·1c** 가 그렇다(충돌은 1b 소관이고, 해소 후 재준비도 1b 다). 예외
 둘은 다음 단계가 아예 다르니 `/pr` 로 안내하지 않는다: **1a** 는 두 갈래 모두("이미 머지됨"·
 "base 가 main 이 아님") 이 명령의 대상이 아니라 보고로 끝나고, **1d** 는 준비가 덜 된 것이
@@ -102,15 +103,26 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
 - `mergeStateStatus == "BEHIND"` 면(승인·충돌엔 문제없지만 뒤처짐) 계속 진행 가능 — GitHub 의
   squash 머지는 최신 main 을 다시 요구하지 않는 한 진행된다. 다만 뒤처진 정도가 크면 `/pr` 로
   `git merge origin/main` 후 테스트를 다시 돌리길 권장한다고 사용자에게 고지한다.
-- `mergeStateStatus == "BLOCKED"` 면 **여기서 종료하지 않고 2번으로 넘긴다.** 이 저장소에서
-  BLOCKED 의 대부분은 `required_conversation_resolution`(미해결 리뷰 스레드)이고 그것은 2번이
-  다루는 일이다. 다른 원인이라면 2번이 스레드를 정리한 뒤에도 BLOCKED 이 남아 **3번 직전
-  재확인**에서 드러난다. 위 CI·충돌 갈래를 이미 통과했으므로 여기서 세우면 원인도 모른 채
-  멈추게 된다.
-- **위 어느 갈래에도 안 걸렸는데 `mergeStateStatus` 가 `CLEAN`·`UNSTABLE`·`BEHIND`·`BLOCKED`
-  중 어느 것도 아니면 종료한다.** 모르는 상태로 머지를 시도하지 않는다 — `DIRTY`·`DRAFT` 가
-  여기 해당한다. `UNKNOWN` 은 GitHub 이 아직 계산 중이라는 뜻이므로 몇 초 뒤 한 번 다시 읽고
-  그래도 `UNKNOWN` 이면 종료한다.
+- `mergeStateStatus == "BLOCKED"` 면 **여기서 종료하지 않는다.** 남은 게이트(**1c·1d**)를
+  그대로 마친 뒤 2번에서 다룬다 — 절을 건너뛰라는 뜻이 아니다. 이 저장소에서 BLOCKED 의
+  대부분은 `required_conversation_resolution`(미해결 리뷰 스레드)이고 그것은 2번이 다루는
+  일이며, 다른 원인이라면 2번이 스레드를 정리한 뒤에도 남아 **3번 직전 재확인**에서 드러난다.
+  위 CI·충돌 갈래를 이미 통과했으므로 여기서 세우면 원인도 모른 채 멈추게 된다.
+  **1d 를 건너뛰면 안 되는 이유가 특히 크다** — 보호가 켜져 있어 BLOCKED 은 예외가 아니라
+  정상 경로의 기본값이라, 건너뛰기로 읽으면 1d 가 거의 모든 실행에서 무력해진다.
+
+##### `mergeStateStatus` 판정 규칙 (3번도 이 규칙을 쓴다)
+
+- **진행 가능**: `CLEAN` · `UNSTABLE` · `BEHIND` (위 BEHIND 항목의 고지를 함께 한다).
+- **1c·1d 를 마치고 2번으로**: `BLOCKED`.
+- **`UNKNOWN` 은 GitHub 이 아직 계산 중이라는 뜻이다.** 몇 초 간격으로 **최대 3회**까지 다시
+  읽고, 그래도 `UNKNOWN` 이면 종료한다. 한 번만 더 읽는 것으로는 부족하다 — 실측에서 어떤 PR 은
+  `UNKNOWN` → `UNKNOWN` → `BLOCKED` 로 **세 번째에야** 답했다. 여기서 성급히 종료하면 멀쩡한
+  PR 이 이유 없이 막힌다.
+- **그 밖의 값이면 종료한다**(`DIRTY`·`DRAFT` 등). 모르는 상태로 머지를 시도하지 않는다.
+
+이 규칙은 **여기 한 곳에만** 둔다. 3번의 머지 직전 재확인도 같은 판정을 하는데, 규칙을 양쪽에
+적으면 한쪽만 고쳐져 게이트와 머지 직전 판정이 갈린다.
 
 #### 1c. PR 브랜치에 미푸시 로컬 작업 없음
 - 사용자가 현재 PR 브랜치(`headRefName`)에 체크아웃한 경우에만 검사한다:
@@ -175,13 +187,22 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
 **왜 1b 뒤인가** (검토했고 그대로 두기로 한 것): 1d 는 서버에 두 번 물으면 끝나는 값싼 확인인데
 앞의 1b 는 CI 를 기다린다(`gh pr checks --watch`). 그래서 겹치는 PR 이 있어 **어차피 멈출 머지를
 몇 분 기다린 뒤에야 멈춘다.** 그럼에도 옮기지 않은 이유는 번호가 곧 참조이기 때문이다 — 옮기면
-`§1d` 를 가리키는 `CONTRIBUTING.md` 2곳 · `docs/conventions/commit-convention.md` §5.1 ·
-이 파일 내부(Notes 포함)를 **함께** 고쳐야 하고, 한 곳이라도 빠지면 문서가 없는 절을 가리킨다.
+`§1d` 를 가리키는 곳을 **함께** 고쳐야 하고, 한 곳이라도 빠지면 문서가 없는 절을 가리킨다.
+어디인지는 세어 두지 않고 그때 찾는다 — 적어 둔 숫자는 반드시 낡는다:
+
+```bash
+grep -rn "§1d" --include="*.md" . | grep -v node_modules
+```
+
+(지금은 `CONTRIBUTING.md` · `docs/conventions/commit-convention.md` · `.claude/commands/pr.md` ·
+이 파일 내부에 걸쳐 있다.)
 잃는 것은 몇 분이고 잃지 않는 것은 참조 정합성이라 후자를 택했다. 늦게 걸리는 것이 실제로
 불편해지면 그때 한 번에 옮긴다.
 
 **이 게이트가 못 잡는 것**: `Closes #N` 없이 본문으로만 이슈를 가리킨 PR 은 걸리지 않는다
-(`closingIssuesReferences` 가 비기 때문). 넓은 문자열 검색(`gh pr list --search "<번호>"`)으로
+(`closingIssuesReferences` 가 비기 때문). **선언을 남기게 하는 쪽은 `/pr` §6-E**
+(`.claude/commands/pr.md`)이고 규칙 본문은 `docs/conventions/commit-convention.md` §5.1 이다 —
+이 게이트를 넓히거나 좁힐 때는 그쪽도 함께 본다. 넓은 문자열 검색(`gh pr list --search "<번호>"`)으로
 늘리지 않는 이유는 오탐이다 — `86` 은 줄 번호·버전·해시에도 있고, 멀쩡한 머지를 세우는 편이 더
 나쁘다. 그 구멍은 사람이 보는 자리(`CONTRIBUTING.md` 「메인테이너에게」)에 남겨 두었다.
 
@@ -222,8 +243,17 @@ gh api graphql -f query='
 
 세지 않는 것은 두 가지다 — 봇이 남긴 것(`__typename == "Bot"`)과 **`gh` 를 실행하는 계정
 (`viewer.login`)이 남긴 것**. "자기 자신"은 PR 작성자가 아니라 viewer 로 못박는다(둘이 대개
-같지만 규칙으로는 다르다). 남는 것은 **사람이 남긴 미반영 지적**뿐이다. 있으면 요약해 보여주고
-그대로 머지할지 확인받고, 없으면 묻지 않는다.
+같지만 규칙으로는 다르다). 남는 것은 **사람이 남긴 미반영 지적**뿐이다.
+
+있으면 요약해 보여주고 **"그 스레드도 접어도 되는지"를 묻는다.** 예전에는 "그대로 머지할지"를
+물었는데 그 물음에는 답할 수가 없다 — `required_conversation_resolution` 이 켜져 있어(1b 의 표)
+"머지해라"라고 답해도 GitHub 이 막고, 3번이 **원인을 모른 채** 종료한다. 그 원인은 방금 사용자에게
+보여 준 그 스레드다. **아는 원인을 모른다고 보고하게 되는 물음은 두지 않는다.**
+
+- **접어도 된다**고 하면 아래 resolve 대상에 그 스레드도 포함한다. 남의 지적을 대신 닫는
+  것이므로 **이 허락은 이번 머지 한 번에만 유효하다** — 다음 실행이 물려받지 않는다.
+- **아니라고 하면 종료한다.** 그 사람과 정리한 뒤 다시 부르라고 안내한다.
+- 없으면 묻지 않는다.
 
 #### 자기 계정이 남긴 스레드는 여기서 resolve 한다
 
@@ -244,18 +274,26 @@ gh api graphql -f query='
     repository(owner:$owner, name:$repo) {
       pullRequest(number:$pr) {
         reviewThreads(first:100) {
+          totalCount
           nodes { id isResolved path line comments(first:1) { nodes { author { login } } } }
         }
       }
     }
   }' -F owner=SurvivorsStudio -F repo=ditter -F pr=<n> \
-  --jq '.data as $d | $d.repository.pullRequest.reviewThreads.nodes[]
-        | select(.isResolved == false)
-        | select(.comments.nodes[0].author.login == $d.viewer.login)
-        | "\(.id) \(.path):\(.line)"'
+  --jq '.data as $d | $d.repository.pullRequest.reviewThreads as $t | {total: $t.totalCount, read: ($t.nodes | length), mine: [$t.nodes[] | select(.isResolved == false) | select(.comments.nodes[0].author.login == $d.viewer.login) | {id, at: "\(.path):\(.line // "줄 불명")"}]}'
 ```
 
-나온 `id` 마다:
+**읽기 전에 세 가지를 본다** — §1d 가 세워 둔 기준을 여기에도 그대로 적용한다.
+
+- **출력이 아예 없으면 통과가 아니라 실패다.** `{"total":N,"read":N,"mine":[]}` 처럼 무언가
+  출력된 것만 "접을 것이 없다"로 읽는다. 빈 화면은 조회 실패와 구별되지 않는다.
+- **`read` 가 `total` 보다 작으면 목록이 잘린 것이다**(스레드 100건 초과). 그때는 **resolve 하지
+  말고 그 사실을 보고하고 종료한다.** 일부만 접으면 나머지 때문에 3번이 여전히 `BLOCKED` 이고,
+  그 자리에서 "스레드가 원인이 아니었다"고 **틀리게** 안내하게 된다.
+- **`line` 이 없는 스레드가 있다**(코드가 바뀌어 outdated 가 된 것). 위 표기가 `줄 불명` 으로
+  떨어뜨리므로 보고에 그대로 쓴다 — `파일:null` 로 적으면 읽는 사람이 오류로 본다.
+
+`mine` 의 `id` 마다:
 
 ```bash
 gh api graphql -f query='mutation($id:ID!){ resolveReviewThread(input:{threadId:$id}){ thread { isResolved } } }' -F id=<thread-id>
@@ -288,10 +326,15 @@ gh api graphql -f query='mutation($id:ID!){ resolveReviewThread(input:{threadId:
 gh pr view <n> --json mergeStateStatus,mergeable --jq '"\(.mergeStateStatus) \(.mergeable)"'
 ```
 
-`CLEAN`·`UNSTABLE`·`BEHIND` 면 진행한다. **여전히 `BLOCKED` 이면 종료한다** — 스레드가 원인이
-아니었다는 뜻이고, 무엇이 남았는지는 이 명령이 판정하지 못한다. 브랜치 보호 설정(1b 의 표)이
-바뀌었을 수 있으니 그 표를 다시 확인하라고 안내하고, PR 페이지의 머지 버튼이 무엇을 요구하는지
-보라고 덧붙인다. 강제·우회 옵션은 쓰지 않는다.
+판정은 **1b 의 「`mergeStateStatus` 판정 규칙」을 그대로 쓴다** — 여기 다시 적지 않는다.
+`UNKNOWN` 재시도(최대 3회)가 특히 여기서 필요하다: 2번이 스레드를 resolve 하면 GitHub 이 머지
+가능 여부를 다시 계산하므로 첫 읽기가 `UNKNOWN` 으로 오기 쉽다.
+
+다만 **`BLOCKED` 의 뜻은 여기서 다르다.** 1b 에서는 "2번으로 넘긴다"였지만, 여기까지 왔다는 것은
+2번이 스레드를 이미 정리했다는 뜻이다. 그래서 **여전히 `BLOCKED` 이면 종료한다.** 남은 원인이
+무엇인지 이 명령은 판정하지 못한다 — 브랜치 보호 설정(1b 의 표)이 바뀌었을 수 있으니 그 표를
+다시 확인하라고 안내하고, PR 페이지의 머지 버튼이 무엇을 요구하는지 보라고 덧붙인다. 강제·우회
+옵션은 쓰지 않는다.
 
 ```bash
 gh pr merge <n> --squash --delete-branch --subject "<타입>: <제목>" --body "<본문>"
