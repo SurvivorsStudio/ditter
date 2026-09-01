@@ -1,6 +1,7 @@
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from '@xyflow/react'
 import { useCanvasStore } from '../store/canvasStore'
 import { useNodeActions } from './nodeActions'
+import { useT } from '../i18n'
 
 /** 노드 사이 엣지. 한쪽 끝 노드에 실행 결과 샘플이 있으면 가운데에 "결과" 칩을 띄운다.
  *
@@ -27,6 +28,7 @@ export function ResultEdge({
   markerEnd,
   style,
 }: EdgeProps) {
+  const tr = useT()
   const [path, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -65,7 +67,7 @@ export function ResultEdge({
               e.stopPropagation()
               actions.openEdgeValues(source, target)
             }}
-            title="이 선으로 넘어간 값 보기"
+            title={tr('cui.edge.viewHanded')}
           >
             {handedEntries.slice(0, 2).map(([key, value]) => (
               <span className="evc-row" key={key}>
@@ -74,7 +76,7 @@ export function ResultEdge({
               </span>
             ))}
             {handedEntries.length > 2 && (
-              <span className="evc-more">외 {handedEntries.length - 2}개</span>
+              <span className="evc-more">{tr('cui.edge.morePlus', { n: handedEntries.length - 2 })}</span>
             )}
           </button>
         </EdgeLabelRenderer>
@@ -88,10 +90,13 @@ export function ResultEdge({
               e.stopPropagation()
               actions.openResult(picked.nodeId)
             }}
-            title="이 사이를 흐른 데이터 보기"
+            title={tr('cui.edge.viewFlow')}
           >
             <span className="erc-ic">▤</span>
-            {picked.sample.rows.length.toLocaleString()}행{picked.sample.truncated ? '+' : ''}
+            {tr('cui.rowsPlus', {
+              n: picked.sample.rows.length,
+              plus: picked.sample.truncated ? '+' : '',
+            })}
           </button>
         </EdgeLabelRenderer>
       )}

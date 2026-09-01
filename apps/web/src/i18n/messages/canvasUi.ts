@@ -286,4 +286,12 @@ export const canvasUi = {
     ' and a subset of the standard library are available.',
   ],
   'cui.py.done': ['완료', 'Done'],
+
+  // ---- 이번 배선에서 드러난 것 (사전에 없던 문구) ----
+  'cui.test.run': ['실행', 'Run'],
+  'cui.memo.cap': ['메모', 'Memo'],
+  'cui.edge.viewHanded': ['이 선으로 넘어간 값 보기', 'View the values handed over this edge'],
+  'cui.edge.viewFlow': ['이 사이를 흐른 데이터 보기', 'View the data that flowed through here'],
+  'cui.edge.morePlus': ['외 {n}개', '+{n} more'],
+  'cui.rowsPlus': ['{n}행{plus}', '{n} row{n||s}{plus}'],
 } as const

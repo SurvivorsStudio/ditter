@@ -3,6 +3,7 @@ import CodeMirror, { EditorState } from '@uiw/react-codemirror'
 import { indentUnit } from '@codemirror/language'
 import { python } from '@codemirror/lang-python'
 import { Icon } from '../components/icons'
+import { useT } from '../i18n'
 
 // Python 은 4칸 들여쓰기가 표준이다. CodeMirror 기본값(2칸)과 코드 템플릿(4칸)이
 // 어긋나면 자동 들여쓰기가 두 번 된 것처럼 보인다 — 4칸으로 통일한다.
@@ -60,30 +61,32 @@ export function PyCodeModal({
   onChange: (value: string) => void
   onClose: () => void
 }) {
+  const tr = useT()
   return createPortal(
     <div className="overlay" onClick={onClose}>
       <div className="modal code-modal" onClick={(e) => e.stopPropagation()}>
         <div className="mh">
-          <h3>Python 전처리 코드</h3>
-          <button className="x" onClick={onClose} aria-label="닫기">
+          <h3>{tr('cui.py.title')}</h3>
+          <button className="x" onClick={onClose} aria-label={tr('common.close')}>
             ×
           </button>
         </div>
         <div className="mb code-modal-body">
           <PyCodeEditor value={value} onChange={onChange} height="62vh" />
           <div className="hint">
-            <code>transform(row: dict)</code> 는 각 레코드마다 호출됩니다(None 반환 시 제외).
-            전체 행을 한 번에 다루려면 <code>transform_batch(df)</code> 를 정의하세요 — pandas
-            DataFrame 을 받아 DataFrame 을 반환합니다(둘 중 하나만). 코드는 격리된 프로세스에서
-            실행됩니다 — DB·시크릿·네트워크에 접근할 수 없고, <code>import pandas as pd</code>
-            및 표준 모듈 일부를 쓸 수 있습니다.
+            <code>transform(row: dict)</code>
+            {tr('cui.py.hint1')}
+            <code>transform_batch(df)</code>
+            {tr('cui.py.hint2')}
+            <code>import pandas as pd</code>
+            {tr('cui.py.hint3')}
           </div>
         </div>
         <div className="mf">
           <button className="btn primary" onClick={onClose}>
             <Icon.save />
-            완료
-          </button>
+            {tr('cui.py.done')}
+            </button>
         </div>
       </div>
     </div>,

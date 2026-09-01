@@ -1,6 +1,7 @@
 import { Banner, Spinner } from '../components/common'
 import { Icon } from '../components/icons'
 import type { SyncPreflight } from '../api/types'
+import { useT } from '../i18n'
 
 /** 실시간 동기화 착수 점검 결과.
  *
@@ -28,6 +29,7 @@ export function SyncPreflightModal({
   onStart: () => void
   onClose: () => void
 }) {
+  const tr = useT()
   const checks = result?.checks ?? []
   // 막는 것과 알리는 것을 갈라 보여준다 — 섞으면 무엇 때문에 못 켜는지 찾아야 한다.
   const blocking = checks.filter((c) => c.level === 'error')
@@ -39,8 +41,8 @@ export function SyncPreflightModal({
     <div className="overlay" onClick={onClose}>
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
         <div className="mh">
-          <h3>실시간 동기화 착수 점검</h3>
-          <button className="x" onClick={onClose} aria-label="닫기">
+          <h3>{tr('cui.sync.title')}</h3>
+          <button className="x" onClick={onClose} aria-label={tr('common.close')}>
             ×
           </button>
         </div>
@@ -48,7 +50,7 @@ export function SyncPreflightModal({
         <div className="mb" style={{ padding: '14px 22px' }}>
           {loading && (
             <div className="preflight-detail">
-              <Spinner /> 원본을 점검하는 중입니다 — 읽기만 하므로 아무것도 바뀌지 않습니다.
+              <Spinner /> {tr('cui.sync.checking')}
             </div>
           )}
           {error && <Banner kind="error">{error}</Banner>}
@@ -56,8 +58,8 @@ export function SyncPreflightModal({
           {result && !loading && (
             <>
               <div className="preflight-detail" style={{ marginBottom: 10 }}>
-                <b>{result.source_connection_name || '소스'}</b> →{' '}
-                <b>{result.target_connection_name || '타깃'}</b>
+                <b>{result.source_connection_name || tr('cui.sync.source')}</b> →{' '}
+                <b>{result.target_connection_name || tr('cui.sync.target')}</b>
                 {result.edition ? ` · ${result.edition}` : ''}
                 {result.server_version ? ` · ${result.server_version}` : ''}
               </div>
@@ -83,14 +85,14 @@ export function SyncPreflightModal({
 
               {tables.length > 0 && (
                 <div style={{ marginTop: 14 }}>
-                  <div className="preflight-label">대상 테이블 {tables.length}개</div>
+                  <div className="preflight-label">{tr('cui.sync.tableCount', { n: tables.length })}</div>
                   <table className="sample-table" style={{ marginTop: 6 }}>
                     <thead>
                       <tr>
-                        <th>테이블</th>
-                        <th>채널</th>
-                        <th>존재</th>
-                        <th>기본키</th>
+                        <th>{tr('cui.sync.thTable')}</th>
+                        <th>{tr('cui.sync.thChannel')}</th>
+                        <th>{tr('cui.sync.thExists')}</th>
+                        <th>{tr('cui.sync.thPk')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -108,17 +110,16 @@ export function SyncPreflightModal({
                     </tbody>
                   </table>
                   <div className="preflight-detail" style={{ marginTop: 6 }}>
-                    기본키가 없으면 갱신·삭제를 어느 행에 적용할지 정할 수 없어 동기화가
-                    성립하지 않습니다. 기본키를 추가하거나 대상에서 빼세요.
+                    {tr('cui.sync.pkNote')}
                   </div>
                 </div>
               )}
 
               <div style={{ marginTop: 14 }}>
                 <Banner kind="warn">
-                  시작하면 <b>원본 테이블에 트리거가 생깁니다.</b> 쓰기 트랜잭션이 느려지고,
-                  변경분이 원본 DB 의 SYM_DATA 에 쌓입니다. 전송이 밀리면 원본 용량이 늘어나므로
-                  모니터에서 미전송 건수를 지켜보세요.
+                  {tr('cui.sync.warn1')}
+                  <b>{tr('cui.sync.warnBold')}</b>
+                  {tr('cui.sync.warn2')}
                 </Banner>
               </div>
             </>
@@ -128,11 +129,11 @@ export function SyncPreflightModal({
         <div className="mf">
           {unmet.length > 0 && result?.ready && (
             <span className="preflight-detail" style={{ marginRight: 'auto' }}>
-              확인이 필요한 항목 {unmet.length}건
-            </span>
+              {tr('cui.sync.unmet', { n: unmet.length })}
+              </span>
           )}
           <button className="btn" onClick={onClose}>
-            닫기
+            {tr('common.close')}
           </button>
           <button
             className="btn primary"
@@ -140,13 +141,13 @@ export function SyncPreflightModal({
             disabled={!result?.ready || starting || loading}
             title={
               result?.ready
-                ? '원본에 트리거를 심고 동기화를 시작합니다'
-                : '통과하지 못한 점검이 있어 시작할 수 없습니다'
+                ? tr('cui.sync.startTitle')
+                : tr('cui.sync.blockedTitle')
             }
           >
             {starting ? <Spinner /> : <Icon.broadcast />}
-            동기화 시작
-          </button>
+{tr('cui.sync.start')}
+</button>
         </div>
       </div>
     </div>

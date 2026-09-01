@@ -3,6 +3,7 @@ import { resultEntries, useCanvasStore, type ResultEntry } from '../store/canvas
 import { SPEC_BY_KIND, isTrigger } from './nodeCatalog'
 import { ResultTreeButton, ResultTreeModal } from './ResultTreeModal'
 import { nodeRefText } from './variables'
+import { useT } from '../i18n'
 
 /** 캔버스 하단 결과 서랍 — `{노드이름: 출력결과}`.
  *
@@ -21,6 +22,7 @@ export function ResultDrawer() {
 
   const [openId, setOpenId] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState(false)
+  const tr = useT()
   const [copied, setCopied] = useState<string | null>(null)
   const [treeOpen, setTreeOpen] = useState(false)
 
@@ -42,9 +44,9 @@ export function ResultDrawer() {
         <button
           className="rd-toggle"
           onClick={() => setCollapsed((v) => !v)}
-          title={collapsed ? '결과 펼치기' : '결과 접기'}
+          title={collapsed ? tr('cui.rd.expandResults') : tr('cui.rd.collapseResults')}
         >
-          {collapsed ? '▲' : '▼'} 노드 결과 <b>{entries.length}</b>
+          {collapsed ? '▲' : '▼'} {tr('cui.rd.title')} <b>{entries.length}</b>
         </button>
 
         {!collapsed && (
@@ -65,8 +67,8 @@ export function ResultDrawer() {
 
         {!collapsed && (
           <div className="rd-actions">
-            <button className="btn sm" onClick={clearNodeResults} title="모아 둔 결과를 비웁니다">
-              비우기
+            <button className="btn sm" onClick={clearNodeResults} title={tr('cui.rd.clearTitle')}>
+              {tr('cui.rd.clear')}
             </button>
             <ResultTreeButton onClick={() => setTreeOpen(true)} />
           </div>
@@ -90,17 +92,20 @@ function ResultChip({
   active: boolean
   onClick: () => void
 }) {
+  const tr = useT()
   const spec = SPEC_BY_KIND[entry.kind]
   const IconComp = spec?.icon
   // 트리거는 행이 아니라 **값**을 내보낸다 — 1행이라고 세면 아무 뜻이 없다
   const handed = isTrigger(entry.kind)
   const count = handed ? entry.sample.columns.length : entry.sample.rows.length
-  const unit = handed ? '개 값' : '행'
   return (
     <button
       className={`rd-chip ${active ? 'active' : ''}`}
       onClick={onClick}
-      title={`${entry.label} — ${count}${unit} · 누르면 결과가 펼쳐집니다`}
+      title={tr(handed ? 'cui.rd.chipTitleHanded' : 'cui.rd.chipTitleRows', {
+        label: entry.label,
+        n: count,
+      })}
     >
       <span className="rd-chip-ic" style={{ background: spec?.color ?? 'var(--muted)' }}>
         {IconComp ? <IconComp /> : null}
@@ -123,6 +128,7 @@ function ResultBody({
   copied: string | null
   onCopy: (text: string) => void
 }) {
+  const tr = useT()
   const columns = entry.sample.columns.length
     ? entry.sample.columns
     : Array.from(new Set(entry.sample.rows.flatMap((r) => Object.keys(r))))
@@ -139,19 +145,23 @@ function ResultBody({
         <b>{entry.label}</b>
         <span>
           {handed ? (
-            <>넘긴 값 {columns.length}개</>
+            <>{tr('cui.handedCount', { n: columns.length })}</>
           ) : (
             <>
-              {entry.sample.rows.length.toLocaleString()}행
-              {entry.sample.truncated && ' (앞부분만)'} · 컬럼 {columns.length}개
+              {tr(entry.sample.truncated ? 'cui.rowsMetaPartial' : 'cui.rowsMeta', {
+                rows: entry.sample.rows.length,
+                cols: columns.length,
+              })}
             </>
           )}
         </span>
-        <span className="rd-at">{new Date(entry.at).toLocaleTimeString()} 기준</span>
+        <span className="rd-at">
+          {tr('cui.rd.asOf', { time: new Date(entry.at).toLocaleTimeString() })}
+        </span>
       </div>
 
       <div className="rd-vars">
-        <span className="rd-vars-hd">변수로 쓰기 — 누르면 복사됩니다</span>
+        <span className="rd-vars-hd">{tr('cui.rd.varsHd')}</span>
         {columns.map((column) => {
           const text = handed ? `$${column}` : nodeRefText({ node: entry.label, column })
           return (
@@ -161,8 +171,8 @@ function ResultBody({
               onClick={() => onCopy(text)}
               title={
                 handed
-                  ? `${text} — 호출 본문으로 받은 값이 꽂힙니다`
-                  : `${text} — 첫 행의 ${column} 값이 꽂힙니다`
+                  ? tr('cui.rd.varTitleHanded', { ref: text })
+                  : tr('cui.rd.varTitleFirst', { ref: text, column })
               }
             >
               <code>{text}</code>
@@ -174,7 +184,7 @@ function ResultBody({
 
       {multiRow && (
         <div className="rd-vars">
-          <span className="rd-vars-hd">여러 행을 한 번에 — IN (…) 자리</span>
+          <span className="rd-vars-hd">{tr('cui.rd.listHd')}</span>
           {columns.map((column) => {
             const text = nodeRefText({ node: entry.label, column, many: true })
             return (
@@ -182,7 +192,7 @@ function ResultBody({
                 key={column}
                 className={`rd-var list ${copied === text ? 'copied' : ''}`}
                 onClick={() => onCopy(text)}
-                title={`${text} — 모든 행의 ${column} 을 쉼표로 이어 붙입니다`}
+                title={tr('cui.rd.listTitle', { ref: text, column })}
               >
                 <code>{text}</code>
                 <span className="rd-var-val">
@@ -201,7 +211,7 @@ function ResultBody({
       <div className="rd-scroll">
         {entry.sample.rows.length === 0 ? (
           <div className="empty" style={{ padding: 20 }}>
-            결과 행이 없습니다.
+            {tr('cui.noResultRows')}
           </div>
         ) : (
           <table className="sample-table">
@@ -231,13 +241,15 @@ function ResultBody({
       <div className="rd-note">
         {handed ? (
           <>
-            「{entry.label}」 가 호출 본문으로 받아 하류에 넘긴 값입니다. 다른 노드에서는{' '}
-            <code>$이름</code> 으로 씁니다 — 노드 결과가 아니라 트리거 변수입니다.
+            {tr('cui.rd.noteHanded1', { label: entry.label })}
+            <code>{tr('cui.ref.varName')}</code>
+            {tr('cui.rd.noteHanded2')}
           </>
         ) : (
           <>
-            첫 행(<span className="rd-first-dot" />)의 값이 변수로 꽂힙니다. 실행할 때마다 「
-            {entry.label}」 를 먼저 돌려 그 시점의 값을 씁니다.
+            {tr('cui.rd.noteFirst1')}
+            <span className="rd-first-dot" />
+            {tr('cui.rd.noteFirst2', { label: entry.label })}
           </>
         )}
       </div>

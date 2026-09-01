@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { TriggerVariable } from '../api/types'
 import { Banner, Spinner } from '../components/common'
 import { Icon } from '../components/icons'
+import { useT, type MsgKey } from '../i18n'
 
 /** 실행에 넘길 값 — JSON 스칼라만 받는다 (백엔드 TriggerVariable.type 과 짝) */
 export type VariableValues = Record<string, string | number | boolean>
@@ -38,6 +39,7 @@ export function TestRunModal({
   onClose: () => void
   onRun: (values: VariableValues, onlyNode?: string) => Promise<void>
 }) {
+  const tr = useT()
   const declared = variables.filter((v) => v.name)
 
   // 기본은 **트리거만** 확인하는 것이다. 데이터를 옮기지 않으므로 하류 노드의 연결·테이블
@@ -78,7 +80,7 @@ export function TestRunModal({
     try {
       const parsed: unknown = JSON.parse(text)
       if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        setJsonError('최상위는 객체여야 합니다 — { "이름": 값 } 형태')
+        setJsonError(tr('cui.test.jsonTopLevel'))
         return
       }
       const next = { ...values }
@@ -88,7 +90,7 @@ export function TestRunModal({
       setValues(next)
       setJsonError(null)
     } catch (e) {
-      setJsonError(e instanceof Error ? e.message : 'JSON 을 해석할 수 없습니다')
+      setJsonError(e instanceof Error ? e.message : tr('cui.test.jsonInvalid'))
     }
   }
 
@@ -98,7 +100,7 @@ export function TestRunModal({
     try {
       await onRun(payload, target === FULL_PIPELINE ? undefined : target)
     } catch (e) {
-      setError(e instanceof Error ? e.message : '실행에 실패했습니다')
+      setError(e instanceof Error ? e.message : tr('cui.test.runFailed'))
       setPending(false)
     }
   }
@@ -107,8 +109,8 @@ export function TestRunModal({
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="mh">
-          <h3>테스트 실행</h3>
-          <button className="x" onClick={onClose} aria-label="닫기">
+          <h3>{tr('cui.test.title')}</h3>
+          <button className="x" onClick={onClose} aria-label={tr('common.close')}>
             ×
           </button>
         </div>
@@ -117,40 +119,37 @@ export function TestRunModal({
           {error && <Banner kind="error">{error}</Banner>}
 
           <div className="field">
-            <label>어디까지 실행할까요</label>
+            <label>{tr('cui.test.scopeLabel')}</label>
             <select value={target} onChange={(e) => setTarget(e.target.value)}>
-              <option value={triggerNodeId}>값 확인만 (트리거)</option>
+              <option value={triggerNodeId}>{tr('cui.test.scopeTrigger')}</option>
               {targets.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.label} 까지 (부분 실행)
+                  {tr('cui.test.scopeUpTo', { label: t.label })}
                 </option>
               ))}
-              <option value={FULL_PIPELINE}>파이프라인 전체 (실제 적재)</option>
+              <option value={FULL_PIPELINE}>{tr('cui.test.scopeFull')}</option>
             </select>
-            <div className="hint">{SCOPE_HINT(target, triggerNodeId)}</div>
+            <div className="hint">{tr(scopeHintKey(target, triggerNodeId))}</div>
           </div>
 
 
           {declared.length === 0 ? (
-            <Banner kind="warn">
-              선언된 입력 변수가 없습니다. 값 없이 그대로 실행합니다 — 값을 받으려면 API 트리거
-              노드 설정에서 변수를 추가하세요.
-            </Banner>
+            <Banner kind="warn">{tr('cui.test.noVars')}</Banner>
           ) : (
             <>
-              <div className="mode-seg" role="group" aria-label="값 입력 방식" style={{ marginBottom: 14 }}>
+              <div className="mode-seg" role="group" aria-label={tr('cui.test.modeAria')} style={{ marginBottom: 14 }}>
                 <button
                   className={`mode-seg-btn ${mode === 'form' ? 'active' : ''}`}
                   onClick={() => setMode('form')}
                 >
-                  폼으로 입력
-                </button>
+                  {tr('cui.test.modeForm')}
+                  </button>
                 <button
                   className={`mode-seg-btn ${mode === 'json' ? 'active' : ''}`}
                   onClick={() => setMode('json')}
                 >
-                  JSON 붙여넣기
-                </button>
+                  {tr('cui.test.modeJson')}
+                  </button>
               </div>
 
               {mode === 'form' ? (
@@ -158,8 +157,8 @@ export function TestRunModal({
                   <div className="field" key={v.name}>
                     <label>
                       <code>${v.name}</code>
-                      <span className="type-desc"> · {TYPE_LABEL[v.type] ?? v.type}</span>
-                      {v.required === false && <span className="type-desc"> · 선택</span>}
+                      <span className="type-desc"> · {TYPE_LABEL[v.type] ? tr(TYPE_LABEL[v.type]) : v.type}</span>
+                      {v.required === false && <span className="type-desc"> · {tr('cui.test.optional')}</span>}
                     </label>
                     {v.type === 'boolean' ? (
                       <select
@@ -182,7 +181,7 @@ export function TestRunModal({
                 ))
               ) : (
                 <div className="field">
-                  <label>호출 본문 (JSON)</label>
+                  <label>{tr('cui.test.jsonLabel')}</label>
                   <textarea
                     rows={8}
                     value={jsonText}
@@ -195,11 +194,11 @@ export function TestRunModal({
               )}
 
               <div className="field">
-                <label>실제로 보낼 값</label>
+                <label>{tr('cui.test.payloadLabel')}</label>
                 <pre className="codeblock">{JSON.stringify(payload, null, 2)}</pre>
                 {missing.length > 0 && (
                   <Banner kind="warn">
-                    필수 값이 비어 있습니다: {missing.map((n) => `$${n}`).join(', ')}
+                    {tr('cui.test.missing', { names: missing.map((n) => `$${n}`).join(', ') })}
                   </Banner>
                 )}
               </div>
@@ -209,33 +208,30 @@ export function TestRunModal({
 
         <div className="mf">
           <button className="btn" onClick={onClose}>
-            취소
+            {tr('common.cancel')}
           </button>
           <button className="btn primary" disabled={pending || missing.length > 0} onClick={submit}>
             {pending ? <Spinner /> : <Icon.play />}
-            실행
-          </button>
+{tr('cui.test.run')}
+</button>
         </div>
       </div>
     </div>
   )
 }
 
-/** 고른 범위가 실제로 무엇을 하는지 — 특히 "적재하는가"를 분명히 한다. */
-function SCOPE_HINT(target: string, triggerNodeId: string): string {
-  if (target === triggerNodeId) {
-    return '데이터를 옮기지 않고, 받은 값이 다음 노드 설정에 어떻게 꽂히는지만 보여줍니다. 하류 노드 설정이 비어 있어도 됩니다.'
-  }
-  if (target === FULL_PIPELINE) {
-    return '타깃까지 실제로 적재합니다. 파이프라인 전체가 검증을 통과해야 합니다.'
-  }
-  return '그 노드까지 실제로 돌려 출력을 훑습니다 (적재 없음, 워터마크 미변경). 그 노드의 연결·테이블 설정이 갖춰져 있어야 합니다.'
+/** 고른 범위가 실제로 무엇을 하는지 — 특히 "적재하는가"를 분명히 한다.
+ *  키만 돌려주고 푸는 것은 렌더 자리에서 한다 — 언어 전환을 따라오게. */
+function scopeHintKey(target: string, triggerNodeId: string): MsgKey {
+  if (target === triggerNodeId) return 'cui.test.hintTrigger'
+  if (target === FULL_PIPELINE) return 'cui.test.hintFull'
+  return 'cui.test.hintPartial'
 }
 
-const TYPE_LABEL: Record<string, string> = {
-  string: '문자',
-  number: '숫자',
-  boolean: '참/거짓',
+const TYPE_LABEL: Record<string, MsgKey> = {
+  string: 'cui.test.typeString',
+  number: 'cui.test.typeNumber',
+  boolean: 'cui.test.typeBoolean',
 }
 
 /** 폼의 문자열 입력을 선언된 타입으로 되돌린다.
