@@ -7,6 +7,7 @@ import logging
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ..i18n import t
 from ..models import (
     CDC_ACTIVE_STATUSES,
     TERMINAL_STATUSES,
@@ -76,7 +77,7 @@ def list_pipelines(session: Session, *, status: str | None = None) -> list[Pipel
 def get_pipeline(session: Session, pipeline_id: str) -> Pipeline:
     pipeline = session.get(Pipeline, pipeline_id)
     if pipeline is None:
-        raise NotFoundError(f"파이프라인을 찾을 수 없습니다: {pipeline_id}")
+        raise NotFoundError(t("dag.gate.pipeline_not_found", name=pipeline_id))
     return pipeline
 
 
@@ -265,7 +266,7 @@ def validate_pipeline(pipeline: Pipeline) -> ValidationOut:
         definition = parse_definition(pipeline)
     except Exception as exc:
         return ValidationOut(
-            valid=False, issues=[ValidationIssue(level="error", message=f"DAG 파싱 실패: {exc}")]
+            valid=False, issues=[_gate_issue("dag.gate.parse_failed", cause=exc)]
         )
 
     issues = validate_definition(definition)
@@ -275,6 +276,11 @@ def validate_pipeline(pipeline: Pipeline) -> ValidationOut:
         order=order,
         issues=issues,
     )
+
+
+def _gate_issue(key: str, **vars: object) -> ValidationIssue:
+    """정의를 아예 못 읽었을 때의 검증 항목. `dag._issue` 와 같은 규칙(키가 곧 코드)."""
+    return ValidationIssue(level="error", code=key, message=t(key, **vars))
 
 
 def _node_label(definition: PipelineDefinition, node_id: str | None) -> str:
@@ -298,7 +304,7 @@ def assert_runnable(pipeline: Pipeline) -> PipelineDefinition:
         problems = "; ".join(
             f"{_node_label(definition, i.node_id)}: {i.message}" for i in result.issues if i.level == "error"
         )
-        raise ValidationError(f"실행할 수 없는 파이프라인입니다 — {problems}")
+        raise ValidationError(t("dag.gate.pipeline_not_runnable", list=problems))
     return parse_definition(pipeline)
 
 
@@ -326,7 +332,7 @@ def assert_node_runnable(pipeline: Pipeline, node_id: str) -> PipelineDefinition
     definition = parse_definition(pipeline)
     node = definition.node_map().get(node_id)
     if node is None:
-        raise ValidationError(f"노드를 찾을 수 없습니다: {node_id}")
+        raise ValidationError(t("dag.gate.node_not_found", name=node_id))
     if node.is_api_trigger:
         # API 트리거는 예외다. 데이터를 옮기지 않고 "받은 값이 다음 노드에 어떻게 꽂히는가"만
         # 확인하므로, 하류가 아직 비어 있어도 실행할 수 있어야 한다 — 오히려 그 상태에서
@@ -334,11 +340,11 @@ def assert_node_runnable(pipeline: Pipeline, node_id: str) -> PipelineDefinition
         own = [i for i in validate_definition(definition) if i.level == "error" and i.node_id == node_id]
         if own:
             problems = "; ".join(i.message for i in own)
-            raise ValidationError(f"API 트리거 설정을 확인하세요 — {problems}")
+            raise ValidationError(t("dag.gate.check_api_trigger", list=problems))
         return definition
 
     if node.is_trigger or node.is_note:
-        raise ValidationError("이 노드는 실행할 수 없습니다 (트리거·메모는 실행 대상이 아닙니다)")
+        raise ValidationError(t("dag.gate.not_runnable_kind"))
 
     scope = _ancestors(definition, node_id)
     # 단일 노드 범위에서 무의미한 구조 규칙 — 하류 연결 여부는 여기서 따지지 않는다.
@@ -354,7 +360,7 @@ def assert_node_runnable(pipeline: Pipeline, node_id: str) -> PipelineDefinition
     ]
     if blocking:
         problems = "; ".join(f"{_node_label(definition, i.node_id)}: {i.message}" for i in blocking)
-        raise ValidationError(f"이 노드를 실행할 수 없습니다 — {problems}")
+        raise ValidationError(t("dag.gate.node_not_runnable", list=problems))
     return definition
 
 

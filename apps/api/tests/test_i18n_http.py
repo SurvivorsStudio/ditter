@@ -168,3 +168,32 @@ def test_service_error_detail_is_translated() -> None:
         assert "ghost" in res.json()["detail"]
     finally:
         main.app.dependency_overrides.clear()
+
+
+def test_gate_wrapper_and_inner_rules_speak_one_language() -> None:
+    """en 에서 `실행할 수 없는 파이프라인입니다 — A target table is required` 가 나오면 안 된다.
+
+    래퍼(`pipeline_service`)와 그 안에 이어 붙는 규칙 문구(`schemas/dag.py`)가 서로 다른
+    커밋에서 옮겨지므로, 한쪽만 옮긴 상태가 실제로 생길 수 있다. 그때 화면에는 한국어
+    껍데기에 영어 속이 뜬다 — 눈으로만 보이는 종류라 여기서 못박는다.
+    """
+    from eai_api.i18n.locale import _locale
+    from eai_api.services.errors import ValidationError
+    from eai_api.services.pipeline_service import assert_runnable
+
+    def _has_hangul(s: str) -> bool:
+        return any("가" <= c <= "힣" for c in s)
+
+    empty = _empty_pipeline()
+    token = _locale.set("en")
+    try:
+        with pytest.raises(ValidationError) as exc:
+            assert_runnable(empty)
+        assert not _has_hangul(str(exc.value)), f"en 응답에 한국어가 섞였다: {exc.value}"
+    finally:
+        _locale.reset(token)
+
+    # ko 는 반대로 영어 문장이 섞이지 않아야 한다 (규칙 이름·식별자는 예외).
+    with pytest.raises(ValidationError) as exc_ko:
+        assert_runnable(empty)
+    assert _has_hangul(str(exc_ko.value))

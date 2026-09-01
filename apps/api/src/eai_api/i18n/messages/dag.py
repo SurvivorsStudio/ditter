@@ -420,4 +420,33 @@ dag: dict[str, tuple[str, str]] = {
         "매핑 #{i}: {name} 매핑이 중복입니다",
         "Mapping #{i}: the mapping for {name} is a duplicate",
     ),
+    # ---- 실행 게이트 래퍼 (services/pipeline_service.py) ----
+    # 위 규칙 문구들을 감싸는 자리다. 여기를 안 옮기면 en 사용자가
+    # `실행할 수 없는 파이프라인입니다 — A target table is required` 를 본다.
+    # `{list}` 는 호출부에서 `; ` 로 이어 붙인 규칙 문구들이다.
+    "dag.gate.parse_failed": ("DAG 파싱 실패: {cause}", "Failed to parse the DAG: {cause}"),
+    "dag.gate.pipeline_not_runnable": (
+        "실행할 수 없는 파이프라인입니다 — {list}",
+        "This pipeline cannot run — {list}",
+    ),
+    "dag.gate.node_not_found": (
+        "노드를 찾을 수 없습니다: {name}",
+        "Node not found: {name}",
+    ),
+    "dag.gate.check_api_trigger": (
+        "API 트리거 설정을 확인하세요 — {list}",
+        "Check the API trigger settings — {list}",
+    ),
+    "dag.gate.not_runnable_kind": (
+        "이 노드는 실행할 수 없습니다 (트리거·메모는 실행 대상이 아닙니다)",
+        "This node cannot be run (triggers and notes are not run targets)",
+    ),
+    "dag.gate.node_not_runnable": (
+        "이 노드를 실행할 수 없습니다 — {list}",
+        "This node cannot run — {list}",
+    ),
+    "dag.gate.pipeline_not_found": (
+        "파이프라인을 찾을 수 없습니다: {name}",
+        "Pipeline not found: {name}",
+    ),
 }
