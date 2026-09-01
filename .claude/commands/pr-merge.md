@@ -5,8 +5,10 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
 
 `/pr` 가 준비해 둔 PR 을 main 으로 **squash 머지**하는 **마지막 얇은 단계**다. 준비(feature 브랜치
 확보·영역별 커밋·변경 영역 테스트·코드 리뷰·push·PR 생성)는 모두 `/pr` 에서 끝나 있어야 한다. 이
-명령은 스스로 무엇도 고치지 않는다 — 사전 게이트가 하나라도 실패하면 **즉시 멈추고 무엇을 먼저
-해야 하는지** 안내한다(대개 `/pr` 로 재준비 — 예외는 1번 머리말).
+명령은 **머지될 코드를 고치지 않는다** — 사전 게이트가 하나라도 실패하면 **즉시 멈추고 무엇을
+먼저 해야 하는지** 안내한다(대개 `/pr` 로 재준비 — 예외는 1번 머리말). 손대는 것은 하나,
+**리뷰 스레드의 해결 표시**뿐이다(2번) — 자기 계정이 남긴 것은 묻지 않고, 남이 남긴 것은
+**허락받은 것만** 접으며, 어느 쪽이든 무엇을 했는지 보고에 남긴다.
 
 원격은 **GitHub** ([SurvivorsStudio/ditter](https://github.com/SurvivorsStudio/ditter))이라 `gh` 를 쓴다.
 
@@ -34,7 +36,8 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
 
 ### 1. 사전 게이트 (모두 통과해야 함 — 첫 실패에서 종료)
 
-이 명령은 게이트 안에서 무엇도 고치지 않는다. 게이트가 실패하면 사용자의 다음 단계는 **대개**
+이 명령은 **1번 게이트 안에서는** 무엇도 고치지 않는다(2번은 자기 스레드를 접는다 — 그 절 참고).
+게이트가 실패하면 사용자의 다음 단계는 **대개**
 `/pr` 로 재준비다 — **1b·1c** 가 그렇다(충돌은 1b 소관이고, 해소 후 재준비도 1b 다). 예외
 둘은 다음 단계가 아예 다르니 `/pr` 로 안내하지 않는다: **1a** 는 두 갈래 모두("이미 머지됨"·
 "base 가 main 이 아님") 이 명령의 대상이 아니라 보고로 끝나고, **1d** 는 준비가 덜 된 것이
@@ -47,12 +50,30 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
   대상이 아니다.
 
 #### 1b. 승인 · CI · 충돌
+
+> **이 저장소에는 브랜치 보호가 걸려 있다.** 예전 판본은 "private + 무료 플랜이라 쓸 수 없다
+> (403)"고 적었는데, 지금 `gh api repos/{owner}/{repo}/branches/main/protection` 은 200 을 돌려준다.
+>
+> | 설정 | 값 |
+> |---|---|
+> | `required_status_checks` | `build-test` (`strict: false`) |
+> | `required_approving_review_count` | 0 |
+> | `enforce_admins` | true |
+> | `required_linear_history` | true |
+> | `required_conversation_resolution` | **true** — 2번이 이것 때문에 있다 |
+>
+> **그래서 아래 게이트들은 유일한 방어선이 아니라 먼저 말해 주는 자리다.** GitHub 도 막지만
+> 그쪽이 주는 신호는 `mergeStateStatus: BLOCKED` 하나뿐이라 무엇이 문제인지 알려 주지 않는다.
+> 설정은 바뀔 수 있다 — 이 표와 어긋나는 동작을 보면 표부터 다시 읽는다.
+
 - `reviewDecision == "CHANGES_REQUESTED"` 면 종료 — 리뷰 코멘트를 먼저 반영하고 `/pr` 로 재준비.
-  브랜치 보호 규칙이 없어 `reviewDecision` 이 빈 값이면(승인 요건 없음) 통과로 본다.
-- **CI 는 "실패가 없으면 통과"가 아니라 "성공을 확인해야 통과"다.** 이 저장소는 브랜치 보호를
-  쓸 수 없어(private + 무료 플랜 — `gh api .../branches/main/protection` 이 403) GitHub 쪽
-  백스톱이 없다. `/pr` 로 PR 을 만든 직후 `/pr-merge` 를 부르는 흐름에서 CI 는 아직 도는 중이고
-  (실측 약 40초), 그때 `statusCheckRollup` 에는 실패가 없다 — 검사 전이기 때문이다.
+  `reviewDecision` 이 빈 값이면 통과로 본다. 보호가 걸려 있어도 `required_approving_review_count`
+  가 **0** 이라 승인 요건 자체가 없다(위 표).
+- **CI 는 "실패가 없으면 통과"가 아니라 "성공을 확인해야 통과"다.** `/pr` 로 PR 을 만든 직후
+  `/pr-merge` 를 부르는 흐름에서 CI 는 아직 도는 중이고(실측 약 40초), 그때 `statusCheckRollup`
+  에는 실패가 없다 — 검사 전이기 때문이다. `build-test` 가 required check 이라 그 상태로 머지를
+  시도하면 GitHub 도 막지만, 돌아오는 것은 `BLOCKED` 뿐이라 **CI 때문인지 다른 것 때문인지
+  구별되지 않는다.** 여기서 먼저 판정하는 이유가 그것이다.
   - `statusCheckRollup` 에 `FAILURE`/`ERROR` 가 있으면 종료 — CI 를 먼저 초록으로 만든다.
   - 아직 도는 중이면(`QUEUED`/`IN_PROGRESS`/`PENDING`) **기다렸다가 다시 판정한다.** 사용자에게
     묻지 않는다 — 기다림은 결정이 아니라 게이트의 일부다. 진행 상황만 고지한다:
@@ -61,26 +82,53 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
     ```
     끝난 뒤 `gh pr view <n> --json statusCheckRollup` 으로 다시 확인한다.
   - 이 명령이 요구하는 체크(`build-test`)가 **하나도 잡히지 않으면**:
-    - 저장소에 **CI 워크플로 자체가 없으면**(`.github/workflows/` 가 비어 있거나 없음) — 이
-      저장소는 아직 **CI 미구성** 상태다(이관 직후 기본값). CI 게이트를 **통과로 처리하되**, 보고에
-      "CI 미구성 — CI 게이트 없이 머지함, 후속으로 `.github/workflows` (pytest + vitest, job 이름
-      `build-test`) 추가 권장" 을 반드시 남긴다.
+    - 저장소에 **CI 워크플로 자체가 없으면**(`.github/workflows/` 가 비어 있거나 없음) —
+      **종료한다.** 예전 판본은 "CI 미구성이니 통과로 처리하고 보고에 남긴다"였는데, 위 표대로
+      `build-test` 가 **required check** 인 지금은 그 검사가 영영 보고되지 않아 **머지 자체가
+      성립하지 않는다.** 통과시키면 3번 재확인이 `BLOCKED` 로 떨어지고, 그 자리 안내는 "보호
+      설정이 바뀌었을 수 있다"라 **원인을 엉뚱한 데서 찾게 된다.** 대신 무엇을 해야 하는지 적어
+      끝낸다 — `.github/workflows` 에 CI 를 추가하거나(job 이름 `build-test`, pytest + vitest),
+      보호 설정의 required check 를 조정하거나.
     - 워크플로는 있는데 체크런이 아직 안 붙었으면 — PR 생성 직후 잠깐 비는 경우다. 10초 간격 최대
       3회 `gh pr view <n> --json statusCheckRollup` 을 다시 읽고, 그래도 `build-test` 가 없으면
       워크플로가 트리거되지 않은 것으로 보고 종료한다.
   - **통과는 `build-test` 의 결론이 `SUCCESS` 일 때뿐이다.** 위 세 갈래에 안 걸렸다고 통과시키지
     않는다 — 그러면 이 절이 거부한 "실패가 없으면 통과"로 되돌아간다. `CANCELLED`·`TIMED_OUT`·
     `ACTION_REQUIRED`·`STALE`·`SKIPPED` 는 실패로 기록되지 않지만 **초록불도 아니므로 종료**한다.
-    (`ci.yml` 이 `cancel-in-progress: true` 를 쓰므로 `CANCELLED` 는 이 저장소가 실제로 만드는
-    상태다.)
-  - 여기서 "요구하는 체크"는 **이 명령이 요구한다**는 뜻이지 GitHub 의 required check 가 아니다
-    (브랜치 보호가 없으므로 그런 것은 없다). `gh pr checks --required` 는 이 저장소에서 항상
-    "no required checks reported" 로 끝나니 쓰지 않는다.
+    (`ci.yml` 에는 지금 `concurrency` 블록이 없어 **자동 취소는 일어나지 않는다** — 이 저장소의
+    예전 `ci.yml`(스캐폴드 `828cd0a`)에는 있었고, 이관 `dba5a94` 가 들어온 판본으로 덮어쓰면서
+    빠졌다. 그래도 손으로 취소한 실행은 `CANCELLED` 로 오므로 규칙은 그대로 필요하다. 근거가
+    없어졌다고 규칙을 지우지 말 것.)
+  - `build-test` 는 **이 명령이 요구하는 체크이자 GitHub 의 required check** 다(위 표). 예전
+    판본은 "브랜치 보호가 없으므로 그런 것은 없다"며 `gh pr checks --required` 를 쓰지 말라고
+    했는데, 지금 그 명령은 `build-test` 를 정상으로 돌려준다(실측). 그래도 여기서는
+    `statusCheckRollup` 을 그대로 읽는다 — 위 세 갈래(워크플로 부재 · 체크런 지연 · 비-SUCCESS
+    결론)를 가르려면 **결론 값**이 필요한데 `gh pr checks` 는 그 구별을 주지 않는다.
 - `mergeable == "CONFLICTING"` 이면 종료: feature 브랜치에서 `git merge origin/main`(rebase
   금지)으로 충돌을 먼저 해소한 뒤 `/pr` 로 재준비하라고 안내. 자동 충돌 해소 옵션은 쓰지 않는다.
 - `mergeStateStatus == "BEHIND"` 면(승인·충돌엔 문제없지만 뒤처짐) 계속 진행 가능 — GitHub 의
   squash 머지는 최신 main 을 다시 요구하지 않는 한 진행된다. 다만 뒤처진 정도가 크면 `/pr` 로
   `git merge origin/main` 후 테스트를 다시 돌리길 권장한다고 사용자에게 고지한다.
+- `mergeStateStatus == "BLOCKED"` 면 **여기서 종료하지 않는다.** 남은 게이트(**1c·1d**)를
+  그대로 마친 뒤 2번에서 다룬다 — 절을 건너뛰라는 뜻이 아니다. 이 저장소에서 BLOCKED 의
+  대부분은 `required_conversation_resolution`(미해결 리뷰 스레드)이고 그것은 2번이 다루는
+  일이며, 다른 원인이라면 2번이 스레드를 정리한 뒤에도 남아 **3번 직전 재확인**에서 드러난다.
+  위 CI·충돌 갈래를 이미 통과했으므로 여기서 세우면 원인도 모른 채 멈추게 된다.
+  **1d 를 건너뛰면 안 되는 이유가 특히 크다** — 보호가 켜져 있어 BLOCKED 은 예외가 아니라
+  정상 경로의 기본값이라, 건너뛰기로 읽으면 1d 가 거의 모든 실행에서 무력해진다.
+
+##### `mergeStateStatus` 판정 규칙 (3번도 이 규칙을 쓴다)
+
+- **진행 가능**: `CLEAN` · `UNSTABLE` · `BEHIND` (위 BEHIND 항목의 고지를 함께 한다).
+- **1c·1d 를 마치고 2번으로**: `BLOCKED`.
+- **`UNKNOWN` 은 GitHub 이 아직 계산 중이라는 뜻이다.** 몇 초 간격으로 **최대 3회**까지 다시
+  읽고, 그래도 `UNKNOWN` 이면 종료한다. 한 번만 더 읽는 것으로는 부족하다 — 실측에서 어떤 PR 은
+  `UNKNOWN` → `UNKNOWN` → `BLOCKED` 로 **세 번째에야** 답했다. 여기서 성급히 종료하면 멀쩡한
+  PR 이 이유 없이 막힌다.
+- **그 밖의 값이면 종료한다**(`DIRTY`·`DRAFT` 등). 모르는 상태로 머지를 시도하지 않는다.
+
+이 규칙은 **여기 한 곳에만** 둔다. 3번의 머지 직전 재확인도 같은 판정을 하는데, 규칙을 양쪽에
+적으면 한쪽만 고쳐져 게이트와 머지 직전 판정이 갈린다.
 
 #### 1c. PR 브랜치에 미푸시 로컬 작업 없음
 - 사용자가 현재 PR 브랜치(`headRefName`)에 체크아웃한 경우에만 검사한다:
@@ -142,8 +190,26 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
 - 그 PR 을 닫는다면 남길 것 셋이 `CONTRIBUTING.md` 「메인테이너에게」에 있다 — 무엇이 맞았는지 ·
   왜 다른 것이 들어갔는지 · 다음에 무엇을 보면 되는지.
 
+**왜 1b 뒤인가** (검토했고 그대로 두기로 한 것): 1d 는 서버에 두 번 물으면 끝나는 값싼 확인인데
+앞의 1b 는 CI 를 기다린다(`gh pr checks --watch`). 그래서 겹치는 PR 이 있어 **어차피 멈출 머지를
+몇 분 기다린 뒤에야 멈춘다.** 그럼에도 옮기지 않은 이유는 번호가 곧 참조이기 때문이다 — 옮기면
+`§1d` 를 가리키는 곳을 **함께** 고쳐야 하고, 한 곳이라도 빠지면 문서가 없는 절을 가리킨다.
+어디인지는 세어 두지 않고 그때 찾는다 — 적어 둔 숫자는 반드시 낡는다:
+
+```bash
+grep -rn "§1d" --include="*.md" . | grep -v node_modules
+```
+
+(지금은 `CONTRIBUTING.md` · `docs/conventions/commit-convention.md` · `.claude/commands/pr.md` ·
+이 파일 내부에 걸쳐 있다.)
+잃는 것은 몇 분이고 잃지 않는 것은 참조 정합성이라 후자를 택했다. 늦게 걸리는 것이 실제로
+불편해지면 그때 한 번에 옮긴다.
+
 **이 게이트가 못 잡는 것**: `Closes #N` 없이 본문으로만 이슈를 가리킨 PR 은 걸리지 않는다
-(`closingIssuesReferences` 가 비기 때문). 넓은 문자열 검색(`gh pr list --search "<번호>"`)으로
+(`closingIssuesReferences` 가 비기 때문). 규칙의 출처가 둘로 갈린다 — **이 게이트 자신의 규칙은
+`docs/conventions/commit-convention.md` §5.1**, 그 판정을 가능하게 하는 **`Closes #N` 선언 규칙은
+같은 문서 §5.2** 다. 선언을 `/pr` 경로에서 챙기는 자리는 **§6-E**(`.claude/commands/pr.md`)이고,
+이 게이트를 넓히거나 좁힐 때는 셋을 함께 본다. 넓은 문자열 검색(`gh pr list --search "<번호>"`)으로
 늘리지 않는 이유는 오탐이다 — `86` 은 줄 번호·버전·해시에도 있고, 멀쩡한 머지를 세우는 편이 더
 나쁘다. 그 구멍은 사람이 보는 자리(`CONTRIBUTING.md` 「메인테이너에게」)에 남겨 두었다.
 
@@ -161,7 +227,10 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
 
 **미해결 리뷰 스레드가 남아 있을 때.** `CHANGES_REQUESTED` 는 1b 에서 이미 종료되지만, 승인 없이
 남은 지적은 서버 상태만으로 반영 여부를 알 수 없다. `gh pr view --comments` 는 스레드의 해결
-여부를 보여주지 않으므로 GraphQL 로 판정한다:
+여부를 보여주지 않으므로 GraphQL 로 판정한다.
+
+**조회는 한 번뿐이다.** 내 스레드와 남의 스레드를 따로 읽으면 절단 가드도 두 벌이 되어 한쪽만
+고쳐지고, 무엇보다 아래 동의 경로에서 접어야 할 `id` 가 한쪽 조회에만 있게 된다.
 
 ```bash
 gh api graphql -f query='
@@ -170,22 +239,89 @@ gh api graphql -f query='
     repository(owner:$owner, name:$repo) {
       pullRequest(number:$pr) {
         reviewThreads(first:100) {
-          nodes { isResolved comments(first:1) { nodes { author { login __typename } body } } }
+          totalCount
+          nodes { id isResolved path line comments(first:100) { nodes { author { login __typename } } } }
         }
       }
     }
   }' -F owner=SurvivorsStudio -F repo=ditter -F pr=<n> \
-  --jq '.data as $d | $d.repository.pullRequest.reviewThreads.nodes[]
-        | select(.isResolved == false)
-        | .comments.nodes[0]
-        | select(. != null)
-        | select(.author.__typename != "Bot" and .author.login != $d.viewer.login)'
+  --jq '.data as $d | $d.repository.pullRequest.reviewThreads as $t | [$t.nodes[] | select(.isResolved == false) | {id, at: "\(.path):\(.line // "줄 불명")", outsiders: [.comments.nodes[].author | {by: (.login // "(삭제된 계정)"), kind: (.__typename // "User")} | select(.by != $d.viewer.login)]}] as $open | {total: $t.totalCount, read: ($t.nodes | length), mine: [$open[] | select(.outsiders | length == 0) | {id, at}], others: [$open[] | select(.outsiders | any(.kind != "Bot")) | {id, at, by: [.outsiders[].by]}], bots: [$open[] | select((.outsiders | length > 0) and (.outsiders | all(.kind == "Bot"))) | {id, at, by: [.outsiders[].by]}]}'
 ```
 
-세지 않는 것은 두 가지다 — 봇이 남긴 것(`__typename == "Bot"`)과 **`gh` 를 실행하는 계정
-(`viewer.login`)이 남긴 것**. "자기 자신"은 PR 작성자가 아니라 viewer 로 못박는다(둘이 대개
-같지만 규칙으로는 다르다). 남는 것은 **사람이 남긴 미반영 지적**뿐이다. 있으면 요약해 보여주고
-그대로 머지할지 확인받고, 없으면 묻지 않는다.
+미해결 스레드를 셋으로 가른다. **기준은 "누가 열었나"가 아니라 "누가 참여했나"다** —
+스레드의 코멘트 작성자를 전부 본다.
+
+- `mine` — **`gh` 를 실행하는 계정**(`viewer.login`)이 열고 **아무도 답하지 않은** 스레드.
+- `others` — 참여자에 viewer 아닌 **사람**이 하나라도 있는 스레드.
+- `bots` — viewer 밖 참여자가 **전부 리뷰 봇**(`__typename == "Bot"`)인 스레드.
+
+"자기 자신"은 PR 작성자가 아니라 viewer 로 못박는다(둘이 대개 같지만 규칙으로는 다르다).
+
+**첫 코멘트 작성자로 가르면 안 된다.** `/pr` §6-D 가 매번 인라인을 달아 스레드를 여는데, 거기에
+사람이 **답글로 반대 의견**을 남기면 첫 작성자는 여전히 viewer 다. 그것을 `mine` 으로 보면
+묻지 않고 접힌 뒤 머지가 그대로 진행된다 — 사람의 반대가 화면에 뜨지도 않고 사라지고, squash
+머지는 되돌릴 수 없다. 1b 도 못 잡는다(스레드 답글은 `reviewDecision` 을 `CHANGES_REQUESTED`
+로 만들지 않는다). 그래서 `comments(first:100)` 으로 참여자 전원을 읽는다.
+
+**봇을 빼지 않고 따로 담는 이유가 있다.** `required_conversation_resolution` 은 작성자를 가리지
+않으므로 봇 스레드 하나로도 머지가 막힌다. 목록에서 빼 버리면 2번은 아무것도 접지 않고 3번이
+`BLOCKED` 로 끝나며 "원인을 판정하지 못한다"고 보고하는데, 원인은 방금 읽은 조회 안에 있었다 —
+이 절이 없애겠다고 한 모양 그대로다. 이 저장소에 아직 리뷰 봇은 없지만, 붙는 순간 이 경로가 산다.
+
+**읽자마자 세 가지를 본다** — §1d 가 세워 둔 기준을 여기에도 그대로 적용한다.
+
+- **출력이 아예 없으면 통과가 아니라 실패다.** `{"bots":[],"mine":[],"others":[],"read":N,"total":N}`
+  처럼 무언가 출력된 것만 "접을 것도 물을 것도 없다"로 읽는다. (키가 사전순인 것은 `gh` 의 jq 가
+  그렇게 내기 때문이다 — 필터에 쓴 순서와 무관하다. 예시를 필터 순서로 "고치지" 말 것.) 빈 화면은 조회 실패(인증 만료·오타)와
+  구별되지 않는다 — 그것을 "남의 지적이 없다"로 읽으면 물어봤어야 할 것을 묻지 않고 지나간다.
+- **`read` 가 `total` 보다 작으면 목록이 잘린 것이다**(스레드 100건 초과). 그때는 **아무것도
+  접지 말고** 그 사실을 보고하고 종료한다. 일부만 접으면 나머지 때문에 3번이 여전히 `BLOCKED`
+  이고, 그 자리에서 "스레드가 원인이 아니었다"고 **틀리게** 안내하게 된다.
+  - **여기서는 한도를 올릴 수 없다.** §1d 의 같은 가드는 `--limit` 을 올리라고 하지만, GraphQL
+    의 `reviewThreads(first:)` 는 **100 이 상한**이다. 더 읽으려면 커서 페이지네이션이 필요하고
+    그건 "조회는 한 번뿐"이라는 이 절의 전제를 깬다. 그러니 **PR 페이지에서 직접 스레드를
+    정리한 뒤 다시 부르라고 안내하고 끝낸다.**
+  - `total` 은 **이미 접힌 것까지 포함한 전체 스레드 수**다. 그래서 접을 것이 하나도 없는 PR 도
+    스레드가 100건을 넘으면 여기 걸린다. 드물지만 걸렸을 때 헷갈리지 않도록 적어 둔다.
+- **`line` 이 없는 스레드가 있다**(코드가 바뀌어 outdated 가 된 것). 위 표기가 `줄 불명` 으로
+  떨어뜨리므로 보고에 그대로 쓴다 — `파일:null` 로 적으면 읽는 사람이 오류로 본다.
+
+#### `others`·`bots` 가 있으면 묻는다 — "그 스레드도 접어도 되는지"
+
+요약해 보여주고 **"그 스레드도 접어도 되는지"를 묻는다.** 예전에는 "그대로 머지할지"를 물었는데
+그 물음에는 답할 수가 없다 — `required_conversation_resolution` 이 켜져 있어(1b 의 표)
+"머지해라"라고 답해도 GitHub 이 막고, 3번이 **원인을 모른 채** 종료한다. 그 원인은 방금 사용자에게
+보여 준 그 스레드다. **아는 원인을 모른다고 보고하게 되는 물음은 두지 않는다.**
+
+- **접어도 된다**고 하면 아래 resolve 대상을 `mine + others + bots` 로 한다. 남의 지적을 대신
+  닫는 것이므로 **이 허락은 이번 머지 한 번에만 유효하다** — 다음 실행이 물려받지 않는다.
+- **아니라고 하면 종료한다.** 그 사람과 정리한 뒤 다시 부르라고 안내한다.
+- **둘 다 비어 있으면 묻지 않는다.** 봇 스레드만 있을 때도 묻는다 — 접는 판단은 사람이 한다.
+
+#### resolve 하고 진행한다
+
+`required_conversation_resolution` 이 켜져 있어 GitHub 은 **작성자를 가리지 않는다** — 누가 썼든
+미해결 스레드가 하나라도 있으면 `mergeStateStatus` 가 `BLOCKED` 이 된다. 그리고 `/pr` §6-D 는
+**매번 인라인 코멘트를 단다**(그것이 "리뷰를 돌렸다는 증거"를 Reviews 탭에 남기는 그 절의
+목적이다). 그래서 `/pr` → `/pr-merge` 라는 **정상 경로가 매번 BLOCKED 로 끝난다.**
+
+**`mine` 은 묻지 않고 접는다.** 방금 자기가 남긴 기록을 접을지 확인받는 것은 같은 결정을 두 번
+시키는 것이고, 그 창은 습관적으로 넘기게 되어 정작 **남이 남긴 지적**을 묻는 위 물음까지 무디게
+만든다. 대상의 `id` 마다:
+
+```bash
+gh api graphql -f query='mutation($id:ID!){ resolveReviewThread(input:{threadId:$id}){ thread { isResolved } } }' -F id=<thread-id>
+```
+
+지킬 것 셋:
+
+- **묻지 않고 접는 것은 `mine` 뿐이다.** `others`·`bots` 는 위 물음에서 **허락받은 것만** 접고,
+  그 허락은 이번 실행에만 유효하다. 허락 없이 남의 지적을 대신 닫지 않는다.
+- **무엇을 resolve 했는지 5번 보고에 반드시 남긴다.** 조용히 접으면 리뷰 기록이 사라진 것처럼
+  보인다. resolve 는 글을 지우지 않고 'Resolved' 로 접을 뿐이라는 것도 함께 적는다. 남의
+  스레드를 접었다면 **허락받아 접었다는 사실과 그 목록**을 따로 적는다.
+- **resolve 가 실패해도 머지를 강행하지 않는다.** 그대로 두면 3번 직전 재확인에서 `BLOCKED` 로
+  걸리므로, 실패한 스레드를 보고하고 종료한다.
 
 그 외에는 묻지 않는다. 특히 **"되돌리기 어려운 작업이니 한 번 더 확인"** 을 이유로 되묻지 않는다 —
 명시적 호출 + 게이트 통과가 곧 승인이다.
@@ -197,6 +333,24 @@ gh api graphql -f query='
 "무엇이든 일단 머지하라"는 뜻이 아니다.
 
 ### 3. Squash 머지
+
+**머지 직전에 `mergeStateStatus` 를 한 번 다시 읽는다** — 2번이 스레드를 정리했으므로 값이
+바뀌었을 수 있고, 1b 가 `BLOCKED` 을 여기로 넘겼기 때문이다:
+
+```bash
+gh pr view <n> --json mergeStateStatus,mergeable --jq '"\(.mergeStateStatus) \(.mergeable)"'
+```
+
+판정은 **1b 의 「`mergeStateStatus` 판정 규칙」을 그대로 쓴다** — 여기 다시 적지 않는다.
+`UNKNOWN` 재시도(최대 3회)가 특히 여기서 필요하다: 2번이 스레드를 resolve 하면 GitHub 이 머지
+가능 여부를 다시 계산하므로 첫 읽기가 `UNKNOWN` 으로 오기 쉽다.
+
+다만 **`BLOCKED` 의 뜻은 여기서 다르다.** 1b 에서는 "2번으로 넘긴다"였지만, 여기까지 왔다는 것은
+2번이 스레드를 이미 정리했다는 뜻이다. 그래서 **여전히 `BLOCKED` 이면 종료한다.** 남은 원인이
+무엇인지 이 명령은 판정하지 못한다 — 브랜치 보호 설정(1b 의 표)이 바뀌었을 수 있으니 그 표를
+다시 확인하라고 안내하고, PR 페이지의 머지 버튼이 무엇을 요구하는지 보라고 덧붙인다. 강제·우회
+옵션은 쓰지 않는다.
+
 ```bash
 gh pr merge <n> --squash --delete-branch --subject "<타입>: <제목>" --body "<본문>"
 ```
@@ -234,15 +388,27 @@ gh pr merge <n> --squash --delete-branch --subject "<타입>: <제목>" --body "
 - 머지된 PR 번호·제목, main 의 새 squash 커밋 해시, 삭제한 브랜치(원격·로컬)를 보고한다.
 - 1d 가 **판정할 근거 없이** 통과했다면(대상 PR 이 닫는 이슈가 없음) 그 한 줄을 함께 남긴다 —
   "겹치는 PR 이 없음을 확인했다"와 "확인할 이슈가 없었다"는 다른 말이다.
+- 2번에서 **resolve 한 리뷰 스레드**가 있으면 몇 건을 어디(`파일:줄`, 없으면 `줄 불명`)에서
+  접었는지 남기고, 글이 지워진 것이 아니라 'Resolved' 로 접힌 것임을 함께 적는다. 이것은 이
+  명령이 PR 상태를 건드린 **유일한 자리**라 보고에서 빠지면 안 된다.
+  **남이 남긴 스레드를 접었다면 그 목록을 따로, 허락받아 접었다는 사실과 함께 적는다** —
+  내 기록을 접은 것과 남의 지적을 대신 닫은 것은 무게가 다르다.
 
 ## Notes
 - PR 타깃은 항상 `main`. 머지 전략은 **squash 고정**(`docs/conventions/commit-convention.md`
   §머지 정책 — SSOT).
 - 모든 게이트는 **서버사이드 PR 상태**(`gh pr view`)를 기준으로 한다 — 로컬 체크아웃이 PR 과
   같다고 가정하지 않는다.
+- **이 저장소에는 브랜치 보호가 걸려 있다**(1b 의 표). 게이트는 유일한 방어선이 아니라 먼저
+  말해 주는 자리다 — GitHub 이 주는 신호는 `BLOCKED` 하나뿐이라 원인을 알려 주지 않는다.
+- **이 명령이 PR 상태를 건드리는 자리는 하나뿐이다** — 2번에서 **자기 계정이 남긴** 미해결
+  리뷰 스레드를 resolve 한다(`required_conversation_resolution` 이 켜져 있어 그것이 없으면
+  `/pr` → `/pr-merge` 정상 경로가 매번 BLOCKED 로 끝난다). 남의 스레드는 **먼저 묻고 허락받은
+  것만** 접으며, 그 허락은 이번 실행에만 유효하다. 무엇을 resolve 했는지는 5번 보고에 남긴다.
 - 머지 명령이 실패해도 **재호출 전 서버 상태(MERGED)를 먼저 확인**한다(step 3). 강제·우회 옵션 금지.
 - **`/pr-merge` 호출이 곧 머지 승인이다.** 게이트를 통과하면 되묻지 않는다 — 묻는 경우는 대상 PR
-  이 하나로 안 좁혀질 때(step 0)와 사람의 미해결 리뷰 스레드가 남았을 때(step 2)뿐이다. 사용자에게
+  이 하나로 안 좁혀질 때(step 0)와 **남이 남긴**(사람·봇) 미해결 리뷰 스레드가 남았을 때
+  (step 2)뿐이다. 사용자에게
   되물어야 할 것은 "이미 지시한 일을 해도 되는지"가 아니라 **"지시만으로는 정해지지 않는 것"** 이다.
 - **같은 이슈를 다루는 다른 열린 PR 이 있으면 머지하지 않는다**(step 1d, SSOT 는
   `docs/conventions/commit-convention.md` §5.1). 이 게이트는 묻지 않고 종료한다 — 필요한 것이

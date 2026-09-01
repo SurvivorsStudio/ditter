@@ -46,7 +46,9 @@ docker compose up -d --build
 
 1. **이슈를 먼저 연다.** 큰 변경은 방향부터 맞추는 편이 서로 시간을 아낀다.
    이미 있는 이슈를 집었다면 **거기에 열린 PR 이 있는지 함께 본다** — 같은 곳을
-   두 번 고치는 일을 막는다.
+   두 번 고치는 일을 막는다. PR 을 올릴 때는 본문에 **`Closes #N`** 을 적는다
+   ([commit-convention.md](docs/conventions/commit-convention.md) §5.2) — 메인테이너의
+   머지 전 겹침 확인이 그 선언을 근거로 돈다.
 2. `main` 에서 브랜치를 딴다. prefix 는 **`feature/`·`fix/`·`bug/`** 만 쓴다.
 3. 커밋을 **영역별로 나눈다.** 한 커밋에는 한 영역만 담는다.
 
