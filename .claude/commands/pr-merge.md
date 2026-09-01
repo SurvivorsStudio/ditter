@@ -95,9 +95,10 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
   - **통과는 `build-test` 의 결론이 `SUCCESS` 일 때뿐이다.** 위 세 갈래에 안 걸렸다고 통과시키지
     않는다 — 그러면 이 절이 거부한 "실패가 없으면 통과"로 되돌아간다. `CANCELLED`·`TIMED_OUT`·
     `ACTION_REQUIRED`·`STALE`·`SKIPPED` 는 실패로 기록되지 않지만 **초록불도 아니므로 종료**한다.
-    (`ci.yml` 에는 지금 `concurrency` 블록이 없어 **자동 취소는 일어나지 않는다** — 예전
-    저장소에는 있었고 이관 `dba5a94` 에서 빠졌다. 그래도 손으로 취소한 실행은 `CANCELLED` 로
-    오므로 규칙은 그대로 필요하다. 근거가 없어졌다고 규칙을 지우지 말 것.)
+    (`ci.yml` 에는 지금 `concurrency` 블록이 없어 **자동 취소는 일어나지 않는다** — 이 저장소의
+    예전 `ci.yml`(스캐폴드 `828cd0a`)에는 있었고, 이관 `dba5a94` 가 들어온 판본으로 덮어쓰면서
+    빠졌다. 그래도 손으로 취소한 실행은 `CANCELLED` 로 오므로 규칙은 그대로 필요하다. 근거가
+    없어졌다고 규칙을 지우지 말 것.)
   - `build-test` 는 **이 명령이 요구하는 체크이자 GitHub 의 required check** 다(위 표). 예전
     판본은 "브랜치 보호가 없으므로 그런 것은 없다"며 `gh pr checks --required` 를 쓰지 말라고
     했는데, 지금 그 명령은 `build-test` 를 정상으로 돌려준다(실측). 그래도 여기서는
