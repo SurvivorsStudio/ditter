@@ -152,7 +152,8 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
   안 된다). **아무것도 출력되지 않거나 exit 이 0 이 아니면 실패다** — 그것은 "닫는 이슈가 없다"가
   아니라 "읽지 못했다"이고, 여기서 통과로 읽으면 **아래 두 번째 명령은 아예 돌지 않는다.**
   (실측: 닫는 이슈가 없는 PR 은 `[]` + exit 0, **존재하지 않는 PR 번호**는 빈 출력 + exit 1 로
-  갈린다.)
+  갈린다.) **dependabot PR 이 이 경우의 대부분이다** — 근거 이슈가 없는 것이 정상이라
+  (`docs/conventions/commit-convention.md` §5.2) 판정할 것이 없다는 사실만 남기고 통과시킨다.
 - 그 이슈를 닫겠다고 선언한 **다른 열린 PR** 을 찾는다. 치환할 자리는 **둘**이고, 대괄호는 이미
   명령에 있으니 번호만 쉼표로 넣는다 — `[<이슈>]` → `[66,86]` · `.number != <self>` →
   `.number != 95`:
@@ -240,19 +241,20 @@ gh api graphql -f query='
       pullRequest(number:$pr) {
         reviewThreads(first:100) {
           totalCount
-          nodes { id isResolved path line comments(first:100) { nodes { author { login __typename } } } }
+          nodes { id isResolved path line comments(first:100) { totalCount nodes { author { login __typename } } } }
         }
       }
     }
   }' -F owner=SurvivorsStudio -F repo=ditter -F pr=<n> \
-  --jq '.data as $d | $d.repository.pullRequest.reviewThreads as $t | [$t.nodes[] | select(.isResolved == false) | {id, at: "\(.path):\(.line // "줄 불명")", outsiders: [.comments.nodes[].author | {by: (.login // "(삭제된 계정)"), kind: (.__typename // "User")} | select(.by != $d.viewer.login)]}] as $open | {total: $t.totalCount, read: ($t.nodes | length), mine: [$open[] | select(.outsiders | length == 0) | {id, at}], others: [$open[] | select(.outsiders | any(.kind != "Bot")) | {id, at, by: [.outsiders[].by]}], bots: [$open[] | select((.outsiders | length > 0) and (.outsiders | all(.kind == "Bot"))) | {id, at, by: [.outsiders[].by]}]}'
+  --jq '.data as $d | $d.repository.pullRequest.reviewThreads as $t | [$t.nodes[] | select(.isResolved == false) | {id, at: "\(.path):\(.line // "줄 불명")", cread: (.comments.nodes | length), ctotal: .comments.totalCount, outsiders: [.comments.nodes[].author | {by: (.login // "(삭제된 계정)"), kind: (.__typename // "User")} | select(.by != $d.viewer.login)]} | . + {blind: (.cread == 0 or .cread < .ctotal)}] as $open | {total: $t.totalCount, read: ($t.nodes | length), mine: [$open[] | select((.blind | not) and (.outsiders | length == 0)) | {id, at}], others: [$open[] | select(.blind or (.outsiders | any(.kind != "Bot"))) | {id, at, by: [.outsiders[].by], why: (if .cread == 0 then "코멘트 없음" elif .cread < .ctotal then "코멘트 \(.cread)/\(.ctotal) 잘림" else "사람 참여" end)}], bots: [$open[] | select((.blind | not) and (.outsiders | length > 0) and (.outsiders | all(.kind == "Bot"))) | {id, at, by: [.outsiders[].by]}]}'
 ```
 
 미해결 스레드를 셋으로 가른다. **기준은 "누가 열었나"가 아니라 "누가 참여했나"다** —
 스레드의 코멘트 작성자를 전부 본다.
 
 - `mine` — **`gh` 를 실행하는 계정**(`viewer.login`)이 열고 **아무도 답하지 않은** 스레드.
-- `others` — 참여자에 viewer 아닌 **사람**이 하나라도 있는 스레드.
+  참여자를 **끝까지 읽었고 코멘트가 최소 한 건 있는** 것만 여기 담는다(아래 「판정 근거가 없는 스레드」).
+- `others` — 참여자에 viewer 아닌 **사람**이 하나라도 있거나, **판정 근거가 없는** 스레드.
 - `bots` — viewer 밖 참여자가 **전부 리뷰 봇**(`__typename == "Bot"`)인 스레드.
 
 "자기 자신"은 PR 작성자가 아니라 viewer 로 못박는다(둘이 대개 같지만 규칙으로는 다르다).
@@ -267,6 +269,27 @@ gh api graphql -f query='
 않으므로 봇 스레드 하나로도 머지가 막힌다. 목록에서 빼 버리면 2번은 아무것도 접지 않고 3번이
 `BLOCKED` 로 끝나며 "원인을 판정하지 못한다"고 보고하는데, 원인은 방금 읽은 조회 안에 있었다 —
 이 절이 없애겠다고 한 모양 그대로다. 이 저장소에 아직 리뷰 봇은 없지만, 붙는 순간 이 경로가 산다.
+
+**판정 근거가 없는 스레드는 `mine` 이 아니다.** 참여자로 가르는 이상 **참여자를 못 읽은** 스레드는
+판정할 수가 없는데, `outsiders` 가 비었다는 사실만 보면 그것이 **"남이 없다"와 구별되지 않는다.**
+둘이 있다.
+
+- **코멘트가 0건인 스레드.** `outsiders` 가 비어 그대로 `mine` 으로 떨어진다. GitHub 이 마지막
+  코멘트가 지워진 스레드를 함께 지우므로 도달 경로를 구성하지는 못했다. 그래도 막아 두는 것은
+  이 절이 세운 원칙("묻지 않고 접는 것은 내 것뿐")이 **빈 스레드에서만 조용히 깨지는** 모양이기
+  때문이다.
+- **코멘트가 100건을 넘어 잘린 스레드.** 101번째가 사람의 반대여도 앞의 100건이 전부 viewer
+  것이면 `mine` 으로 읽힌다. 그래서 `comments` 에도 `totalCount` 를 받아 스레드마다
+  `cread`(읽은 수)와 `ctotal`(전체 수)을 비교한다.
+
+**둘 다 `others` 로 보내 물어보게 한다.** `mine` 에서 빼기만 하면 어느 바구니에도 없어 2번이
+아무것도 접지 못하고 3번이 `BLOCKED` 로 끝난다 — 봇을 목록에서 뺐을 때와 **똑같은 실수**다.
+`why` 가 그 이유(`코멘트 없음` · `코멘트 N/M 잘림`)를 담으므로 물을 때 그대로 보여 준다.
+
+**스레드 목록의 `read`/`total` 가드를 스레드 안쪽에 한 번 더 적용하는 것**이고 방향도 같다 —
+확인할 근거가 없는 것을 "확인했다"로 읽지 않는다. 다만 여기서는 **종료하지 않고 물어본다.**
+목록이 잘리면 무엇이 안 보이는지조차 모르지만, 스레드 하나가 잘린 것은 그 스레드를 PR 페이지에서
+열어 보면 사람이 즉시 판정할 수 있기 때문이다.
 
 **읽자마자 세 가지를 본다** — §1d 가 세워 둔 기준을 여기에도 그대로 적용한다.
 
@@ -297,6 +320,9 @@ gh api graphql -f query='
   닫는 것이므로 **이 허락은 이번 머지 한 번에만 유효하다** — 다음 실행이 물려받지 않는다.
 - **아니라고 하면 종료한다.** 그 사람과 정리한 뒤 다시 부르라고 안내한다.
 - **둘 다 비어 있으면 묻지 않는다.** 봇 스레드만 있을 때도 묻는다 — 접는 판단은 사람이 한다.
+- **`why` 를 함께 보여 준다.** `사람 참여` 가 아닌 것(`코멘트 없음` · `코멘트 N/M 잘림`)은 남의
+  지적이 있다는 뜻이 아니라 **판정하지 못했다**는 뜻이고, `by` 가 비어 있는 이유이기도 하다.
+  그대로 적어 준다 — "남이 남긴 지적"으로 소개하면 사용자가 없는 반대를 찾게 된다.
 
 #### resolve 하고 진행한다
 
@@ -307,11 +333,38 @@ gh api graphql -f query='
 
 **`mine` 은 묻지 않고 접는다.** 방금 자기가 남긴 기록을 접을지 확인받는 것은 같은 결정을 두 번
 시키는 것이고, 그 창은 습관적으로 넘기게 되어 정작 **남이 남긴 지적**을 묻는 위 물음까지 무디게
-만든다. 대상의 `id` 마다:
+만든다. 대상의 `id` 마다 아래를 **한 번에** 돌린다 — 셸 상태는 호출 사이에 남지 않으므로
+접을 목록을 heredoc 으로 함께 넣는다(위 조회의 `id` 와 `at` 을 한 줄씩).
 
 ```bash
-gh api graphql -f query='mutation($id:ID!){ resolveReviewThread(input:{threadId:$id}){ thread { isResolved } } }' -F id=<thread-id>
+ok=0; fail=0
+while read -r id at; do
+  [ -n "$id" ] || continue
+  got=$(gh api graphql -f query='mutation($id:ID!){ resolveReviewThread(input:{threadId:$id}){ thread { isResolved } } }' -F id="$id" --jq '.data.resolveReviewThread.thread.isResolved' 2>&1)
+  case "$got" in
+    true) ok=$((ok+1));   echo "resolved  $at" ;;
+    *)    fail=$((fail+1)); echo "FAILED    $at  ($id) — $got" ;;
+  esac
+done <<'THREADS'
+PRRT_kwDO…AAA apps/web/src/pages/SqlEditor.tsx:120
+PRRT_kwDO…BBB docs/conventions/commit-convention.md:줄 불명
+THREADS
+echo "resolve: 성공 $ok · 실패 $fail"
 ```
+
+**손으로 단어 분할을 하지 않는다.** `id` 와 위치를 한 문자열에 담아 `set -- $pair` 로 가르는 흔한
+형태는 **zsh 에서 나뉘지 않는다** — 이 저장소의 기본 셸이 `/bin/zsh` 다.
+
+```bash
+zsh  -c 'p="A B"; set -- $p; echo "1=[$1] 2=[$2]"'   # 1=[A B] 2=[]
+bash -c 'p="A B"; set -- $p; echo "1=[$1] 2=[$2]"'   # 1=[A] 2=[B]
+```
+
+PR #110 을 머지하며 실제로 밟았다. 9건 전부 `NOT_FOUND` 로 떨어져 **아무것도 변경되지 않았고**
+피해는 없었지만, 부분 성공했다면 보고와 실제가 갈렸을 것이다. 위 형태는 나누는 일을 `read` 에
+맡기므로 zsh·bash 양쪽에서 같게 동작한다(`at` 은 마지막 변수라 `줄 불명` 의 공백까지 그대로 들어간다).
+**heredoc 은 파이프가 아니라 리다이렉션이라** 두 셸 모두 `ok`·`fail` 이 루프 밖에서 살아남는다 —
+`... | while read` 로 바꾸면 bash 에서 집계가 0 이 된다.
 
 지킬 것 셋:
 
@@ -321,7 +374,10 @@ gh api graphql -f query='mutation($id:ID!){ resolveReviewThread(input:{threadId:
   보인다. resolve 는 글을 지우지 않고 'Resolved' 로 접을 뿐이라는 것도 함께 적는다. 남의
   스레드를 접었다면 **허락받아 접었다는 사실과 그 목록**을 따로 적는다.
 - **resolve 가 실패해도 머지를 강행하지 않는다.** 그대로 두면 3번 직전 재확인에서 `BLOCKED` 로
-  걸리므로, 실패한 스레드를 보고하고 종료한다.
+  걸리므로, 실패한 스레드를 보고하고 종료한다. **판정은 `fail` 로 한다** — 뮤테이션이 한 건씩
+  나가므로 **부분 실패가 정상적으로 가능하다.** `fail` 이 0 이 아니면 접힌 것이 있어도 진행하지
+  않고, 5번 보고에 **접힌 목록과 실패한 목록을 나눠** 적는다. 하나로 뭉뚱그리면 다음 사람이
+  어디부터 다시 해야 하는지 알 수 없다.
 
 그 외에는 묻지 않는다. 특히 **"되돌리기 어려운 작업이니 한 번 더 확인"** 을 이유로 되묻지 않는다 —
 명시적 호출 + 게이트 통과가 곧 승인이다.
