@@ -32,14 +32,15 @@ updates:
       prod-dependencies:
         dependency-type: production
         update-types: [minor, patch]
-    # 아래 여덟은 **메이저만** 뺀다. 마이너·패치는 위 그룹으로 그대로 온다.
-    # 여덟 모두 "이것 하나만 올리면 안 되는" 것들이라 갱신이 아니라 결정이다.
+    # 아래 열은 **메이저만** 뺀다. 마이너·패치는 위 그룹으로 그대로 온다.
+    # 열 모두 "이것 하나만 올리면 안 되는" 것들이라 갱신이 아니라 결정이다.
     #
-    # 되돌릴 때 주의 — **세 건은 절차가 하나 더 있다.** 첫 주기 정리 중 #57(@types/node)·
-    # #58(vitest)·#59(typescript) 에 `@dependabot ignore this major version` 코멘트도 함께
-    # 보냈고, 그쪽은 저장소에 보이지 않는 Dependabot 내부 상태다. 그 셋은 아래 설정을
-    # 지우는 것만으로 갱신이 돌아오지 않는다 — `@dependabot unignore ...` 를 함께 보내야
-    # 하고, 안 그러면 설정은 고쳤는데 PR 만 안 오는, 원인을 못 찾는 상태가 된다.
+    # 되돌릴 때 주의 — **다섯 건은 절차가 하나 더 있다.** 첫 주기 정리 중 #57(@types/node)·
+    # #58(vitest)·#59(typescript) 에, 그리고 이번에 #103(@vitest/coverage-v8)·
+    # #104(@vitejs/plugin-react) 를 닫으면서 `@dependabot ignore this major version`
+    # 코멘트도 함께 보냈고, 그쪽은 저장소에 보이지 않는 Dependabot 내부 상태다. 그 다섯은
+    # 아래 설정을 지우는 것만으로 갱신이 돌아오지 않는다 — `@dependabot unignore ...` 를
+    # 함께 보내야 하고, 안 그러면 설정은 고쳤는데 PR 만 안 오는, 원인을 못 찾는 상태가 된다.
     # 나머지 다섯(vite · react 4형제)은 그런 코멘트가 없어 설정만 지우면 된다.
     ignore:
       # vitest 는 자체 vite 를 번들한다 — vite 메이저와 맞춰야 타입이 충돌하지 않는다
@@ -49,6 +50,29 @@ updates:
       - dependency-name: vitest
         update-types: [version-update:semver-major]
       - dependency-name: vite
+        update-types: [version-update:semver-major]
+      # 이 둘도 **같은 짝의 나머지 구성원**이다 — 위 vitest·vite 만 잠그고 이 둘을 열어
+      # 두었더니 그 구멍으로 PR #103·#104 가 들어왔다.
+      #
+      # `@vitest/coverage-v8` 의 peer 는 `vitest` 와 **정확히 같은 버전**이다
+      # (4.1.11 은 `vitest@4.1.11` 을 요구). vitest 를 잠근 채 이쪽만 열어 두면 반드시
+      # `ERESOLVE` 로 막힌 PR 이 온다 — #103 이 실제로 `npm ci` 단계에서 그렇게 실패했다.
+      #
+      # `@vitejs/plugin-react` 는 vite 메이저에 묶인다. **6.1.1 의 peer 는 `vite@^8.0.0`**
+      # 이고 우리는 vite ^6.0.1 이라 #104 가 `ERESOLVE` 로 막혔다. #68 이 「plugin-react
+      # 4 → 6」이라 적을 때 근거였던 #77 시점에는 vite 7 이면 됐지만, **지금 6.1.1 은
+      # vite 8 을 요구한다** — #68 의 목표 버전 자체가 낡았다. (참고: `@vitejs/plugin-
+      # react@5.2.0` 은 `vite ^4.2 || ^5 || ^6 || ^7 || ^8` 이라 vite 6 에서도 돌지만,
+      # 짝을 따로 움직이지 않는다는 이 파일의 원칙에 따라 그것도 #68 에서 함께 정한다.)
+      #
+      # 넷(vitest·vite·coverage-v8·plugin-react)을 함께 올리는 것도 #68 이 추적한다.
+      # 되돌릴 때 주의: 이 둘도 `@dependabot ignore this major version` 코멘트가 남는다
+      # (#103·#104 를 닫으며 함께 보냈다) — 설정만 지우면 안 돌아오고
+      # `@dependabot unignore @vitest/coverage-v8` · `@dependabot unignore
+      # @vitejs/plugin-react` 를 함께 보내야 한다 (머리말의 "다섯 건" 목록 참조).
+      - dependency-name: "@vitest/coverage-v8"
+        update-types: [version-update:semver-major]
+      - dependency-name: "@vitejs/plugin-react"
         update-types: [version-update:semver-major]
       # @types/node 가 하는 일은 "이 런타임에 무엇이 있는가"를 tsc 에 알려 주는 것이다.
       # 런타임보다 앞서면 Node 26 에만 있는 API 를 tsc 가 통과시키고 컨테이너에서 터진다 —
