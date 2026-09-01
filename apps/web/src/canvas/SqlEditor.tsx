@@ -17,6 +17,7 @@ import {
 } from '@codemirror/autocomplete'
 import { Prec } from '@codemirror/state'
 import { Icon } from '../components/icons'
+import { t, useT, type MsgKey } from '../i18n'
 import { SchemaTableTree, type TreeTable } from '../components/SchemaTableTree'
 import { useRunQuery, useRunMongo, useRunDuck, useExplain } from '../api/hooks'
 import { ExplainModal, type ExplainTarget } from './ExplainModal'
@@ -83,11 +84,13 @@ function parseFromRefs(doc: string): FromRef[] {
 /** 편집기 슬래시 명령. 괄호를 쓰지 않는다(자동완성 괄호와 충돌하던 문제 회피).
  *  - loadQuery: `/loadQuery.` 를 넣고 인라인 즐겨찾기 드롭다운을 띄운다(이름으로 바로).
  *  - loadQueryList: 큰 모달 피커를 연다(전체 목록 + SQL 미리보기). */
-const SLASH_COMMANDS: { name: string; desc: string; kind: 'inline' | 'modal' | 'ai' | 'conn' }[] = [
-  { name: 'loadQuery', desc: '즐겨찾기 바로 불러오기 (이름)', kind: 'inline' },
-  { name: 'loadQueryList', desc: '즐겨찾기 목록 팝업', kind: 'modal' },
-  { name: 'aiQuery', desc: 'AI 로 SQL 생성', kind: 'ai' },
-  { name: 'conn', desc: '이 문장만 다른 연결로 (-- @conn)', kind: 'conn' },
+// 설명은 MsgKey 로만 들고 자동완성이 **열릴 때** t() 로 푼다 — 모듈 상수에 번역문을 담으면
+// 언어 전환을 못 따라온다.
+const SLASH_COMMANDS: { name: string; desc: MsgKey; kind: 'inline' | 'modal' | 'ai' | 'conn' }[] = [
+  { name: 'loadQuery', desc: 'sqlEd.cmdLoadQuery', kind: 'inline' },
+  { name: 'loadQueryList', desc: 'sqlEd.cmdLoadQueryList', kind: 'modal' },
+  { name: 'aiQuery', desc: 'sqlEd.cmdAiQuery', kind: 'ai' },
+  { name: 'conn', desc: 'sqlEd.cmdConn', kind: 'conn' },
 ]
 
 /** `/conn.…` 트리거를 지우고, **그 문장 맨 앞에** 연결 마커를 놓는다 (`name === null` 이면 지운다).
@@ -140,15 +143,25 @@ export function makeLoadQueryCompletion(
       const frag = connMatch.text.slice(connMatch.text.indexOf('.') + 1).trim().toLowerCase()
       const conns = getConns()
       const entries: { name: string | null; label: string; detail: string; type: string }[] = [
-        { name: null, label: '기본 연결 따르기', detail: '마커 제거', type: 'keyword' },
-        { name: DUCK_MARKER_NAME, label: DUCK_MARKER_NAME, detail: '여러 연결', type: 'keyword' },
+        {
+          name: null,
+          label: t('sqlEd.followDefaultConn'),
+          detail: t('sqlEd.removeMarker'),
+          type: 'keyword',
+        },
+        {
+          name: DUCK_MARKER_NAME,
+          label: DUCK_MARKER_NAME,
+          detail: t('sqlEd.multiConn'),
+          type: 'keyword',
+        },
         ...conns.map((c) => ({ name: c.name, label: c.name, detail: c.type, type: 'class' })),
       ]
       const matched = entries.filter((e) => !frag || e.label.toLowerCase().includes(frag))
       if (matched.length === 0) {
         return {
           from: anchor,
-          options: [{ label: '일치하는 연결 없음', type: 'text', apply: () => {} }],
+          options: [{ label: t('sqlEd.noConnMatch'), type: 'text', apply: () => {} }],
           filter: false,
         }
       }
@@ -182,9 +195,9 @@ export function makeLoadQueryCompletion(
           c.name.toLowerCase().startsWith(frag),
       ).map((c) => ({
         label: '/' + c.name,
-        detail: '명령',
+        detail: t('sqlEd.command'),
         type: 'keyword',
-        info: c.desc,
+        info: t(c.desc),
         apply: (view: EditorView) => {
           if (c.kind === 'modal' || c.kind === 'ai') {
             // 명령 텍스트는 지우고 그 자리에 결과(즐겨찾기 SQL / AI 생성 SQL)를 넣을 지점을 넘긴다.
@@ -209,16 +222,16 @@ export function makeLoadQueryCompletion(
     const frag = favMatch.text.slice(favMatch.text.indexOf('.') + 1).toLowerCase()
     const favs = getFavs()
     if (favs.length === 0) {
-      return { from: anchor, options: [{ label: '등록된 즐겨찾기가 없습니다', type: 'text', apply: () => {} }], filter: false }
+      return { from: anchor, options: [{ label: t('sqlEd.noFavorites'), type: 'text', apply: () => {} }], filter: false }
     }
     // 이름 조각으로 직접 거른다(대소문자·부분일치). 없으면 안내 항목만 — 이 문맥에선 즐겨찾기만 보인다.
     const matched = favs.filter((f) => !frag || f.name.toLowerCase().includes(frag))
     if (matched.length === 0) {
-      return { from: anchor, options: [{ label: '일치하는 즐겨찾기 없음', type: 'text', apply: () => {} }], filter: false }
+      return { from: anchor, options: [{ label: t('sqlEd.noFavMatch'), type: 'text', apply: () => {} }], filter: false }
     }
     const options = matched.map((f) => ({
       label: f.name,
-      detail: '즐겨찾기',
+      detail: t('sqlEd.favorite'),
       type: 'text',
       // '/loadQuery.이름' 트리거 전체를 SQL 로 바꾼다(커서 위치 삽입).
       apply: (view: EditorView, _c: unknown, _from: number, to: number) =>
@@ -253,10 +266,18 @@ function mergeCompletions(
 }
 
 export function makeTableCompletion(tables: CompletionTable[]): CompletionSource {
-  const tableOptions = tables.map((t) => {
-    const qualified = t.namespace ? `${t.namespace}.${t.name}` : t.name
-    return { label: t.name, detail: t.namespace ?? '테이블', type: 'class', apply: qualified }
-  })
+  // 팩토리 시점이 아니라 **자동완성이 열릴 때** 만든다 — 팩토리는 tables 가 바뀔 때만 다시
+  // 불리므로(useMemo), 여기서 t() 를 굳혀 두면 언어를 바꿔도 옛 말이 남는다.
+  const tableOptions = () =>
+    tables.map((tbl) => {
+      const qualified = tbl.namespace ? `${tbl.namespace}.${tbl.name}` : tbl.name
+      return {
+        label: tbl.name,
+        detail: tbl.namespace ?? t('sqlEd.table'),
+        type: 'class',
+        apply: qualified,
+      }
+    })
   const colsByTable = new Map<string, NonNullable<CompletionTable['columns']>>()
   const tablesBySchema = new Map<string, CompletionTable[]>()
   for (const t of tables) {
@@ -305,7 +326,7 @@ export function makeTableCompletion(tables: CompletionTable[]): CompletionSource
     // FROM/JOIN 바로 뒤(테이블 자리) — 테이블 추천
     const inTablePos = /\b(?:from|join|into|update)\s+(?:[\w."]+\s*,\s*)*$/i.test(before)
     if (inTablePos) {
-      return { from: word.from, options: tableOptions, validFor: /^\w*$/ }
+      return { from: word.from, options: tableOptions(), validFor: /^\w*$/ }
     }
 
     // 그 외(SELECT/WHERE/ON/GROUP BY…) — 선언된 테이블의 컬럼을 추천
@@ -451,8 +472,13 @@ function makeMongoCompletion(collections: CompletionTable[]): CompletionSource {
         return {
           from,
           options: [
-            { label: 'find', type: 'method', detail: '{ 필터 }', apply: 'find({  })' },
-            { label: 'aggregate', type: 'method', detail: '[ 파이프라인 ]', apply: 'aggregate([  ])' },
+            { label: 'find', type: 'method', detail: t('sqlEd.mongoFindDetail'), apply: 'find({  })' },
+            {
+              label: 'aggregate',
+              type: 'method',
+              detail: t('sqlEd.mongoAggDetail'),
+              apply: 'aggregate([  ])',
+            },
           ],
           validFor: /^\w*$/,
         }
@@ -486,7 +512,7 @@ function makeMongoCompletion(collections: CompletionTable[]): CompletionSource {
     if (!inside) {
       return {
         from: word.from,
-        options: names.map((n) => ({ label: n, type: 'class', detail: '컬렉션' })),
+        options: names.map((n) => ({ label: n, type: 'class', detail: t('sqlEd.collection') })),
         validFor: /^\w*$/,
       }
     }
@@ -766,6 +792,7 @@ function VariablePanel({
   variables: EditorVariable[]
   onInsert: (text: string) => void
 }) {
+  const tr = useT()
   const trigger = variables.filter((v) => v.source !== 'node')
   const fromNodes = variables.filter((v) => v.source === 'node')
 
@@ -776,11 +803,11 @@ function VariablePanel({
         className="sql-var-row"
         key={text}
         onClick={() => onInsert(text)}
-        title={`${text} (${v.type})${v.isExample ? ' · 아직 실행 전이라 예시 값입니다' : ''}`}
+        title={`${text} (${v.type})${v.isExample ? tr('sqlEd.varExample') : ''}`}
       >
         <span className="svr-name">{text}</span>
         <span className={`svr-val ${v.value === null ? 'empty' : ''} ${v.isExample ? 'example' : ''}`}>
-          {v.value === null ? '값 없음' : String(v.value)}
+          {v.value === null ? tr('sqlEd.varNoValue') : String(v.value)}
         </span>
       </button>
     )
@@ -790,19 +817,20 @@ function VariablePanel({
     <div className="sql-var-panel">
       {trigger.length > 0 && (
         <>
-          <div className="sql-modal-tree-hd">API 트리거 변수 — 클릭하면 삽입됩니다</div>
+          <div className="sql-modal-tree-hd">{tr('sqlEd.varTriggerHd')}</div>
           {trigger.map(row)}
         </>
       )}
       {fromNodes.length > 0 && (
         <>
-          <div className="sql-modal-tree-hd">노드 결과 — 그 노드 첫 행의 값</div>
+          <div className="sql-modal-tree-hd">{tr('sqlEd.varNodeHd')}</div>
           {fromNodes.map(row)}
         </>
       )}
       <div className="sql-var-note">
-        따옴표는 직접 넣으세요 — <code>WHERE dt &gt;= &apos;$since&apos;</code>. 값에 따옴표·
-        세미콜론이 있으면 실행이 거부됩니다.
+        {tr('sqlEd.varNotePre')}
+        <code>WHERE dt &gt;= &apos;$since&apos;</code>
+        {tr('sqlEd.varNotePost')}
       </div>
     </div>
   )
@@ -964,6 +992,7 @@ export function SqlWorkbench({
   /** 「AI 탭에서 이어가기」 — 오류 수정 패널의 대화 승격을 페이지가 처리한다. */
   onAiEscalate?: (payload: { sql: string; error?: string; explain?: string; assistant: string; dbConnId?: string }) => void
 }) {
+  const tr = useT()
   const cmRef = useRef<ReactCodeMirrorRef>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   // 아직 값이 없는 변수(`value === null`)는 넣지 않는다 — 그래야 치환이 조용히 'null' 을
@@ -1161,7 +1190,9 @@ export function SqlWorkbench({
   viewRef.current = view
 
   // JSON 뷰: CodeMirror 내장 검색 패널을 열고, Find 입력 옆에 일치 건수를 주입한다.
-  const openJsonFind = () => {
+  // useCallback 인 이유: 아래 ⌘F 리스너가 이 함수를 의존성으로 잡는다. tr 은 언어별로
+  // 하나씩만 만들어지므로(i18n/index.ts) 언어를 바꿀 때만 리스너가 다시 붙는다.
+  const openJsonFind = useCallback(() => {
     const v = jsonCmRef.current?.view
     if (!v) return
     openSearchPanel(v)
@@ -1187,7 +1218,7 @@ export function SqlWorkbench({
             i += needle.length
           }
         }
-        countEl!.textContent = q ? `${c.toLocaleString()}개 일치` : ''
+        countEl!.textContent = q ? tr('sqlEd.matchCount', { n: c }) : ''
       }
       field.removeEventListener('input', update)
       field.addEventListener('input', update)
@@ -1195,7 +1226,7 @@ export function SqlWorkbench({
       field.focus()
       field.select()
     }, 30)
-  }
+  }, [tr])
 
   // ⌘/Ctrl+F → 결과 검색. 이 워크벤치가 보이는(활성 탭) 상태일 때만 가로챈다.
   useEffect(() => {
@@ -1216,7 +1247,7 @@ export function SqlWorkbench({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [openJsonFind])
 
   // 전체 화면일 때 Esc 로 해제
   useEffect(() => {
@@ -1293,7 +1324,7 @@ export function SqlWorkbench({
     const handlers = {
       onSuccess: applyFirstPage,
       onError: (e: unknown) =>
-        firstPageError(e, m === 'mongo' ? '조회에 실패했습니다.' : '쿼리 실행에 실패했습니다.'),
+        firstPageError(e, m === 'mongo' ? tr('sqlEd.mongoRunFailed') : tr('sqlEd.queryRunFailed')),
     }
     if (m === 'duck') {
       runDuck.mutate({ query: q, offset: 0, sortCol, sortDir, filters, signal }, handlers)
@@ -1389,7 +1420,7 @@ export function SqlWorkbench({
     try {
       q = substituteVars(body, variableValues, { contextKey: 'query' })
     } catch (e) {
-      setError(e instanceof VariableError ? e.message : '변수 치환에 실패했습니다.')
+      setError(e instanceof VariableError ? e.message : tr('sqlEd.varSubstFailed'))
       setRanWith(null)
       setRanOn(null)
       return
@@ -1433,14 +1464,14 @@ export function SqlWorkbench({
       return
     }
     if (target.mode !== 'sql' || !target.connId) {
-      setError('연합 조회 문장은 실행 계획을 볼 수 없습니다.')
+      setError(tr('sqlEd.duckNoExplain'))
       return
     }
     let q: string
     try {
       q = substituteVars(stripMarkers(trimmed).trim(), variableValues, { contextKey: 'query' })
     } catch (e) {
-      setError(e instanceof VariableError ? e.message : '변수 치환에 실패했습니다.')
+      setError(e instanceof VariableError ? e.message : tr('sqlEd.varSubstFailed'))
       return
     }
     setError(null)
@@ -1453,7 +1484,7 @@ export function SqlWorkbench({
           setExplaining(false)
         },
         onError: (e) => {
-          setError(e instanceof ApiError ? e.message : '실행 계획 조회에 실패했습니다.')
+          setError(e instanceof ApiError ? e.message : tr('sqlEd.explainFailed'))
           setExplaining(false)
         },
       },
@@ -1539,7 +1570,7 @@ export function SqlWorkbench({
         `query_result_${stamp}.${fmt}`,
       )
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : '내보내기에 실패했습니다.')
+      setError(e instanceof ApiError ? e.message : tr('sqlEd.exportFailed'))
     } finally {
       setExporting(null)
     }
@@ -1574,7 +1605,7 @@ export function SqlWorkbench({
         showCancelled()
         return
       }
-      setError(e instanceof ApiError ? e.message : '추가 로딩에 실패했습니다.')
+      setError(e instanceof ApiError ? e.message : tr('sqlEd.loadMoreFailed'))
     }
     const onSettled = () => setLoadingMore(false)
     const signal = (abortRef.current = new AbortController()).signal
@@ -1732,7 +1763,7 @@ export function SqlWorkbench({
           {variables.length > 0 && (
             <VariablePanel variables={variables} onInsert={insertAtCursor} />
           )}
-          <div className="sql-modal-tree-hd">테이블을 클릭하면 SQL 에 삽입됩니다</div>
+          <div className="sql-modal-tree-hd">{tr('sqlEd.treeHint')}</div>
           <SchemaTableTree tables={tables} value="" loading={loading} onChange={insert} />
         </div>
       )}
@@ -1745,29 +1776,29 @@ export function SqlWorkbench({
                 className="sql-save-btn"
                 onClick={onSave}
                 disabled={!value.trim()}
-                title="이 쿼리를 폴더에 저장 (⌘/Ctrl+S)"
+                title={tr('sqlEd.saveTip')}
               >
                 <Icon.save />
-                저장
+                {tr('sqlEd.save')}
               </button>
             )}
             {hint && <span className="sql-editor-hint">{hint}</span>}
             <div className="sql-toolbar-spacer" />
             {!floatingRun &&
               (pending ? (
-                <button className="btn sm sql-run cancel" onClick={cancel} title="실행 취소">
+                <button className="btn sm sql-run cancel" onClick={cancel} title={tr('sqlEd.cancelRun')}>
                   <Icon.stop />
-                  취소
+                  {tr('common.cancel')}
                 </button>
               ) : (
                 <button
                   className="btn primary sm sql-run"
                   onClick={run}
                   disabled={!ready || !value.trim()}
-                  title={ready ? '소스에서 실행 (⌘/Ctrl + Enter)' : '먼저 연결을 고르세요'}
+                  title={ready ? tr('sqlEd.runTip') : tr('sqlEd.pickConnFirst')}
                 >
                   <Icon.play />
-                  {mode === 'mongo' ? '조회' : '실행'}
+                  {mode === 'mongo' ? tr('sqlEd.runMongo') : tr('sqlEd.run')}
                   <kbd className="sql-kbd">⌘↵</kbd>
                 </button>
               ))}
@@ -1777,19 +1808,19 @@ export function SqlWorkbench({
                   className="btn sm sql-explain"
                   onClick={() => runExplain(pickRunText(), false)}
                   disabled={!ready || !value.trim() || explaining !== false}
-                  title="실행 계획 (EXPLAIN) — 추정 계획만, 실행하지 않음"
+                  title={tr('sqlEd.explainTip')}
                 >
                   <Icon.map />
-                  {explaining === 'plain' ? '분석 중…' : '실행 계획'}
+                  {explaining === 'plain' ? tr('sqlEd.analyzing') : tr('sqlEd.explain')}
                 </button>
                 <button
                   className="btn sm sql-explain"
                   onClick={() => runExplain(pickRunText(), true)}
                   disabled={!ready || !value.trim() || explaining !== false}
-                  title="성능 분석 (EXPLAIN ANALYZE) — 실제 실행 후 계획+시간 (롤백됨)"
+                  title={tr('sqlEd.analyzeTip')}
                 >
                   <Icon.bolt />
-                  {explaining === 'analyze' ? '분석 중…' : '성능 분석'}
+                  {explaining === 'analyze' ? tr('sqlEd.analyzing') : tr('sqlEd.analyze')}
                 </button>
               </div>
             )}
@@ -1800,8 +1831,8 @@ export function SqlWorkbench({
             <button
               className="sql-fs-btn"
               onClick={() => setFullscreen((v) => !v)}
-              title={fullscreen ? '전체 화면 해제 (Esc)' : '전체 화면으로 작성'}
-              aria-label={fullscreen ? '전체 화면 해제' : '전체 화면'}
+              title={fullscreen ? tr('sqlEd.fsExitTip') : tr('sqlEd.fsTip')}
+              aria-label={fullscreen ? tr('sqlEd.fsExit') : tr('sqlEd.fs')}
             >
               {fullscreen ? <Icon.compress /> : <Icon.expand />}
             </button>
@@ -1828,9 +1859,9 @@ export function SqlWorkbench({
             onAiCommand={mode === 'sql' ? (r) => setAiPrompt(r) : undefined}
             placeholder={
               mode === 'mongo'
-                ? 'collection.find({ })   또는   collection.aggregate([ ... ])'
+                ? tr('sqlEd.mongoPlaceholder')
                 : isDuck
-                  ? 'SELECT * FROM 연결이름.데이터베이스.테이블 …'
+                  ? tr('sqlEd.duckPlaceholder')
                   : 'SELECT * FROM schema.table WHERE ...'
             }
           />
@@ -1841,12 +1872,12 @@ export function SqlWorkbench({
               disabled={!pending && (!ready || !value.trim())}
               title={
                 pending
-                  ? `실행 취소 (${runSecs.toFixed(1)}초 경과)`
+                  ? tr('sqlEd.cancelRunElapsed', { s: runSecs.toFixed(1) })
                   : ready
-                    ? '실행 (⌘/Ctrl + Enter)'
-                    : '먼저 연결을 고르세요'
+                    ? tr('sqlEd.runTipShort')
+                    : tr('sqlEd.pickConnFirst')
               }
-              aria-label={pending ? '실행 취소' : '실행'}
+              aria-label={pending ? tr('sqlEd.cancelRun') : tr('sqlEd.run')}
             >
               {pending ? <Icon.stop /> : <Icon.play />}
             </button>
@@ -1857,7 +1888,7 @@ export function SqlWorkbench({
           <div
             className="sql-vsplit"
             onPointerDown={startSplitDrag}
-            title="드래그해서 위·아래 크기 조절"
+            title={tr('sqlEd.splitTip')}
           >
             <span className="sql-vsplit-grip" />
           </div>
@@ -1865,7 +1896,7 @@ export function SqlWorkbench({
           {cancelled && (
             <div className="sql-cancel-toast">
               <Icon.stop />
-              실행을 취소했습니다
+              {tr('sqlEd.cancelledToast')}
             </div>
           )}
           {findOpen && view === 'table' && data && (
@@ -1874,29 +1905,29 @@ export function SqlWorkbench({
               <input
                 ref={findInputRef}
                 value={findText}
-                placeholder="결과에서 검색…"
+                placeholder={tr('sqlEd.findPlaceholder')}
                 onChange={(e) => setFindText(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Escape') closeFind()
                 }}
               />
               <span className="sql-find-count">
-                {findQ ? `${shownTableRows.length.toLocaleString()}개 일치` : ''}
+                {findQ ? tr('sqlEd.matchCount', { n: shownTableRows.length }) : ''}
               </span>
-              <button className="sql-find-x" onClick={closeFind} aria-label="닫기">
+              <button className="sql-find-x" onClick={closeFind} aria-label={tr('common.close')}>
                 ×
               </button>
             </div>
           )}
           {ranOn && (
-            <div className="sql-ran-with sql-ran-on" title={`이 문장은 「${ranOn}」 으로 실행되었습니다`}>
-              <span className="srw-tag conn">문장별 연결</span>
+            <div className="sql-ran-with sql-ran-on" title={tr('sqlEd.ranOnTip', { name: ranOn })}>
+              <span className="srw-tag conn">{tr('sqlEd.perStmtConn')}</span>
               <code>{ranOn}</code>
             </div>
           )}
           {ranWith && !error && (
             <div className="sql-ran-with" title={ranWith}>
-              <span className="srw-tag">변수 치환됨</span>
+              <span className="srw-tag">{tr('sqlEd.varsSubstituted')}</span>
               <code>{ranWith.replace(/\s+/g, ' ').trim()}</code>
             </div>
           )}
@@ -1909,9 +1940,9 @@ export function SqlWorkbench({
                   <button
                     className="btn sm ai-fix-btn"
                     onClick={() => setShowFix((v) => !v)}
-                    title="수행된 쿼리와 오류를 AI 가 보고 고칩니다"
+                    title={tr('sqlEd.aiFixTip')}
                   >
-                    <Icon.bolt /> AI로 고치기
+                    <Icon.bolt /> {tr('sqlEd.aiFix')}
                   </button>
                 )}
               </div>
@@ -1941,8 +1972,8 @@ export function SqlWorkbench({
               </span>
               <b>
                 {data.affected == null
-                  ? '실행했습니다'
-                  : `${data.affected.toLocaleString()}행이 적용되었습니다`}
+                  ? tr('sqlEd.executed')
+                  : tr('sqlEd.rowsApplied', { n: data.affected })}
               </b>
               <span className="dot">·</span>
               <span>{data.elapsedMs} ms</span>
@@ -1951,14 +1982,14 @@ export function SqlWorkbench({
             <>
               <div className="sql-result-toolbar">
                 {(sort || Object.values(colFilters).some((v) => v.trim())) && (
-                  <span className="sql-grid-hint">전체 데이터 기준 정렬·필터</span>
+                  <span className="sql-grid-hint">{tr('sqlEd.sortFilterHint')}</span>
                 )}
-                <div className="mode-seg" role="group" aria-label="결과 보기 방식">
+                <div className="mode-seg" role="group" aria-label={tr('sqlEd.viewModeAria')}>
                   <button
                     className={`mode-seg-btn ${view === 'table' ? 'active' : ''}`}
                     onClick={() => setView('table')}
                   >
-                    테이블
+                    {tr('sqlEd.table')}
                   </button>
                   <button
                     className={`mode-seg-btn ${view === 'json' ? 'active' : ''}`}
@@ -1971,10 +2002,10 @@ export function SqlWorkbench({
                   <button
                     className={`sql-filter-toggle ${showFilters ? 'on' : ''}`}
                     onClick={toggleFilters}
-                    title="컬럼별 필터 (전체 데이터 기준)"
+                    title={tr('sqlEd.filterTip')}
                   >
                     <Icon.filter />
-                    필터
+                    {tr('sqlEd.filter')}
                   </button>
                 )}
                 <div className="sql-export">
@@ -1982,22 +2013,26 @@ export function SqlWorkbench({
                     className="sql-filter-toggle"
                     onClick={() => setExportOpen((o) => !o)}
                     disabled={!!exporting}
-                    title="결과를 파일로 저장 (전체 데이터)"
+                    title={tr('sqlEd.exportTip')}
                   >
                     <Icon.save />
-                    {exporting ? '저장 중…' : '저장'}
+                    {exporting ? tr('sqlEd.saving') : tr('sqlEd.save')}
                     <Icon.chevron />
                   </button>
                   {exportOpen && (
                     <>
                       <div className="sql-export-overlay" onClick={() => setExportOpen(false)} />
                       <div className="sql-export-menu">
-                        <div className="sql-export-hd">파일 형식</div>
+                        <div className="sql-export-hd">{tr('sqlEd.exportFormat')}</div>
                         {(['csv', 'json', 'txt'] as const).map((f) => (
                           <button key={f} onClick={() => doExport(f)}>
                             <span className="sql-export-fmt">{f.toUpperCase()}</span>
                             <span className="sql-export-desc">
-                              {f === 'csv' ? '엑셀·범용' : f === 'json' ? '구조 보존' : '탭 구분(TSV)'}
+                              {f === 'csv'
+                                ? tr('sqlEd.fmtCsv')
+                                : f === 'json'
+                                  ? tr('sqlEd.fmtJson')
+                                  : tr('sqlEd.fmtTxt')}
                             </span>
                           </button>
                         ))}
@@ -2009,7 +2044,7 @@ export function SqlWorkbench({
               {view === 'table' ? (
                 <div className="sql-grid-wrap" ref={gridRef} onScroll={onGridScroll}>
                   {data.columns.length === 0 ? (
-                    <div className="sql-result-empty">결과 행이 없습니다.</div>
+                    <div className="sql-result-empty">{tr('sqlEd.noRows')}</div>
                   ) : (
                     <table className="sql-grid">
                       <thead>
@@ -2021,7 +2056,7 @@ export function SqlWorkbench({
                               className={`sql-th ${sort?.col === c ? 'sorted' : ''}`}
                               onClick={() => cycleSort(c)}
                               style={colStyle(c)}
-                              title="클릭하면 정렬 (오름 → 내림 → 해제)"
+                              title={tr('sqlEd.sortTip')}
                             >
                               <span className="sql-th-label">{c}</span>
                               <span className="sql-th-arrow">
@@ -2035,7 +2070,7 @@ export function SqlWorkbench({
                                   e.stopPropagation()
                                   resetColWidth(c)
                                 }}
-                                title="드래그해서 폭 조절 · 더블클릭하면 초기화"
+                                title={tr('sqlEd.colResizeTip')}
                               />
                             </th>
                           ))}
@@ -2050,7 +2085,7 @@ export function SqlWorkbench({
                                 <input
                                   className="sql-col-filter"
                                   value={colFilters[c] ?? ''}
-                                  placeholder="필터…"
+                                  placeholder={tr('sqlEd.filterPlaceholder')}
                                   onChange={(e) => onColFilter(c, e.target.value)}
                                 />
                               </th>
@@ -2083,14 +2118,18 @@ export function SqlWorkbench({
                           <tr>
                             <td className="rownum" />
                             <td className="sql-find-none" colSpan={data.columns.length + 1}>
-                              일치하는 행이 없습니다 (로드된 {data.rows.length.toLocaleString()}행 기준)
+                              {tr('sqlEd.findNoRows', { n: data.rows.length })}
                             </td>
                           </tr>
                         )}
                       </tbody>
                     </table>
                   )}
-                  {loadingMore && <div className="sql-grid-more">더 불러오는 중… {runSecs.toFixed(1)}초</div>}
+                  {loadingMore && (
+                    <div className="sql-grid-more">
+                      {tr('sqlEd.loadingMore', { s: runSecs.toFixed(1) })}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="sql-json-wrap">
@@ -2099,22 +2138,28 @@ export function SqlWorkbench({
                     onNearBottom={loadMore}
                     cmRef={jsonCmRef}
                   />
-                  {loadingMore && <div className="sql-json-more">더 불러오는 중… {runSecs.toFixed(1)}초</div>}
+                  {loadingMore && (
+                    <div className="sql-json-more">
+                      {tr('sqlEd.loadingMore', { s: runSecs.toFixed(1) })}
+                    </div>
+                  )}
                 </div>
               )}
               <div className="sql-result-status">
                 {data.total != null ? (
                   <span>
-                    전체 <b>{data.total.toLocaleString()}</b> 행
+                    {tr('sqlEd.totalPre')}
+                    <b>{data.total.toLocaleString()}</b>
+                    {tr('sqlEd.totalPost')}
                     {data.rows.length < data.total && (
                       <span className="sql-result-loaded">
                         {' '}
-                        · {data.rows.length.toLocaleString()} 로드됨
+                        {tr('sqlEd.loadedSuffix', { n: data.rows.length })}
                       </span>
                     )}
                   </span>
                 ) : (
-                  <span>{data.rows.length.toLocaleString()} 행</span>
+                  <span>{tr('sqlEd.rowCountSpaced', { n: data.rows.length })}</span>
                 )}
                 <span className="dot">·</span>
                 <span>{data.elapsedMs} ms</span>
@@ -2122,11 +2167,14 @@ export function SqlWorkbench({
                   <>
                     <span className="dot">·</span>
                     <span>
-                      {data.statement.toUpperCase()} {data.affected.toLocaleString()}행 적용
+                      {tr('sqlEd.stmtApplied', {
+                        stmt: data.statement.toUpperCase(),
+                        n: data.affected,
+                      })}
                     </span>
                   </>
                 )}
-                {data.hasMore && <span className="sql-result-more">스크롤하면 더 불러옵니다</span>}
+                {data.hasMore && <span className="sql-result-more">{tr('sqlEd.scrollMore')}</span>}
               </div>
             </>
           ) : (
@@ -2134,12 +2182,13 @@ export function SqlWorkbench({
               {pending ? (
                 <span className="sql-running">
                   <span className="sql-running-dot" />
-                  실행 중… <b>{runSecs.toFixed(1)}초</b>
+                  {tr('sqlEd.runningPre')}
+                  <b>{tr('sqlEd.secs', { s: runSecs.toFixed(1) })}</b>
                 </span>
               ) : mode === 'mongo' ? (
-                '컬렉션.find({…}) 또는 컬렉션.aggregate([…]) 를 실행하면 여기에 표시됩니다 (⌘/Ctrl + Enter)'
+                tr('sqlEd.emptyMongo')
               ) : (
-                '실행하면 결과가 여기에 표시됩니다 (⌘/Ctrl + Enter)'
+                tr('sqlEd.emptyResult')
               )}
             </div>
           )}
@@ -2217,7 +2266,7 @@ export function SqlWorkbench({
               }}
             >
               <Icon.play />
-              실행
+              {tr('sqlEd.run')}
               <span className="sql-ctxmenu-kbd">⌘↵</span>
             </button>
             {canExplain && (
@@ -2232,7 +2281,7 @@ export function SqlWorkbench({
                   }}
                 >
                   <Icon.map />
-                  실행 계획 (EXPLAIN)
+                  {tr('sqlEd.ctxExplain')}
                 </button>
                 <button
                   className="sql-ctxmenu-item"
@@ -2244,7 +2293,7 @@ export function SqlWorkbench({
                   }}
                 >
                   <Icon.bolt />
-                  성능 분석 (EXPLAIN ANALYZE)
+                  {tr('sqlEd.ctxAnalyze')}
                 </button>
               </>
             )}
@@ -2258,7 +2307,7 @@ export function SqlWorkbench({
                 }}
               >
                 <Icon.star />
-                즐겨찾기 저장
+                {tr('sqlEd.saveFavorite')}
                 <span className="sql-ctxmenu-kbd">⌘S</span>
               </button>
             )}
@@ -2280,12 +2329,12 @@ export function SqlWorkbench({
             <div className="sql-favsave" onMouseDown={(e) => e.stopPropagation()}>
               <div className="sql-favsave-hd">
                 <Icon.star />
-                즐겨찾기 저장
+                {tr('sqlEd.saveFavorite')}
               </div>
               <input
                 className="sql-favsave-name"
                 autoFocus
-                placeholder="이름 (예: 일일 집계)"
+                placeholder={tr('sqlEd.favNamePlaceholder')}
                 value={favSave.name}
                 onChange={(e) => setFavSave((s) => (s ? { ...s, name: e.target.value } : s))}
                 onKeyDown={(e) => {
@@ -2301,10 +2350,10 @@ export function SqlWorkbench({
                   disabled={!favSave.name.trim() || !connectionId}
                 >
                   <Icon.save />
-                  저장
+                  {tr('sqlEd.save')}
                 </button>
                 <button className="btn sm" onClick={() => setFavSave(null)}>
-                  취소
+                  {tr('common.cancel')}
                 </button>
               </div>
             </div>
@@ -2333,12 +2382,13 @@ export function SqlModal({
   loading?: boolean
   variables?: EditorVariable[]
 }) {
+  const tr = useT()
   return createPortal(
     <div className="overlay" onClick={onClose}>
       <div className="modal code-modal sql-modal" onClick={(e) => e.stopPropagation()}>
         <div className="mh">
-          <h3>커스텀 SQL</h3>
-          <button className="x" onClick={onClose} aria-label="닫기">
+          <h3>{tr('sqlEd.customSql')}</h3>
+          <button className="x" onClick={onClose} aria-label={tr('common.close')}>
             ×
           </button>
         </div>
@@ -2351,12 +2401,12 @@ export function SqlModal({
           loading={loading}
           variables={variables}
           autoFocus
-          hint="커스텀 SQL 모드에서는 증분 워터마크가 적용되지 않습니다 — 전량을 읽습니다."
+          hint={tr('sqlEd.customSqlHint')}
         />
         <div className="mf">
           <button className="btn primary" onClick={onClose}>
             <Icon.save />
-            완료
+            {tr('sqlEd.done')}
           </button>
         </div>
       </div>

@@ -168,4 +168,13 @@ export const sqlEditor = {
     'Custom SQL mode ignores the incremental watermark — it reads everything.',
   ],
   'sqlEd.done': ['완료', 'Done'],
+
+  // ---- 이번 배선에서 드러난 것 (사전에 없던 문구) ----
+  'sqlEd.multiConn': ['여러 연결', 'Multiple connections'],
+  'sqlEd.treeHint': [
+    '테이블을 클릭하면 SQL 에 삽입됩니다',
+    'Click a table to insert it into the SQL',
+  ],
+  'sqlEd.analyzing': ['분석 중…', 'Analysing…'],
+  'sqlEd.splitTip': ['드래그해서 위·아래 크기 조절', 'Drag to resize top/bottom'],
 } as const
