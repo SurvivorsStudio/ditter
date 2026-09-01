@@ -162,11 +162,45 @@ updates:
     # 코멘트가 남아 있어** 설정을 지우는 것만으로는 돌아오지 않는다(`@dependabot unignore
     # redis` 를 함께 보낸다). **celery 는 그룹 PR #60 안에 있어 닫기만 했고 코멘트가 없다** —
     # 설정만 지우면 된다.
+    #
+    # fastmcp·mcp 도 같은 이유로 뺀다 — 다만 스큐가 아니라 **메이저가 서로를 못박는** 쪽이다.
+    # fastmcp 는 fastmcp-slim 을 통해 자신이 쓰는 mcp 의 메이저를 고정한다: 3.4.7 은
+    # `mcp>=1.24.0,<2.0`, 4.0.0 은 `mcp>=2.0.0,<3.0.0` 을 요구한다. 그래서 fastmcp 와 mcp 는
+    # **한쪽 메이저만 올리면 반대쪽과 반드시 어긋나는 짝**이다 — 위 npm 항목의 vitest ↔ vite
+    # 와 같은 계열("짝이므로 양쪽 다 뺀다. 한쪽만 잠그면 반대쪽이 단독 메이저 PR 로 올라와
+    # 같은 짝을 반대 방향에서 깬다").
+    #
+    # 실제로 일어난 일이다. 2026-08-31 주기에 #106(mcp 1.27.2→2.1.1)·#107(fastmcp
+    # 2.14.0→3.4.7)이 각각 따로 왔고, **둘 다 CI 초록불이었는데 합치면 존재할 수 없는
+    # 조합**이었다. `uv lock` 이 그대로 말해 준다 — "fastmcp==3.4.7 depends on
+    # mcp>=1.24.0,<2.0 ... and your project depends on mcp==2.1.1 ... unsatisfiable".
+    #
+    # 그 초록불이 왜 거짓이었는지도 확인됐다 — 그때 `apps/api/tests` 는 `eai_api.main` 도
+    # `mcp` 도 태우지 않았다. `mcp_server.py`·`main.py` 의 MCP 배선(생성자·데코레이터·
+    # `http_app`·lifespan)을 어떤 테스트도 거치지 않았다는 뜻이라, PR 이 각각 초록불을
+    # 받는 것과 실제로 떠 있는 것은 별개였다 — 위 celery·redis 항목의 「ci.yml 은 api·
+    # worker 를 같이 띄우지 않아 스큐를 잡지 못한다」와 같은 종류의 구멍이다. #115 가
+    # `tests/test_mcp_server.py` 로 그 구멍을 메웠다(lifespan 을 실제로 태우고 도구 목록을
+    # 확인한다) — 지금은 초록불이 뭘 증명하는지가 celery·redis 만큼은 분명해졌다.
+    #
+    # **메이저만** 뺀다. 마이너·패치는 그대로 받는다 — 우리는 `==` 핀이라 Dependabot 의
+    # 갱신 PR 이 없으면 아무도 버전을 올리지 않는다. 이번에 mcp 1.27.2 → 1.29.1 이 정확히
+    # 그렇게 들어왔다(#115).
+    #
+    # 되돌리는 조건은 #114(fastmcp 4.0 + mcp 2.x 로 함께 올리는 추적 이슈) 다.
+    # 되돌릴 때 절차는 위 celery 와 같다 — **`@dependabot ignore this major version`
+    # 코멘트를 보내지 않았다.** #106·#107 은 코멘트 없이 그냥 닫았으므로 아래 설정만
+    # 지우면 갱신이 돌아온다. redis(#62)나 npm 쪽 다섯 건과 달리 `@dependabot unignore`
+    # 를 따로 보낼 필요가 없다.
     ignore:
       - dependency-name: celery
         update-types: [version-update:semver-minor, version-update:semver-major]
       - dependency-name: redis
         update-types: [version-update:semver-minor, version-update:semver-major]
+      - dependency-name: fastmcp
+        update-types: [version-update:semver-major]
+      - dependency-name: mcp
+        update-types: [version-update:semver-major]
 
   # ── CI 액션 ───────────────────────────────────────────────────────────
   # 한도를 적지 않아 기본값 5다. 첫 주기에 3건(#51·#52·#53)이라 여유가 있어 그대로 둔다 —
