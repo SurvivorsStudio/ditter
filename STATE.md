@@ -27,9 +27,14 @@
 ## 내린 결정
 
 - **AI 프롬프트 시드는 번역하지 않는다** (`AiFixPanel.tsx` 주석이 근거).
-  근거가 확인됐다 — **백엔드 `ai_service.py` 의 시스템 프롬프트가 전부 한국어 하드코딩**
-  ("너는 {d} 디버깅 어시스턴트다…")이라 프론트 시드를 번역해도 모델은 한국어로 답한다.
-  진짜 다국어 AI 응답은 백엔드 프롬프트 작업이고, 이 배치의 범위 밖이다.
+  프론트 시드는 그대로 두고 **답변 언어만 서버에서 정한다** — `AiChatRequest.locale` 로
+  받아 `_ANSWER_LANG` 한 줄을 시스템 프롬프트 끝에 붙인다.
+  `_prompt_*` 본문(되묻는 기준·차트 형식·주입 방어)은 오래 다듬은 것이라 영어로 옮기면
+  결이 바뀐다 — 모델은 한국어 지시를 따르면서 영어로 답할 수 있으므로 바꿀 것은 출력 언어
+  하나다. `_prompt_interpret`·`_prompt_report` 가 본문에 박아 두었던 "한국어로"는 지시가
+  충돌하므로 걷어냈다(테스트가 못박는다).
+  프론트는 `useAiChat` **한 곳**에서 `getLocale()` 을 붙인다 — 호출부(챗·수정·튜닝·노트북
+  셀·인라인 프롬프트)마다 붙이게 두면 한 곳을 빠뜨렸을 때 그 자리만 조용히 한국어로 답한다.
 - 화면 문구만 번역하고 **기술 값·프로토콜은 그대로 둔다** — cron 식, 모드 id
   (`upsert`·`initial`·`soft`…), `__deleted`, `-- @conn` 마커, `연합 조회`
   (DUCK_MARKER_NAME), 슬래시 명령 이름, `nodeCatalog` 의 category 식별자
@@ -50,12 +55,7 @@
 항목 label/detail)는 번역 대상 밖이었다. en 화면에서도 그 문구는 한국어로 뜬다.
 프론트만으로는 못 고친다 — 백엔드에 같은 종류의 사전이 필요하다.
 
-### 2. AI 응답 언어 (위 「내린 결정」 참조)
-
-`apps/api/src/eai_api/services/ai_service.py` 의 `_prompt_*` 6개가 한국어 하드코딩이다.
-en 사용자가 「AI로 고치기」를 쓰면 UI 는 영어인데 답만 한국어로 온다.
-
-### 3. 일부러 한국어로 남긴 것 (검증 도구가 잡으므로 오해 말 것)
+### 2. 일부러 한국어로 남긴 것 (검증 도구가 잡으므로 오해 말 것)
 
 전체 스캔에 47건이 남는데 전부 의도된 것이다:
 - `canvas/nodeCatalog.tsx` 36건 — category 식별자(값). 화면은 `CATEGORY_KEY` 로 번역한다.
@@ -71,8 +71,18 @@ en 사용자가 「AI로 고치기」를 쓰면 UI 는 영어인데 답만 한�
 cd apps/web && npx tsc -b --force && npm run lint && npm test && npm run build
 ```
 
-### 4. 숫자 보간이 자릿수 구분을 붙인다
+### 3. 숫자 보간이 자릿수 구분을 붙인다
 
 `i18n/index.ts` 가 number 를 `toLocaleString()` 으로 푼다. UI 에서는 오히려 낫지만
 `AiChatPane` 의 `chat.runTotalNote`·`chat.runResultHead` 는 **모델에 보내는 프롬프트 본문**
-이라 모델이 `1,000행` 을 본다. 판단 필요(2번과 함께 정하면 된다).
+이라 모델이 `1,000행` 을 본다. 무해해 보이지만 확인은 안 했다.
+
+### 4. 이 세션에서 **돌려보지 못한 것**
+
+`uv` 가 이 머신에 없어(`command not found`) 파이썬 테스트를 한 번도 돌리지 못했다.
+`apps/api/tests/test_ai_service.py` 에 답변 언어 테스트 4개를 새로 넣었는데 **구문 검사만
+했다** (`python3 -m py_compile`). 다음에 `uv` 가 있는 환경에서 반드시 확인할 것:
+
+```bash
+cd apps/api && uv run --extra dev pytest -q
+```

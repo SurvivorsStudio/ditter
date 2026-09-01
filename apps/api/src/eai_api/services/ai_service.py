@@ -129,11 +129,14 @@ def _prompt_interpret(
     error: str | None,
     explain: str | None = None,
 ) -> str:
-    """실행 결과 해석 — SQL 을 새로 만들지 않고, 사용자가 받은 결과를 한국어로 풀어 준다."""
+    """실행 결과 해석 — SQL 을 새로 만들지 않고, 사용자가 받은 결과를 풀어 준다.
+
+    답변 언어는 여기서 정하지 않는다 — `_ANSWER_LANG` 이 마지막에 한 줄로 붙인다.
+    """
     d = dialect or "SQL"
     parts = [
         f"너는 {d} 데이터 분석 어시스턴트다. 사용자가 실행한 SQL 과 그 결과 표를 받아, "
-        "결과가 무엇을 의미하는지 한국어로 해석한다.",
+        "결과가 무엇을 의미하는지 해석한다.",
         "규칙:\n"
         "- **SQL 을 새로 만들지 마라. ```sql 코드블록을 넣지 마라.**\n"
         "- 결과를 사람 말로 요약하라: 무엇을 보여주는 표인지, 행·값이 뜻하는 바.\n"
@@ -184,10 +187,13 @@ def _prompt_report(
     error: str | None,
     explain: str | None = None,
 ) -> str:
-    """보고서 작성 — 실행 결과를 구조화된 한국어 마크다운 보고서로 정리한다."""
+    """보고서 작성 — 실행 결과를 구조화된 마크다운 보고서로 정리한다.
+
+    답변 언어는 여기서 정하지 않는다 — `_ANSWER_LANG` 이 마지막에 한 줄로 붙인다.
+    """
     parts = [
-        "너는 데이터 분석 보고서 작성자다. 사용자가 실행한 SQL 과 결과 표를 받아, 읽기 좋은 "
-        "한국어 마크다운 보고서로 정리한다.",
+        "너는 데이터 분석 보고서 작성자다. 사용자가 실행한 SQL 과 결과 표를 받아, "
+        "읽기 좋은 마크다운 보고서로 정리한다.",
         "규칙:\n"
         "- **마크다운**으로 구조를 잡아라: `## 제목`, 굵은 소제목, 글머리표, 필요하면 번호목록.\n"
         "- 구성 예: 개요 → 주요 지표(핵심 수치) → 관찰된 패턴·이상치 → 결론/제안.\n"
@@ -247,6 +253,21 @@ def supported_intents() -> list[str]:
     return sorted(_INTENTS)
 
 
+# ---------------------------------------------------------------- 답변 언어
+
+#: 답변 언어 지시. **프롬프트 본문은 한국어 그대로 두고 이 한 줄만 덧붙인다.**
+#:
+#: 위 `_prompt_*` 들은 오래 다듬은 행동 규칙이라(되묻는 기준·차트 블록 형식·주입 방어)
+#: 영어로 옮기면 그 미세한 결이 바뀐다. 모델은 한국어 지시를 따르면서 영어로 답할 수
+#: 있으므로, 바꿀 것은 **출력 언어 하나**다 — 규칙을 번역하는 것이 아니다.
+#:
+#: SQL 자체는 언어와 무관하다. 바뀌는 것은 설명·되묻는 문장이다.
+_ANSWER_LANG = {
+    "ko": "\n\n- 설명과 질문은 **한국어**로 작성하라.",
+    "en": "\n\n- Write your explanations and questions in **English**.",
+}
+
+
 # ---------------------------------------------------------------- 진입점
 
 
@@ -261,6 +282,7 @@ def chat(
     error: str | None = None,
     explain: str | None = None,
     include_samples: bool = False,
+    locale: str = "ko",
 ) -> AiChatResult:
     if intent not in _INTENTS:
         raise ValidationError(f"알 수 없는 intent: {intent} (가능: {', '.join(supported_intents())})")
@@ -281,6 +303,8 @@ def chat(
         session, db_connection_id, convo_text, include_samples=include_samples
     )
     system = _INTENTS[intent](dialect, schema_text, sql, error, explain)
+    # 모르는 언어 코드는 ko 로 떨어뜨린다 — 지시를 아예 빼면 모델이 제멋대로 고른다.
+    system += _ANSWER_LANG.get(locale, _ANSWER_LANG["ko"])
 
     result = connector.generate(list(messages), system=system)  # ConnectorError 는 전역 핸들러가 처리
     return AiChatResult(

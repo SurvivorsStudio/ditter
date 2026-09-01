@@ -265,3 +265,58 @@ def test_report_intent_forbids_code_blocks(monkeypatch) -> None:
     )  # type: ignore[arg-type]
     assert out.sql is None
     assert "마크다운" in conn.seen["system"]
+
+
+def test_answer_language_defaults_to_korean(monkeypatch) -> None:
+    # 프롬프트 본문은 한국어 그대로 두고, 답변 언어만 마지막 한 줄로 정한다.
+    conn = _AiConnector(text="```sql\nSELECT 1\n```")
+    _patch(monkeypatch, ai_conn=_Conn("gemini"), connector=conn)
+    svc.chat(
+        None,
+        ai_connection_id="ai",
+        messages=[{"role": "user", "content": "전체 조회"}],
+    )  # type: ignore[arg-type]
+    assert conn.seen["system"].endswith("- 설명과 질문은 **한국어**로 작성하라.")
+
+
+def test_answer_language_english(monkeypatch) -> None:
+    conn = _AiConnector(text="```sql\nSELECT 1\n```")
+    _patch(monkeypatch, ai_conn=_Conn("gemini"), connector=conn)
+    svc.chat(
+        None,
+        ai_connection_id="ai",
+        messages=[{"role": "user", "content": "select everything"}],
+        locale="en",
+    )  # type: ignore[arg-type]
+    system = conn.seen["system"]
+    assert system.endswith("- Write your explanations and questions in **English**.")
+    # 규칙 본문은 그대로 한국어다 — 번역한 것이 아니라 출력 언어만 덧붙였다.
+    assert "```sql 코드블록" in system
+
+
+def test_unknown_locale_falls_back_to_korean(monkeypatch) -> None:
+    # 지시를 아예 빼면 모델이 제멋대로 고른다 — 모르는 값은 ko 로 떨군다.
+    conn = _AiConnector(text="ok")
+    _patch(monkeypatch, ai_conn=_Conn("gemini"), connector=conn)
+    svc.chat(
+        None,
+        ai_connection_id="ai",
+        messages=[{"role": "user", "content": "hi"}],
+        locale="ja",
+    )  # type: ignore[arg-type]
+    assert conn.seen["system"].endswith("- 설명과 질문은 **한국어**로 작성하라.")
+
+
+def test_interpret_prompt_does_not_pin_output_language(monkeypatch) -> None:
+    # 본문이 "한국어로 해석한다"를 박아 두면 en 요청에서 지시가 충돌한다.
+    conn = _AiConnector(text="요약")
+    _patch(monkeypatch, ai_conn=_Conn("gemini"), connector=conn)
+    svc.chat(
+        None,
+        ai_connection_id="ai",
+        messages=[{"role": "user", "content": "결과 표: ..."}],
+        intent="sql.interpret",
+        locale="en",
+    )  # type: ignore[arg-type]
+    body = conn.seen["system"].rsplit("\n\n", 1)[0]  # 마지막 언어 지시 줄을 뺀 본문
+    assert "한국어" not in body
