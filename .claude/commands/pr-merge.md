@@ -82,10 +82,13 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
     ```
     끝난 뒤 `gh pr view <n> --json statusCheckRollup` 으로 다시 확인한다.
   - 이 명령이 요구하는 체크(`build-test`)가 **하나도 잡히지 않으면**:
-    - 저장소에 **CI 워크플로 자체가 없으면**(`.github/workflows/` 가 비어 있거나 없음) — 이
-      저장소는 아직 **CI 미구성** 상태다(이관 직후 기본값). CI 게이트를 **통과로 처리하되**, 보고에
-      "CI 미구성 — CI 게이트 없이 머지함, 후속으로 `.github/workflows` (pytest + vitest, job 이름
-      `build-test`) 추가 권장" 을 반드시 남긴다.
+    - 저장소에 **CI 워크플로 자체가 없으면**(`.github/workflows/` 가 비어 있거나 없음) —
+      **종료한다.** 예전 판본은 "CI 미구성이니 통과로 처리하고 보고에 남긴다"였는데, 위 표대로
+      `build-test` 가 **required check** 인 지금은 그 검사가 영영 보고되지 않아 **머지 자체가
+      성립하지 않는다.** 통과시키면 3번 재확인이 `BLOCKED` 로 떨어지고, 그 자리 안내는 "보호
+      설정이 바뀌었을 수 있다"라 **원인을 엉뚱한 데서 찾게 된다.** 대신 무엇을 해야 하는지 적어
+      끝낸다 — `.github/workflows` 에 CI 를 추가하거나(job 이름 `build-test`, pytest + vitest),
+      보호 설정의 required check 를 조정하거나.
     - 워크플로는 있는데 체크런이 아직 안 붙었으면 — PR 생성 직후 잠깐 비는 경우다. 10초 간격 최대
       3회 `gh pr view <n> --json statusCheckRollup` 을 다시 읽고, 그래도 `build-test` 가 없으면
       워크플로가 트리거되지 않은 것으로 보고 종료한다.
@@ -240,17 +243,23 @@ gh api graphql -f query='
       }
     }
   }' -F owner=SurvivorsStudio -F repo=ditter -F pr=<n> \
-  --jq '.data as $d | $d.repository.pullRequest.reviewThreads as $t | [$t.nodes[] | select(.isResolved == false) | select(.comments.nodes[0] != null) | {id, at: "\(.path):\(.line // "줄 불명")", by: .comments.nodes[0].author.login, kind: .comments.nodes[0].author.__typename, body: .comments.nodes[0].body}] as $open | {total: $t.totalCount, read: ($t.nodes | length), mine: [$open[] | select(.by == $d.viewer.login) | {id, at}], others: [$open[] | select(.by != $d.viewer.login and .kind != "Bot") | {id, at, by}]}'
+  --jq '.data as $d | $d.repository.pullRequest.reviewThreads as $t | [$t.nodes[] | select(.isResolved == false) | select(.comments.nodes[0] != null) | {id, at: "\(.path):\(.line // "줄 불명")", by: .comments.nodes[0].author.login, kind: .comments.nodes[0].author.__typename, body: .comments.nodes[0].body}] as $open | {total: $t.totalCount, read: ($t.nodes | length), mine: [$open[] | select(.by == $d.viewer.login) | {id, at}], others: [$open[] | select(.by != $d.viewer.login and .kind != "Bot") | {id, at, by}], bots: [$open[] | select(.by != $d.viewer.login and .kind == "Bot") | {id, at, by}]}'
 ```
 
-`mine` 은 **`gh` 를 실행하는 계정**(`viewer.login`)이 남긴 미해결 스레드, `others` 는 **사람이
-남긴 미반영 지적**이다. `others` 에서 빼는 것은 봇(`__typename == "Bot"`)과 viewer 자신이다 —
+미해결 스레드를 셋으로 가른다 — `mine` 은 **`gh` 를 실행하는 계정**(`viewer.login`)이 남긴 것,
+`others` 는 **사람이 남긴 미반영 지적**, `bots` 는 리뷰 봇이 남긴 것(`__typename == "Bot"`)이다.
 "자기 자신"은 PR 작성자가 아니라 viewer 로 못박는다(둘이 대개 같지만 규칙으로는 다르다).
+
+**봇을 빼지 않고 따로 담는 이유가 있다.** `required_conversation_resolution` 은 작성자를 가리지
+않으므로 봇 스레드 하나로도 머지가 막힌다. 목록에서 빼 버리면 2번은 아무것도 접지 않고 3번이
+`BLOCKED` 로 끝나며 "원인을 판정하지 못한다"고 보고하는데, 원인은 방금 읽은 조회 안에 있었다 —
+이 절이 없애겠다고 한 모양 그대로다. 이 저장소에 아직 리뷰 봇은 없지만, 붙는 순간 이 경로가 산다.
 
 **읽자마자 세 가지를 본다** — §1d 가 세워 둔 기준을 여기에도 그대로 적용한다.
 
-- **출력이 아예 없으면 통과가 아니라 실패다.** `{"total":N,"read":N,"mine":[],"others":[]}` 처럼
-  무언가 출력된 것만 "접을 것도 물을 것도 없다"로 읽는다. 빈 화면은 조회 실패(인증 만료·오타)와
+- **출력이 아예 없으면 통과가 아니라 실패다.** `{"bots":[],"mine":[],"others":[],"read":N,"total":N}`
+  처럼 무언가 출력된 것만 "접을 것도 물을 것도 없다"로 읽는다. (키가 사전순인 것은 `gh` 의 jq 가
+  그렇게 내기 때문이다 — 필터에 쓴 순서와 무관하다. 예시를 필터 순서로 "고치지" 말 것.) 빈 화면은 조회 실패(인증 만료·오타)와
   구별되지 않는다 — 그것을 "남의 지적이 없다"로 읽으면 물어봤어야 할 것을 묻지 않고 지나간다.
 - **`read` 가 `total` 보다 작으면 목록이 잘린 것이다**(스레드 100건 초과). 그때는 **아무것도
   접지 말고** 그 사실을 보고하고 종료한다. 일부만 접으면 나머지 때문에 3번이 여전히 `BLOCKED`
@@ -258,17 +267,17 @@ gh api graphql -f query='
 - **`line` 이 없는 스레드가 있다**(코드가 바뀌어 outdated 가 된 것). 위 표기가 `줄 불명` 으로
   떨어뜨리므로 보고에 그대로 쓴다 — `파일:null` 로 적으면 읽는 사람이 오류로 본다.
 
-#### `others` 가 있으면 묻는다 — "그 스레드도 접어도 되는지"
+#### `others`·`bots` 가 있으면 묻는다 — "그 스레드도 접어도 되는지"
 
 요약해 보여주고 **"그 스레드도 접어도 되는지"를 묻는다.** 예전에는 "그대로 머지할지"를 물었는데
 그 물음에는 답할 수가 없다 — `required_conversation_resolution` 이 켜져 있어(1b 의 표)
 "머지해라"라고 답해도 GitHub 이 막고, 3번이 **원인을 모른 채** 종료한다. 그 원인은 방금 사용자에게
 보여 준 그 스레드다. **아는 원인을 모른다고 보고하게 되는 물음은 두지 않는다.**
 
-- **접어도 된다**고 하면 아래 resolve 대상을 `mine + others` 로 한다. 남의 지적을 대신 닫는
-  것이므로 **이 허락은 이번 머지 한 번에만 유효하다** — 다음 실행이 물려받지 않는다.
+- **접어도 된다**고 하면 아래 resolve 대상을 `mine + others + bots` 로 한다. 남의 지적을 대신
+  닫는 것이므로 **이 허락은 이번 머지 한 번에만 유효하다** — 다음 실행이 물려받지 않는다.
 - **아니라고 하면 종료한다.** 그 사람과 정리한 뒤 다시 부르라고 안내한다.
-- `others` 가 비어 있으면 묻지 않는다.
+- **둘 다 비어 있으면 묻지 않는다.** 봇 스레드만 있을 때도 묻는다 — 접는 판단은 사람이 한다.
 
 #### resolve 하고 진행한다
 
@@ -287,8 +296,8 @@ gh api graphql -f query='mutation($id:ID!){ resolveReviewThread(input:{threadId:
 
 지킬 것 셋:
 
-- **묻지 않고 접는 것은 `mine` 뿐이다.** `others` 는 위 물음에서 **허락받은 것만** 접고, 그
-  허락은 이번 실행에만 유효하다. 허락 없이 남의 지적을 대신 닫지 않는다.
+- **묻지 않고 접는 것은 `mine` 뿐이다.** `others`·`bots` 는 위 물음에서 **허락받은 것만** 접고,
+  그 허락은 이번 실행에만 유효하다. 허락 없이 남의 지적을 대신 닫지 않는다.
 - **무엇을 resolve 했는지 5번 보고에 반드시 남긴다.** 조용히 접으면 리뷰 기록이 사라진 것처럼
   보인다. resolve 는 글을 지우지 않고 'Resolved' 로 접을 뿐이라는 것도 함께 적는다. 남의
   스레드를 접었다면 **허락받아 접었다는 사실과 그 목록**을 따로 적는다.
