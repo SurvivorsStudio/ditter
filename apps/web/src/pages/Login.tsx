@@ -3,6 +3,7 @@ import { api } from '../api/client'
 import { auth, tokenResponseSchema } from '../api/auth'
 import { Banner, Spinner } from '../components/common'
 import { setLocale, useLocale, useT } from '../i18n'
+import { queryClient } from '../main'
 
 export function Login() {
   const [email, setEmail] = useState('')
@@ -37,7 +38,11 @@ export function Login() {
         type="button"
         className="login-lang"
         title={t('common.langToggle')}
-        onClick={() => setLocale(locale === 'ko' ? 'en' : 'ko')}
+        onClick={() => {
+          setLocale(locale === 'ko' ? 'en' : 'ko')
+          // 서버가 만든 문구(오류 detail 등)도 새 언어로 다시 받는다 — App 의 언어 버튼과 같다
+          void queryClient.invalidateQueries()
+        }}
       >
         {locale === 'ko' ? 'EN' : '한'}
       </button>

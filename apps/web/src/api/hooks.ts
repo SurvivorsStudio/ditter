@@ -1,7 +1,6 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { z } from 'zod'
 import { api } from './client'
-import { getLocale } from '../i18n'
 import { DUCK_TYPES, duckDatabase, duckRef, type DuckTable } from '../canvas/duckRefs'
 import {
   cdcStreamListItemSchema,
@@ -290,13 +289,12 @@ export function useAiChat() {
       error?: string | null
       explain?: string | null
       include_samples?: boolean
-      // locale 은 호출부가 넘기지 않는다 — 아래에서 한 번만 붙인다.
+      // 답변 언어는 본문에 없다 — `client.ts` 가 모든 요청에 `Accept-Language` 를
+      // 실어 보내고 서버가 그 하나만 본다. 본문에도 두면 같은 결정이 두 군데가 된다.
     }) =>
       api.parsed(aiChatOutSchema, '/ai/chat', {
         method: 'POST',
-        // 답변 언어는 **보내는 순간의** 화면 언어다. 호출부(챗·수정·튜닝·노트북 셀·인라인
-        // 프롬프트)마다 붙이게 두면 한 곳을 빠뜨렸을 때 그 자리만 조용히 한국어로 답한다.
-        body: { ...body, locale: getLocale() },
+        body,
       }),
   })
 }

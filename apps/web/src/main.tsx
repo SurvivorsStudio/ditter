@@ -5,7 +5,9 @@ import { BrowserRouter } from 'react-router-dom'
 import { App } from './App'
 import './styles.css'
 
-const queryClient = new QueryClient({
+/** 언어 전환이 서버 문구를 다시 받아오려면 이 클라이언트를 화면 밖에서도 만져야 한다.
+ *  (`i18n/locale.ts` 의 setLocale 직후 invalidateQueries → App·Login 의 언어 버튼) */
+export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 5_000,
