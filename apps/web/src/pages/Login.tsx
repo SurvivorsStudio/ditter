@@ -3,7 +3,7 @@ import { api } from '../api/client'
 import { auth, tokenResponseSchema } from '../api/auth'
 import { Banner, Spinner } from '../components/common'
 import { switchLocale, useLocale, useT } from '../i18n'
-import { queryClient } from '../main'
+import { queryClient } from '../api/queryClient'
 
 export function Login() {
   const [email, setEmail] = useState('')
