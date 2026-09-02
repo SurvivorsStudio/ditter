@@ -58,7 +58,7 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
 > |---|---|
 > | `required_status_checks` | `build-test` (`strict: false`) |
 > | `required_approving_review_count` | 1 |
-> | `dismiss_stale_reviews` | true |
+> | `dismiss_stale_reviews` | **true** — 새 커밋을 push 하면 기존 승인이 취소된다 |
 > | `enforce_admins` | true |
 > | `required_linear_history` | true |
 > | `required_conversation_resolution` | **true** — 2번이 이것 때문에 있다 |
@@ -68,9 +68,12 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
 > 설정은 바뀔 수 있다 — 이 표와 어긋나는 동작을 보면 표부터 다시 읽는다.
 
 - `reviewDecision == "CHANGES_REQUESTED"` 면 종료 — 리뷰 코멘트를 먼저 반영하고 `/pr` 로 재준비.
-  `reviewDecision == "APPROVED"` 면 **통과**. **빈 값이거나 `REVIEW_REQUIRED`** 이면 종료 —
-  승인이 필요하다(위 표). `.claude/commands/pr.md` §6-D 를 참고하여 **자기 PR 을 자기가
-  승인할 수 없다는 점**을 기억하고, 다른 사람의 리뷰를 기다린다.
+  **새 커밋만으로는 취소되지 않는다** — `dismiss_stale_reviews` 는 승인만 취소하고 변경 요청은
+  유지한다. 재준비 뒤 리뷰어에게 다시 검토를 요청해야 한다.
+- `reviewDecision == "APPROVED"` 면 **통과** — **승인은 마지막 push 뒤에 받아야 한다.** 승인을
+  받은 뒤 `/pr` 을 다시 돌리면(6-C 경로) push 로 승인이 취소되어 이 게이트가 다시 막힌다.
+  **빈 값이거나 `REVIEW_REQUIRED`** 이면 종료 — 승인이 필요하다(위 표). `.claude/commands/pr.md`
+  §6-D 를 참고하여 **자기 PR 을 자기가 승인할 수 없다는 점**을 기억하고, 다른 사람의 리뷰를 기다린다.
 - **CI 는 "실패가 없으면 통과"가 아니라 "성공을 확인해야 통과"다.** `/pr` 로 PR 을 만든 직후
   `/pr-merge` 를 부르는 흐름에서 CI 는 아직 도는 중이고(실측 약 40초), 그때 `statusCheckRollup`
   에는 실패가 없다 — 검사 전이기 때문이다. `build-test` 가 required check 이라 그 상태로 머지를
@@ -408,7 +411,7 @@ PR #110 을 머지하며 실제로 밟았다. 9건 전부 `NOT_FOUND` 로 떨어
   어디부터 다시 해야 하는지 알 수 없다.
 
 그 외에는 묻지 않는다. 특히 **"되돌리기 어려운 작업이니 한 번 더 확인"** 을 이유로 되묻지 않는다 —
-명시적 호출 + 게이트 통과가 곧 승인이다.
+명시적 호출 + 게이트 통과가 곧 머지 실행 동의다.
 
 머지해도 되는지 걸리는 점이 있어도, 그것이 **머지되는 코드의 동작에 영향을 주지 않는 사정**이면
 (예: 방금 발견한 문서 부정확, 이월된 리뷰 항목, 후속 정리 거리) 머지를 멈추지 말고 **진행한 뒤
