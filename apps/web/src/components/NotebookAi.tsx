@@ -11,6 +11,7 @@ import { Markdown } from './Markdown'
 import { MiniSelect } from '../canvas/AiChatPane'
 import { useAiChat } from '../api/hooks'
 import type { SelectOption } from './SearchSelect'
+import { useT } from '../i18n'
 
 type CellMsg = {
   id: string
@@ -46,6 +47,7 @@ export function CellAiChat({
   onInsert: (sql: string) => void
   onInsertBelow: (sql: string) => void
 }) {
+  const t = useT()
   const chat = useAiChat()
   const [messages, setMessages] = useState<CellMsg[]>([])
   const [input, setInput] = useState('')
@@ -91,7 +93,7 @@ export function CellAiChat({
             {
               id: uid(),
               role: 'assistant',
-              display: err instanceof Error ? err.message : 'AI 호출에 실패했습니다.',
+              display: err instanceof Error ? err.message : t('nb.ai.failed'),
               content: '',
               error: true,
             },
@@ -105,15 +107,17 @@ export function CellAiChat({
       <div
         className="nb-ai-head"
         onClick={() => setCollapsed((c) => !c)}
-        title={collapsed ? '펼치기' : '접기'}
+        title={collapsed ? t('nb.expand') : t('nb.collapse')}
       >
         <span className={`nb-ai-caret ${collapsed ? '' : 'open'}`}>
           <Icon.chevron />
         </span>
         <Icon.bolt />
-        <span>AI 어시스턴트</span>
+        <span>{t('nb.ai.title')}</span>
         {collapsed && messages.length > 0 && (
-          <span className="nb-ai-count">{messages.filter((m) => m.role === 'user').length}개 대화</span>
+          <span className="nb-ai-count">
+            {t('nb.ai.convCount', { n: messages.filter((m) => m.role === 'user').length })}
+          </span>
         )}
         <div className="nb-ai-head-right" onClick={(e) => e.stopPropagation()}>
           {!collapsed && (
@@ -121,17 +125,17 @@ export function CellAiChat({
               value={aiConnId}
               options={modelOptions}
               onChange={onModelChange}
-              placeholder="AI 모델"
+              placeholder={t('nb.ai.model')}
               align="right"
               up={false}
             />
           )}
           {messages.length > 0 && (
-            <button className="nb-ai-clear" onClick={() => setMessages([])} title="대화 비우기">
+            <button className="nb-ai-clear" onClick={() => setMessages([])} title={t('nb.ai.clear')}>
               <Icon.trash />
             </button>
           )}
-          <button className="nb-ai-clear nb-ai-close" onClick={onClose} title="AI 챗 닫기">
+          <button className="nb-ai-clear nb-ai-close" onClick={onClose} title={t('nb.ai.close')}>
             ×
           </button>
         </div>
@@ -154,11 +158,11 @@ export function CellAiChat({
                   )}
                   {m.sql && (
                     <div className="nb-ai-actions">
-                      <button className="btn sm primary" onClick={() => onInsert(m.sql!)} title="이 셀의 SQL 을 이 결과로 바꿉니다">
-                        <Icon.edit /> 이 셀에 넣기
+                      <button className="btn sm primary" onClick={() => onInsert(m.sql!)} title={t('nb.ai.insertTitle')}>
+                        <Icon.edit /> {t('nb.ai.insert')}
                       </button>
-                      <button className="btn sm" onClick={() => onInsertBelow(m.sql!)} title="아래에 새 셀을 만들어 넣습니다">
-                        <Icon.plus /> 아래 새 셀
+                      <button className="btn sm" onClick={() => onInsertBelow(m.sql!)} title={t('nb.ai.insertBelowTitle')}>
+                        <Icon.plus /> {t('nb.ai.insertBelow')}
                       </button>
                     </div>
                   )}
@@ -170,7 +174,7 @@ export function CellAiChat({
             <div className="nb-ai-msg assistant">
               <div className="nb-ai-bubble nb-ai-loading">
                 <span className="ai-progress-spin" />
-                생성 중…
+                {t('nb.ai.generating')}
               </div>
             </div>
           )}
@@ -188,13 +192,13 @@ export function CellAiChat({
                 send()
               }
             }}
-            placeholder={cellSrc.trim() ? '이 SQL 을 어떻게 바꿀까요…' : 'SQL 로 만들 내용을 적어주세요…'}
+            placeholder={cellSrc.trim() ? t('nb.ai.editPlaceholder') : t('nb.ai.newPlaceholder')}
           />
           <button
             className="btn sm primary"
             onClick={send}
             disabled={chat.isPending || !input.trim()}
-            title="전송 (Enter)"
+            title={t('nb.ai.sendTitle')}
           >
             ↵
           </button>

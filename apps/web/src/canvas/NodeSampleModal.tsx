@@ -1,8 +1,10 @@
 import { SPEC_BY_KIND } from './nodeCatalog'
+import { useT } from '../i18n'
 import { useCanvasStore } from '../store/canvasStore'
 
 /** 노드 실행 결과 샘플을 표로 보여준다 (엣지의 결과 칩에서 연다). */
 export function NodeSampleModal({ nodeId, onClose }: { nodeId: string; onClose: () => void }) {
+  const tr = useT()
   const node = useCanvasStore((s) => s.nodes.find((n) => n.id === nodeId))
   const sample = node?.data.runState?.sample
   if (!node || !sample) return null
@@ -20,22 +22,28 @@ export function NodeSampleModal({ nodeId, onClose }: { nodeId: string; onClose: 
           <span className="sample-badge" style={{ background: spec?.color ?? 'var(--muted)' }}>
             {IconComp ? <IconComp /> : null}
           </span>
-          <h3>{node.data.label || spec?.title || node.id} · 실행 결과</h3>
-          <button className="x" onClick={onClose} aria-label="닫기">
+          <h3>
+            {tr('cui.sample.title', {
+              label: node.data.label || (spec ? tr(spec.titleKey) : node.id),
+            })}
+          </h3>
+          <button className="x" onClick={onClose} aria-label={tr('common.close')}>
             ×
           </button>
         </div>
 
         <div className="sample-meta">
-          {sample.rows.length.toLocaleString()}행 미리보기
-          {sample.truncated && ' (앞부분만 · 실제로는 더 많습니다)'} · 컬럼 {columns.length}개
+          {tr(sample.truncated ? 'cui.sample.metaPartial' : 'cui.sample.meta', {
+            rows: sample.rows.length,
+            cols: columns.length,
+          })}
         </div>
 
         <div className="sample-scroll">
           {sample.rows.length === 0 ? (
             <div className="empty" style={{ padding: 30 }}>
-              결과 행이 없습니다.
-            </div>
+              {tr('cui.noResultRows')}
+              </div>
           ) : (
             <table className="sample-table">
               <thead>

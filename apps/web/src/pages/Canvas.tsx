@@ -37,6 +37,7 @@ import { ResultDrawer } from '../canvas/ResultDrawer'
 import { ResultEdge } from '../canvas/ResultEdge'
 import { Banner, EmptyState, Spinner, formatTime } from '../components/common'
 import { Icon } from '../components/icons'
+import { useT } from '../i18n'
 import { useCanvasStore } from '../store/canvasStore'
 
 const nodeTypes = { eai: EaiNode, memo: MemoNode, frame: GroupNode }
@@ -59,6 +60,7 @@ export function Canvas({ pipelineId, embedded }: { pipelineId?: string; embedded
 }
 
 function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; embedded: boolean }) {
+  const t = useT()
   const params = useParams<{ pipelineId: string }>()
   const pipelineId = propId ?? params.pipelineId
   const navigate = useNavigate()
@@ -135,15 +137,22 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
 
   useEffect(() => {
     if (activeRunId && isTerminal(stream.status)) {
-      const scope = runNodeId ? `노드 ${runNodeId} ` : ''
+      const scope = runNodeId ? t('canvasPage.nodeScope', { id: runNodeId }) : ''
       setMessage(
         stream.status === 'success'
-          ? { kind: 'ok', text: `${scope}실행 완료 — ${stream.records.toLocaleString()}건` }
-          : { kind: 'error', text: `${scope}실행 ${stream.status}: ${stream.error ?? '원인 미상'}` },
+          ? { kind: 'ok', text: t('canvasPage.runDone', { scope, n: stream.records }) }
+          : {
+              kind: 'error',
+              text: t('canvasPage.runEnded', {
+                scope,
+                status: stream.status,
+                error: stream.error ?? t('canvasPage.unknownCause'),
+              }),
+            },
       )
       setRunNodeId(null)
     }
-  }, [stream.status, stream.records, stream.error, activeRunId, runNodeId])
+  }, [stream.status, stream.records, stream.error, activeRunId, runNodeId, t])
 
   /** 포인터가 휴지통 위인가 (드래그 중에만 의미 있음) */
   const isOverTrash = useCallback((event: MouseEvent | TouchEvent) => {
@@ -204,7 +213,7 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
         store.copySelection()
         const count = useCanvasStore.getState().clipboard?.nodes.length ?? 0
         if (count > 0) {
-          setMessage({ kind: 'ok', text: `노드 ${count}개 복사 — Ctrl/⌘+V 로 붙여넣기` })
+          setMessage({ kind: 'ok', text: t('canvasPage.copiedNodes', { n: count }) })
         }
       } else if (key === 'v') {
         if (!useCanvasStore.getState().clipboard) return
@@ -219,7 +228,7 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
           store.redo()
         } else {
           if (store.past.length === 0) {
-            setMessage({ kind: 'warn', text: '되돌릴 작업이 없습니다' })
+            setMessage({ kind: 'warn', text: t('canvasPage.nothingToUndo') })
             return
           }
           store.undo()
@@ -228,7 +237,7 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [])
+  }, [t])
 
   const onDrop = useCallback(
     (event: React.DragEvent) => {
@@ -253,13 +262,13 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
       const errors = issues.filter((i) => i.level === 'error')
       setMessage(
         errors.length > 0
-          ? { kind: 'warn', text: `저장했지만 실행 전 해결이 필요합니다: ${errors[0].message}` }
-          : { kind: 'ok', text: '저장했습니다' },
+          ? { kind: 'warn', text: t('canvasPage.savedButIssues', { message: errors[0].message }) }
+          : { kind: 'ok', text: t('canvasPage.saved') },
       )
       // 실행 중인 스트림이 있으면 변경이 자동 반영되지 않는다 — 중지 후 재시작을 안내한다
       if (activeStream) setStreamWarn(true)
     } catch (e) {
-      setMessage({ kind: 'error', text: e instanceof Error ? e.message : '저장 실패' })
+      setMessage({ kind: 'error', text: e instanceof Error ? e.message : t('canvasPage.saveFailed') })
     }
   }
 
@@ -275,7 +284,7 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
       setActiveRunId(created.id)
       setShowLogs(true)
     } catch (e) {
-      setMessage({ kind: 'error', text: e instanceof Error ? e.message : '실행 실패' })
+      setMessage({ kind: 'error', text: e instanceof Error ? e.message : t('canvasPage.runFailed') })
     }
   }
 
@@ -302,14 +311,20 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
       const result = await revalidate()
       const errors = (result.data?.issues ?? []).filter((i) => i.level === 'error')
       if (errors.length > 0) {
-        setMessage({ kind: 'warn', text: `동기화 시작 전 해결이 필요합니다: ${errors[0].message}` })
+        setMessage({
+          kind: 'warn',
+          text: t('canvasPage.syncIssuesBeforeStart', { message: errors[0].message }),
+        })
         return
       }
       setPreflightOpen(true)
       syncPreflight.reset()
       await syncPreflight.mutateAsync(pipelineId)
     } catch (e) {
-      setMessage({ kind: 'error', text: e instanceof Error ? e.message : '착수 점검 실패' })
+      setMessage({
+        kind: 'error',
+        text: e instanceof Error ? e.message : t('canvasPage.preflightFailed'),
+      })
     }
   }
 
@@ -322,11 +337,13 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
       setMessage({
         kind: notes ? 'warn' : 'ok',
         text:
-          `동기화를 시작했습니다 (${stream.status}). [모니터] 스트림 탭에서 상태를 확인하세요.` +
-          (notes ? ` — ${notes}` : ''),
+          t('canvasPage.syncStarted', { status: stream.status }) + (notes ? ` — ${notes}` : ''),
       })
     } catch (e) {
-      setMessage({ kind: 'error', text: e instanceof Error ? e.message : '동기화 시작 실패' })
+      setMessage({
+        kind: 'error',
+        text: e instanceof Error ? e.message : t('canvasPage.syncStartFailed'),
+      })
     }
   }
 
@@ -339,16 +356,22 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
       const result = await revalidate()
       const errors = (result.data?.issues ?? []).filter((i) => i.level === 'error')
       if (errors.length > 0) {
-        setMessage({ kind: 'warn', text: `스트림 시작 전 해결이 필요합니다: ${errors[0].message}` })
+        setMessage({
+          kind: 'warn',
+          text: t('canvasPage.streamIssuesBeforeStart', { message: errors[0].message }),
+        })
         return
       }
       const stream = await startStream.mutateAsync(pipelineId)
       setMessage({
         kind: 'ok',
-        text: `스트림을 시작했습니다 (${stream.status}). [모니터] Streams 탭에서 상태를 확인하세요.`,
+        text: t('canvasPage.streamStarted', { status: stream.status }),
       })
     } catch (e) {
-      setMessage({ kind: 'error', text: e instanceof Error ? e.message : '스트림 시작 실패' })
+      setMessage({
+        kind: 'error',
+        text: e instanceof Error ? e.message : t('canvasPage.streamStartFailed'),
+      })
     }
   }
 
@@ -403,10 +426,13 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
         setShowLogs(true)
       } catch (e) {
         setRunNodeId(null)
-        setMessage({ kind: 'error', text: e instanceof Error ? e.message : '노드 실행 실패' })
+        setMessage({
+          kind: 'error',
+          text: e instanceof Error ? e.message : t('canvasPage.nodeRunFailed'),
+        })
       }
     },
-    [pipelineId, save, toDefinition, markClean, clearRunStates, run, declaredVariables, apiTrigger],
+    [pipelineId, save, toDefinition, markClean, clearRunStates, run, declaredVariables, apiTrigger, t],
   )
 
   // API 트리거 테스트 실행 — 값을 채우는 모달을 먼저 연다.
@@ -423,10 +449,13 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
         }
         setTestRun({ triggerId: nodeId, target: nodeId })
       } catch (e) {
-        setMessage({ kind: 'error', text: e instanceof Error ? e.message : '저장 실패' })
+        setMessage({
+          kind: 'error',
+          text: e instanceof Error ? e.message : t('canvasPage.saveFailed'),
+        })
       }
     },
-    [pipelineId, save, toDefinition, markClean],
+    [pipelineId, save, toDefinition, markClean, t],
   )
 
   // 모달이 값을 다 채우면 실행한다.
@@ -487,8 +516,8 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
     return (
       <div className="view">
         <div className="pad">
-          <EmptyState title="파이프라인을 선택하세요">
-            홈에서 파이프라인을 고르거나 새로 만들어 주세요.
+          <EmptyState title={t('canvasPage.selectPipeline')}>
+            {t('canvasPage.selectPipelineHint')}
           </EmptyState>
         </div>
       </div>
@@ -499,7 +528,7 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
     return (
       <div className="view">
         <div className="pad">
-          <EmptyState title="불러오는 중…" />
+          <EmptyState title={t('runs.loading')} />
         </div>
       </div>
     )
@@ -509,9 +538,9 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
     return (
       <div className="view">
         <div className="pad">
-          <EmptyState title="파이프라인을 찾을 수 없습니다">
+          <EmptyState title={t('canvasPage.notFound')}>
             <button className="btn" style={{ marginTop: 12 }} onClick={() => navigate('/')}>
-              홈으로
+              {t('canvasPage.goHome')}
             </button>
           </EmptyState>
         </div>
@@ -534,21 +563,24 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
               <b>{pipeline.name}</b>
             </div>
             <div className="ctool" style={{ color: dirty ? 'var(--amber)' : 'var(--muted)' }}>
-              {dirty ? '● 저장되지 않음' : `v${pipeline.version} · 저장됨`}
+              {dirty
+                ? t('canvasPage.unsavedDot')
+                : t('canvasPage.savedVersion', { version: String(pipeline.version) })}
             </div>
             {activeStream && (
               <div
                 className="ctool"
                 style={{ color: 'var(--amber)', cursor: 'pointer' }}
                 onClick={() => setStreamWarn(true)}
-                title="변경사항은 스트림 재시작 후 반영됩니다"
+                title={t('canvasPage.streamRunningWarnTitle')}
               >
-                ⚠ 스트림 실행중 — 변경은 재시작 필요
+                {t('canvasPage.streamRunningWarn')}
               </div>
             )}
             {running && (
               <div className="ctool" style={{ color: 'var(--blue)' }}>
-                <Spinner /> 실행중 {stream.progress}% · {stream.records.toLocaleString()}건
+                <Spinner />{' '}
+                {t('canvasPage.runningProgress', { progress: stream.progress, n: stream.records })}
               </div>
             )}
           </div>
@@ -556,32 +588,32 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
           <div className="canvas-run">
             {!isCdcPipeline && !isSyncPipeline && (
               <button className="btn" onClick={() => setShowLogs((v) => !v)} disabled={!activeRunId}>
-                로그
+                {t('canvasPage.logs')}
               </button>
             )}
             <button className="btn" onClick={handleSave} disabled={save.isPending}>
               {save.isPending ? <Spinner /> : <Icon.save />}
-              저장
+              {t('canvasPage.save')}
             </button>
             {isSyncPipeline ? (
               <button
                 className="btn primary"
                 onClick={handleOpenPreflight}
                 disabled={syncPreflight.isPending || save.isPending}
-                title="원본 상태를 점검한 뒤 실시간 동기화를 켭니다"
+                title={t('canvasPage.startSyncTitle')}
               >
                 {syncPreflight.isPending ? <Spinner /> : <Icon.broadcast />}
-                동기화 시작
+                {t('canvasPage.startSync')}
               </button>
             ) : isCdcPipeline ? (
               <button
                 className="btn primary"
                 onClick={handleStartStream}
                 disabled={startStream.isPending || save.isPending}
-                title="Debezium 커넥터를 등록해 실시간 수집을 켭니다"
+                title={t('canvasPage.startStreamTitle')}
               >
                 {startStream.isPending ? <Spinner /> : <Icon.broadcast />}
-                스트림 시작
+                {t('canvasPage.startStream')}
               </button>
             ) : (
               <>
@@ -589,10 +621,10 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
                   className="btn"
                   onClick={() => handleRun(true)}
                   disabled={running || run.isPending}
-                  title="워터마크를 무시하고 전체를 다시 적재합니다"
+                  title={t('canvasPage.fullRefreshTitle')}
                 >
                   <Icon.refresh />
-                  전체 재적재
+                  {t('canvasPage.fullRefresh')}
                 </button>
                 <button
                   className="btn primary"
@@ -600,7 +632,7 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
                   disabled={running || run.isPending}
                 >
                   {run.isPending ? <Spinner /> : <Icon.play />}
-                  실행
+                  {t('canvasPage.run')}
                 </button>
               </>
             )}
@@ -651,7 +683,7 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
             aria-hidden={!draggingNode}
           >
             <Icon.trash />
-            <span>{overTrash ? '놓으면 삭제됩니다' : '여기로 끌어 삭제'}</span>
+            <span>{overTrash ? t('canvasPage.trashDrop') : t('canvasPage.trashHint')}</span>
           </div>
 
           {(message || errorIssues.length > 0) && (
@@ -659,7 +691,10 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
               {message && <Banner kind={message.kind}>{message.text}</Banner>}
               {!message && errorIssues.length > 0 && (
                 <Banner kind="warn">
-                  실행 전 해결 필요 ({errorIssues.length}건): {errorIssues[0].message}
+                  {t('canvasPage.issuesBeforeRun', {
+                    n: errorIssues.length,
+                    message: errorIssues[0].message,
+                  })}
                   {errorIssues[0].node_id ? ` (${errorIssues[0].node_id})` : ''}
                 </Banner>
               )}
@@ -691,20 +726,22 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
                   borderBottom: '1px solid #2f3142',
                 }}
               >
-                실행 로그 · #{activeRunId.slice(0, 8)}
+                {t('canvasPage.runLogTitle', { id: activeRunId.slice(0, 8) })}
                 <span style={{ color: stream.connected ? '#7fd6ac' : '#ff9a9a', fontWeight: 600 }}>
-                  {stream.connected ? '● 실시간' : '○ 연결 끊김'}
+                  {stream.connected ? t('canvasPage.liveDot') : t('canvasPage.disconnectedDot')}
                 </span>
                 <button
                   className="btn sm"
                   style={{ marginLeft: 'auto' }}
                   onClick={() => setShowLogs(false)}
                 >
-                  닫기
+                  {t('common.close')}
                 </button>
               </div>
               <div className="logbox" style={{ borderRadius: 0, maxHeight: 'none', flex: 1 }}>
-                {stream.logs.length === 0 && <div style={{ color: '#6f7590' }}>로그 대기 중…</div>}
+                {stream.logs.length === 0 && (
+                  <div style={{ color: '#6f7590' }}>{t('canvasPage.waitingLogs')}</div>
+                )}
                 {stream.logs.map((log) => (
                   <div key={log.id} className={`lvl-${log.level}`}>
                     <span className="ts">{formatTime(log.ts)}</span>
@@ -768,28 +805,34 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
         <div className="overlay" onClick={() => setStreamWarn(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="mh">
-              <h3>⚠ 실행 중인 스트림이 있습니다</h3>
-              <button className="x" onClick={() => setStreamWarn(false)} aria-label="닫기">
+              <h3>{t('canvasPage.streamWarnHead')}</h3>
+              <button className="x" onClick={() => setStreamWarn(false)} aria-label={t('common.close')}>
                 ×
               </button>
             </div>
             <div className="mb" style={{ padding: '18px 22px' }}>
               <Banner kind="warn">
-                이 파이프라인은 <b>실행 중인 CDC 스트림</b>이 있습니다. 방금 저장한 변경사항
-                (특히 <b>소스 테이블·삭제 처리·연결</b>)은 <b>실행 중인 스트림에 자동 반영되지 않습니다.</b>
+                {t('canvasPage.streamWarnBody1')}<b>{t('canvasPage.streamWarnBody1b')}</b>
+                {t('canvasPage.streamWarnBody2')}<b>{t('canvasPage.streamWarnBody2b')}</b>
+                {t('canvasPage.streamWarnBody3')}<b>{t('canvasPage.streamWarnBody3b')}</b>
               </Banner>
               <p style={{ fontSize: 14, color: 'var(--muted)', marginTop: 14, lineHeight: 1.7 }}>
-                변경을 반영하려면 <b>기존 스트림을 중지한 다음 다시 시작</b>하세요.
-                스트림 시작 시점의 소스 설정이 커넥터에 고정되기 때문입니다.
+                {t('canvasPage.streamWarnFix1')}<b>{t('canvasPage.streamWarnFix1b')}</b>
+                {t('canvasPage.streamWarnFix2')}
               </p>
               <ol style={{ fontSize: 14, color: 'var(--ink)', margin: '10px 0 0', paddingLeft: 20, lineHeight: 1.9 }}>
-                <li>[모니터] → 스트림(CDC) 탭에서 이 스트림 <b>중지</b></li>
-                <li>캔버스로 돌아와 <b>[스트림 시작]</b></li>
+                <li>
+                  {t('canvasPage.streamWarnStep1')}<b>{t('canvasPage.streamWarnStep1b')}</b>
+                  {t('canvasPage.streamWarnStep1c')}
+                </li>
+                <li>
+                  {t('canvasPage.streamWarnStep2')}<b>{t('canvasPage.streamWarnStep2b')}</b>
+                </li>
               </ol>
             </div>
             <div className="mf">
               <button className="btn" onClick={() => setStreamWarn(false)}>
-                계속 편집
+                {t('canvasPage.keepEditing')}
               </button>
               <button
                 className="btn primary"
@@ -798,7 +841,7 @@ function CanvasInner({ pipelineId: propId, embedded }: { pipelineId?: string; em
                   navigate('/monitor')
                 }}
               >
-                모니터로 이동
+                {t('canvasPage.goMonitor')}
               </button>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import type { z } from 'zod'
 import { auth } from './auth'
+import { getLocale, t } from '../i18n'
 
 /** 개발 중에는 vite 프록시(/api)를, 배포 시에는 빌드 타임 주입값을 쓴다 */
 const RAW_BASE = import.meta.env.VITE_API_BASE ?? '/api'
@@ -22,10 +23,19 @@ type RequestOptions = {
   signal?: AbortSignal
 }
 
+/** 서버 문구의 언어는 **화면 언어를 그대로** 따른다.
+ *
+ *  브라우저는 이 헤더를 자동으로도 붙인다. 그대로 두면 영어 OS 를 쓰는 한국인이 UI 는
+ *  한국어인데 서버 오류만 영어로 받는다 — `i18n/locale.ts` 가 `navigator.language` 를
+ *  일부러 보지 않는 것과 같은 이유다. 그래서 **항상 덮어쓴다.**
+ *
+ *  붙이는 자리는 `request` 와 `download` **두 곳**이다. 내보내기 실패도 `detail` 을
+ *  그대로 화면에 올리므로 한쪽만 붙이면 그 자리만 조용히 언어가 갈린다.
+ */
 async function request(path: string, options: RequestOptions = {}): Promise<unknown> {
   const { method = 'GET', body, signal } = options
 
-  const headers: Record<string, string> = {}
+  const headers: Record<string, string> = { 'Accept-Language': getLocale() }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const token = auth.token
   if (token) headers.Authorization = `Bearer ${token}`
@@ -42,7 +52,7 @@ async function request(path: string, options: RequestOptions = {}): Promise<unkn
     // 사용자가 취소(AbortController)한 경우는 그대로 전파해 호출부가 조용히 처리하게 한다
     if (e instanceof DOMException && e.name === 'AbortError') throw e
     // 네트워크 자체가 끊긴 경우 — status 0 으로 서버 응답과 구분해서 알린다
-    throw new ApiError(0, `서버에 연결할 수 없습니다 (${API_BASE})`, undefined)
+    throw new ApiError(0, t('api.noServer', { base: API_BASE }), undefined)
   }
 
   const requestId = response.headers.get('X-Request-ID') ?? undefined
@@ -68,7 +78,7 @@ async function request(path: string, options: RequestOptions = {}): Promise<unkn
     const detail =
       typeof payload === 'object' && payload !== null && 'detail' in payload
         ? String((payload as { detail: unknown }).detail)
-        : `요청 실패 (${response.status})`
+        : t('api.requestFailed', { status: String(response.status) })
     throw new ApiError(response.status, detail, requestId)
   }
 
@@ -93,7 +103,7 @@ async function parsed<S extends z.ZodType>(
   const result = schema.safeParse(raw)
   if (!result.success) {
     console.error('API 응답 스키마 불일치', path, result.error.issues, raw)
-    throw new ApiError(500, `응답 형식이 올바르지 않습니다: ${path}`)
+    throw new ApiError(500, t('api.badResponse', { path }))
   }
   return result.data
 }
@@ -103,7 +113,10 @@ async function parsed<S extends z.ZodType>(
  * (내보내기처럼 응답이 파일인 엔드포인트용. `request` 는 JSON 을 가정하므로 못 쓴다.)
  */
 async function download(path: string, body: unknown, filename: string): Promise<void> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Accept-Language': getLocale(),
+  }
   const token = auth.token
   if (token) headers.Authorization = `Bearer ${token}`
 
@@ -111,12 +124,12 @@ async function download(path: string, body: unknown, filename: string): Promise<
   try {
     res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers, body: JSON.stringify(body) })
   } catch {
-    throw new ApiError(0, `서버에 연결할 수 없습니다 (${API_BASE})`)
+    throw new ApiError(0, t('api.noServer', { base: API_BASE }))
   }
   if (res.status === 401 && token) auth.logout()
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    let detail = `내보내기 실패 (${res.status})`
+    let detail = t('api.exportFailed', { status: String(res.status) })
     try {
       const p = JSON.parse(text)
       if (p && typeof p === 'object' && 'detail' in p) detail = String((p as { detail: unknown }).detail)

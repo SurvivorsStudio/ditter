@@ -1,0 +1,236 @@
+"""사전과 `t()` 의 계약.
+
+**이 파일이 배치 1에서 가장 중요하다.** 프론트에는 `keyof typeof MESSAGES` 가 있어
+없는 키를 쓰면 컴파일이 막지만, 파이썬에는 그런 장치가 없고 mypy 도 문자열 키를 못 본다.
+그 검사를 대신하는 것이 여기 `test_every_t_call_uses_a_known_key` 다.
+"""
+
+from __future__ import annotations
+
+import ast
+import re
+from pathlib import Path
+
+import pytest
+
+from eai_api.i18n import MESSAGES, get_locale, locale_from_header, t
+from eai_api.i18n.locale import _locale
+from eai_api.i18n.messages import MODULES
+
+SRC = Path(__file__).resolve().parents[1] / "src" / "eai_api"
+SLOT = re.compile(r"\{(\w+)(?:\|([^|}]*)\|([^}]*))?\}")
+
+#: 키를 리터럴로 받는 호출들 — 값은 키가 몇 번째 인자인가.
+#: `_issue(level, key, ...)` 만 두 번째이고 나머지는 첫 번째.
+#:
+#: **래퍼를 새로 만들면 여기 등록해야 한다.** 빠뜨리면 그 래퍼의 키 오타를 아무도 못 잡고
+#: 화면에 키 문자열이 그대로 뜬다 (`_gate_issue` 가 실제로 그렇게 빠져 있었다).
+_KEY_ARG = {"t": 0, "_issue": 1, "_gate_issue": 0}
+
+
+@pytest.fixture(autouse=True)
+def _reset_locale():
+    token = _locale.set("ko")
+    yield
+    _locale.reset(token)
+
+
+# ---------------------------------------------------------------- 사전
+
+
+def test_every_key_has_both_languages() -> None:
+    for key, pair in MESSAGES.items():
+        assert len(pair) == 2, key
+        assert pair[0].strip(), f"{key}: ko 가 비었다"
+        assert pair[1].strip(), f"{key}: en 이 비었다"
+
+
+def test_no_duplicate_keys_across_modules() -> None:
+    # dict 병합은 중복 키를 조용히 덮어쓴다 — 합계와 크기가 갈리면 어딘가 겹쳤다.
+    total = sum(len(m) for m in MODULES)
+    assert total == len(MESSAGES), "사전 모듈 사이에 중복 키가 있다"
+
+
+def test_slots_match_between_ko_and_en() -> None:
+    # 번역하다 {table} 을 빠뜨리면 그 자리가 조용히 비어 나간다.
+    for key, (ko, en) in MESSAGES.items():
+        ko_slots = {m.group(1) for m in SLOT.finditer(ko)}
+        en_slots = {m.group(1) for m in SLOT.finditer(en)}
+        assert ko_slots == en_slots, f"{key}: 슬롯이 다르다 ko={ko_slots} en={en_slots}"
+
+
+def _literal_keys() -> set[str]:
+    """소스에서 `t("리터럴")` · `_issue(level, "리터럴")` 의 키를 모은다."""
+    found: set[str] = set()
+    for path in SRC.rglob("*.py"):
+        if "i18n" in path.parts:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+                continue
+            pos = _KEY_ARG.get(node.func.id)
+            if pos is None or len(node.args) <= pos:
+                continue
+            arg = node.args[pos]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                found.add(arg.value)
+    return found
+
+
+def test_every_t_call_uses_a_known_key() -> None:
+    # 파이썬에는 keyof 가 없다 — 오타를 잡아 주는 것은 이 테스트뿐이다.
+    unknown = sorted(_literal_keys() - set(MESSAGES))
+    assert not unknown, f"사전에 없는 키를 쓴다: {unknown}"
+
+
+def _all_string_literals() -> set[str]:
+    """소스에 나오는 **모든** 문자열 리터럴.
+
+    고아 검사는 이쪽을 본다. 키가 `t(...)` 에 직접 들어가지 않는 자리가 정상적으로
+    있기 때문이다 — 모듈 상수(`STRUCTURAL_SOURCE_ORPHAN`)로 두거나, 분기를 키로
+    올리느라 변수에 담았다가(`key = ... if ... else ...`) 넘기는 경우.
+    좁게 보면 그런 키를 전부 고아로 오인한다.
+    """
+    found: set[str] = set()
+    for path in SRC.rglob("*.py"):
+        if "i18n" in path.parts:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                found.add(node.value)
+    return found
+
+
+def _check_keys() -> set[str]:
+    """`_check("<리터럴>", ...)` 의 첫 인자 — 착수 점검 항목의 key."""
+    found: set[str] = set()
+    for path in SRC.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "_check"
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+            ):
+                found.add(node.args[0].value)
+    return found
+
+
+def _call_sites() -> list[tuple[str, str, int, set[str]]]:
+    """`t(...)`·`_issue(...)`·`_gate_issue(...)` 호출의 (파일, 키, 줄, 넘긴 변수 이름)."""
+    out: list[tuple[str, str, int, set[str]]] = []
+    for path in SRC.rglob("*.py"):
+        if "i18n" in path.parts:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+                continue
+            pos = _KEY_ARG.get(node.func.id)
+            if pos is None or len(node.args) <= pos:
+                continue
+            arg = node.args[pos]
+            if not (isinstance(arg, ast.Constant) and isinstance(arg.value, str)):
+                continue
+            names = {k.arg for k in node.keywords if k.arg and k.arg != "node_id"}
+            out.append((path.name, arg.value, node.lineno, names))
+    return out
+
+
+def test_call_sites_supply_every_slot() -> None:
+    """호출부가 넘기는 변수와 사전의 슬롯이 맞는가.
+
+    ko↔en 슬롯 일치(위)는 사전 안쪽만 본다. 호출부가 `{line}` 을 빠뜨리면 화면에
+    `줄 {line}` 이 그대로 뜨는데 그것을 잡는 것이 없었다.
+    """
+    bad: list[str] = []
+    for file, key, line, given in _call_sites():
+        pair = MESSAGES.get(key)
+        if pair is None:
+            continue  # 위 test_every_t_call_uses_a_known_key 가 본다
+        wanted = {m.group(1) for m in SLOT.finditer(pair[0])}
+        if missing := wanted - given:
+            bad.append(f"{file}:{line} {key} — 안 넘긴 슬롯 {sorted(missing)}")
+        if extra := given - wanted:
+            bad.append(f"{file}:{line} {key} — 사전에 없는 변수 {sorted(extra)}")
+    assert not bad, "\n".join(bad)
+
+
+def test_every_preflight_key_has_a_label() -> None:
+    """`_check` 는 label 을 `sync.pre.<key>.label` 로 **계산해서** 찾는다.
+
+    계산 키라 위 AST 검사가 잡지 못한다 — 오타가 나면 화면에 키 문자열이 그대로 뜬다.
+    그 구멍을 여기서 막는다.
+    """
+    keys = _check_keys()
+    assert keys, "_check 호출을 하나도 못 찾았다 — 검사가 무력해졌다"
+    missing = sorted(f"sync.pre.{k}.label" for k in keys if f"sync.pre.{k}.label" not in MESSAGES)
+    assert not missing, f"label 이 없는 점검 항목: {missing}"
+
+
+def test_no_orphan_keys() -> None:
+    # 사전만 남고 코드에서 사라진 문구 — 없애지 않으면 사전이 썩는다.
+    # 계산해서 만드는 label 키는 위 검사가 따로 지킨다.
+    computed = {f"sync.pre.{k}.label" for k in _check_keys()}
+    orphans = sorted(set(MESSAGES) - _all_string_literals() - computed)
+    assert not orphans, f"아무도 쓰지 않는 키: {orphans}"
+
+
+# ---------------------------------------------------------------- t()
+
+
+def test_default_locale_is_ko_outside_request() -> None:
+    # 기존 테스트 160여 건이 이 기본값 위에 서 있다. 워커 안전도 같은 근거다.
+    assert get_locale() == "ko"
+
+
+def test_interpolation_contract() -> None:
+    MESSAGES["_test.plain"] = ("이름은 {name} 입니다", "The name is {name}")
+    MESSAGES["_test.count"] = ("{n}건", "{n} row{n||s}")
+    try:
+        assert t("_test.plain", name="주문") == "이름은 주문 입니다"
+        # 빠뜨린 변수는 자리 그대로 — 조용히 빈칸이 되면 원인을 못 찾는다
+        assert t("_test.plain") == "이름은 {name} 입니다"
+        # int 는 자릿수 구분까지 (프론트 toLocaleString 과 결과가 같다)
+        assert t("_test.count", n=1234) == "1,234건"
+        # 값 안의 중괄호가 다시 해석되지 않는다 (re.sub 는 치환 결과를 재스캔하지 않는다)
+        assert t("_test.plain", name="{name}") == "이름은 {name} 입니다"
+
+        _locale.set("en")
+        assert t("_test.count", n=1) == "1 row"
+        assert t("_test.count", n=3) == "3 rows"
+    finally:
+        del MESSAGES["_test.plain"]
+        del MESSAGES["_test.count"]
+
+
+def test_unknown_key_returns_the_key_instead_of_raising() -> None:
+    # 오류 문구 자리에서 예외를 던지면 진짜 오류를 가린다.
+    assert t("nope.missing") == "nope.missing"
+
+
+# ---------------------------------------------------------------- Accept-Language
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [
+        ("en", "en"),
+        ("en-US", "en"),
+        ("en-US,en;q=0.9,ko;q=0.8", "en"),
+        ("ko", "ko"),
+        ("ko-KR,en;q=0.9", "ko"),  # 첫 태그만 본다 — 협상하지 않는다
+        (None, "ko"),
+        ("", "ko"),
+        ("*", "ko"),
+        ("zz", "ko"),
+        ("english", "ko"),  # `en` 또는 `en-*` 만 en 이다
+    ],
+)
+def test_locale_from_header(header: str | None, expected: str) -> None:
+    assert locale_from_header(header) == expected

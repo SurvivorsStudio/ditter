@@ -4,6 +4,7 @@ import { Icon } from '../components/icons'
 import { resultEntries, useCanvasStore, type ResultEntry } from '../store/canvasStore'
 import { SPEC_BY_KIND, isTrigger } from './nodeCatalog'
 import { nodeRefText } from './variables'
+import { useT } from '../i18n'
 
 /** 결과 전체를 트리로 펼쳐 보는 팝업 — `{노드이름: {컬럼: 값}}` 의 구조 그대로.
  *
@@ -15,6 +16,7 @@ import { nodeRefText } from './variables'
  * 엉뚱한 곳을 가리키기 때문이다 — 쓸 수 없는 표기를 눌러 볼 수 있게 두지 않는다.
  */
 export function ResultTreeModal({ onClose }: { onClose: () => void }) {
+  const tr = useT()
   const nodes = useCanvasStore((s) => s.nodes)
   const nodeResults = useCanvasStore((s) => s.nodeResults)
   const entries = resultEntries(nodes, nodeResults)
@@ -61,11 +63,11 @@ export function ResultTreeModal({ onClose }: { onClose: () => void }) {
     <div className="overlay" onClick={onClose}>
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
         <div className="mh">
-          <h3>노드 결과 — 트리</h3>
+          <h3>{tr('cui.rt.title')}</h3>
           <button className="btn sm" style={{ marginLeft: 'auto' }} onClick={toggleAll}>
-            {allOpen ? '모두 접기' : '모두 펼치기'}
+            {allOpen ? tr('cui.rt.collapseAll') : tr('cui.rt.expandAll')}
           </button>
-          <button className="x" onClick={onClose} aria-label="닫기">
+          <button className="x" onClick={onClose} aria-label={tr('common.close')}>
             ×
           </button>
         </div>
@@ -73,7 +75,7 @@ export function ResultTreeModal({ onClose }: { onClose: () => void }) {
         <div className="rt-scroll">
           {entries.length === 0 ? (
             <div className="empty" style={{ padding: 30 }}>
-              아직 모인 결과가 없습니다.
+              {tr('cui.rt.empty')}
             </div>
           ) : (
             entries.map((entry) => (
@@ -90,9 +92,16 @@ export function ResultTreeModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="rt-note">
-          <code>{'${이름.컬럼}'}</code> 은 <b>첫 행</b>의 값 하나, <code>{'${이름.컬럼[]}'}</code> 는{' '}
-          <b>모든 행</b>을 쉼표로 이어 붙인 것입니다 — <code>WHERE id IN (${'{'}이름.컬럼[]{'}'})</code>{' '}
-          처럼 씁니다(문자값의 따옴표는 자동으로 붙습니다). 중첩된 안쪽 값은 참조할 수 없습니다.
+          <code>{tr('cui.ref.nodeCol')}</code>
+          {tr('cui.rt.note1')}
+          <b>{tr('cui.rt.noteFirstRow')}</b>
+          {tr('cui.rt.note2')}
+          <code>{tr('cui.ref.nodeColList')}</code>
+          {tr('cui.rt.note3')}
+          <b>{tr('cui.rt.noteAllRows')}</b>
+          {tr('cui.rt.note4')}
+          <code>{tr('cui.ref.whereIn')}</code>
+          {tr('cui.rt.note5')}
         </div>
       </div>
     </div>,
@@ -113,6 +122,7 @@ function NodeBranch({
   copied: string | null
   onCopy: (text: string) => void
 }) {
+  const tr = useT()
   const spec = SPEC_BY_KIND[entry.kind]
   const IconComp = spec?.icon
   const handed = isTrigger(entry.kind)
@@ -134,17 +144,18 @@ function NodeBranch({
         <span className="rt-name">{entry.label}</span>
         <span className="rt-meta">
           {handed
-            ? `넘긴 값 ${columns.length}개`
-            : `${entry.sample.rows.length.toLocaleString()}행${
-                entry.sample.truncated ? '+' : ''
-              } · 컬럼 ${columns.length}개`}
+            ? tr('cui.handedCount', { n: columns.length })
+            : tr(entry.sample.truncated ? 'cui.rowsMetaPlus' : 'cui.rowsMeta', {
+                rows: entry.sample.rows.length,
+                cols: columns.length,
+              })}
         </span>
       </button>
 
       {open &&
         (entry.sample.rows.length === 0 ? (
           <div className="rt-row rt-empty" style={{ paddingLeft: 46 }}>
-            결과 행이 없습니다.
+            {tr('cui.noResultRows')}
           </div>
         ) : handed ? (
           // 트리거는 행이 아니라 값이다 — 행 층을 두면 없는 구조를 만들어 낸다
@@ -175,7 +186,7 @@ function NodeBranch({
                 >
                   <Caret open={rowOpen} />
                   <span className="rt-index">[{i}]</span>
-                  {i === 0 && <span className="rt-badge">참조되는 행</span>}
+                  {i === 0 && <span className="rt-badge">{tr('cui.rt.refRow')}</span>}
                   {!rowOpen && <span className="rt-preview">{preview(row, columns)}</span>}
                 </button>
                 {rowOpen &&
@@ -233,6 +244,7 @@ function Field({
   copied: string | null
   onCopy: (text: string) => void
 }) {
+  const tr = useT()
   const pad = 26 + depth * 20
   const children = branchEntries(value)
 
@@ -247,7 +259,7 @@ function Field({
           <button
             className={`rt-ref ${copied === refText ? 'copied' : ''}`}
             onClick={() => onCopy(refText)}
-            title={`${refText} — 이 행의 값 하나. 누르면 복사됩니다`}
+            title={tr('cui.rt.refTitle', { ref: refText })}
           >
             <code>{refText}</code>
           </button>
@@ -256,7 +268,7 @@ function Field({
           <button
             className={`rt-ref list ${copied === listText ? 'copied' : ''}`}
             onClick={() => onCopy(listText)}
-            title={`${listText} — 모든 행을 쉼표로 이어 붙입니다. IN (...) 자리에 씁니다`}
+            title={tr('cui.rt.listRefTitle', { ref: listText })}
           >
             <code>{listText}</code>
           </button>
@@ -272,7 +284,9 @@ function Field({
         <Caret open={open} />
         <span className="rt-key">{name}</span>
         <span className="rt-val muted">
-          {Array.isArray(value) ? `배열 ${children.length}개` : `객체 ${children.length}개`}
+          {tr(Array.isArray(value) ? 'cui.rt.arrayCount' : 'cui.rt.objectCount', {
+            n: children.length,
+          })}
         </span>
       </button>
       {open &&
@@ -323,10 +337,11 @@ function scalarText(value: unknown): string {
 
 /** 서랍의 「비우기」 옆에 서는 버튼 */
 export function ResultTreeButton({ onClick }: { onClick: () => void }) {
+  const tr = useT()
   return (
-    <button className="btn sm rd-tree-btn" onClick={onClick} title="결과 전체를 트리로 봅니다">
+    <button className="btn sm rd-tree-btn" onClick={onClick} title={tr('cui.rt.btnTitle')}>
       <Icon.branch />
-      트리 보기
+      {tr('cui.rt.btn')}
     </button>
   )
 }

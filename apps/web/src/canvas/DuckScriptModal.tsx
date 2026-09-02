@@ -6,6 +6,7 @@ import { EditorView } from '@codemirror/view'
 import { Icon } from '../components/icons'
 import { useDuckScript } from '../api/hooks'
 import { ApiError } from '../api/client'
+import { useT } from '../i18n'
 
 const readOnlyPython = [python(), EditorView.lineWrapping, EditorView.editable.of(false)]
 
@@ -20,6 +21,7 @@ const readOnlyPython = [python(), EditorView.lineWrapping, EditorView.editable.o
  */
 export function DuckScriptModal({ sql, onClose }: { sql: string; onClose: () => void }) {
   const { mutate, data, error, isPending } = useDuckScript()
+  const tr = useT()
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
@@ -54,7 +56,7 @@ export function DuckScriptModal({ sql, onClose }: { sql: string; onClose: () => 
   const message = error
     ? error instanceof ApiError
       ? error.message
-      : '코드를 만들지 못했습니다.'
+      : tr('cui.duck.genFailed')
     : null
 
   return createPortal(
@@ -63,11 +65,11 @@ export function DuckScriptModal({ sql, onClose }: { sql: string; onClose: () => 
         className="modal wide duck-script"
         role="dialog"
         aria-modal="true"
-        aria-label="파이썬 코드"
+        aria-label={tr('cui.duck.title')}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mh">
-          <h3>파이썬 코드</h3>
+          <h3>{tr('cui.duck.title')}</h3>
           <button
             className="btn sm"
             style={{ marginLeft: 'auto' }}
@@ -75,19 +77,19 @@ export function DuckScriptModal({ sql, onClose }: { sql: string; onClose: () => 
             disabled={!data}
           >
             <Icon.save />
-            내려받기
-          </button>
+            {tr('cui.duck.download')}
+            </button>
           <button className="btn primary sm" onClick={copy} disabled={!data}>
-            {copied ? '복사됨' : '복사'}
+            {copied ? tr('cui.copied') : tr('cui.copy')}
           </button>
-          <button className="x" onClick={onClose} aria-label="닫기">
+          <button className="x" onClick={onClose} aria-label={tr('common.close')}>
             ×
           </button>
         </div>
 
         {data && data.password_envs.length > 0 && (
           <div className="duck-script-envs">
-            <b>비밀번호는 코드에 없습니다.</b> 돌리기 전에 환경변수를 설정하세요 —{' '}
+            <b>{tr('cui.duck.envsBold')}</b> {tr('cui.duck.envsRest')}{' '}
             {data.password_envs.map((name, i) => (
               <span key={name}>
                 {i > 0 && ', '}
@@ -98,7 +100,7 @@ export function DuckScriptModal({ sql, onClose }: { sql: string; onClose: () => 
         )}
 
         <div className="duck-script-body">
-          {isPending && <div className="tree-empty">코드를 만드는 중…</div>}
+          {isPending && <div className="tree-empty">{tr('cui.duck.generating')}</div>}
           {message && <div className="duck-script-error">{message}</div>}
           {data && (
             <CodeMirror

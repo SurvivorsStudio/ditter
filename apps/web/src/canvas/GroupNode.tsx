@@ -2,6 +2,7 @@ import { NodeResizer, type NodeProps } from '@xyflow/react'
 import type { EaiNode as EaiNodeType } from '../store/canvasStore'
 import { useCanvasStore } from '../store/canvasStore'
 import { frameColorVars, memoColor } from './memoColors'
+import { useT } from '../i18n'
 
 /** 영역 그룹(프레임) — 노드들을 사각형으로 묶어 시각적으로 구분하는 주석.
  *
@@ -9,6 +10,7 @@ import { frameColorVars, memoColor } from './memoColors'
  * (store 에서 zIndex 0, 일반 노드 1). 크기는 모서리를 끌어 조절하고 params.w/h 로 저장된다.
  */
 export function GroupNode({ id, data, selected }: NodeProps<EaiNodeType>) {
+  const tr = useT()
   const updateParams = useCanvasStore((s) => s.updateParams)
   const color = memoColor(data.params.color)
   const title = String(data.params.title ?? '').trim()
@@ -27,7 +29,7 @@ export function GroupNode({ id, data, selected }: NodeProps<EaiNodeType>) {
       {/* 제목은 캔버스에서 편집하지 않는다 — 우측 설정 패널에서만 수정한다.
           nodrag 를 빼서 이 라벨을 잡고도 영역을 끌 수 있게 둔다. */}
       <div className={`frame-title ${title ? '' : 'empty'}`} title={title || undefined}>
-        {title || '영역 제목'}
+        {title || tr('cui.group.titlePlaceholder')}
       </div>
     </div>
   )

@@ -13,6 +13,8 @@ import {
 import { SYNC_CHANNELS, SYNC_PURPOSES } from '../api/types'
 import type { TriggerCreated, TriggerVariable } from '../api/types'
 import { Banner, formatDateTime } from '../components/common'
+import { t, useT, type MsgKey } from '../i18n'
+import { rich } from '../i18n/rich'
 import { Icon } from '../components/icons'
 import { SchemaTableTree } from '../components/SchemaTableTree'
 import { SearchSelect, type SelectOption } from '../components/SearchSelect'
@@ -27,9 +29,9 @@ const SqlEditor = lazy(() => import('./SqlEditor').then((m) => ({ default: m.Sql
 const SqlModal = lazy(() => import('./SqlEditor').then((m) => ({ default: m.SqlModal })))
 import type { EditorVariable } from './SqlEditor'
 import {
-  DEFAULT_PYCODE,
-  DEFAULT_PYCODE_BATCH,
   SPEC_BY_KIND,
+  defaultPycode,
+  isDefaultPycode,
   type SwitchCase,
   allowedConnectorTypes,
   isCdcSource,
@@ -43,21 +45,22 @@ import {
   newCaseId,
 } from './nodeCatalog'
 
+// 라벨은 MsgKey 로만 들고 렌더 시점에 t() 로 푼다 — 모듈 상수에 번역문을 담으면 언어 전환을 못 따라온다.
 const FILTER_OPS = [
-  ['eq', '= 같음'],
-  ['ne', '≠ 다름'],
-  ['gt', '> 초과'],
-  ['gte', '≥ 이상'],
-  ['lt', '< 미만'],
-  ['lte', '≤ 이하'],
-  ['in', 'in 포함됨'],
-  ['not_in', 'not in 미포함'],
-  ['contains', '문자열 포함'],
-  ['starts_with', '~로 시작'],
-  ['is_null', '값 없음'],
-  ['is_not_null', '값 있음'],
-  ['regex', '정규식'],
-] as const
+  ['eq', 'cfg.op.eq'],
+  ['ne', 'cfg.op.ne'],
+  ['gt', 'cfg.op.gt'],
+  ['gte', 'cfg.op.gte'],
+  ['lt', 'cfg.op.lt'],
+  ['lte', 'cfg.op.lte'],
+  ['in', 'cfg.op.in'],
+  ['not_in', 'cfg.op.not_in'],
+  ['contains', 'cfg.op.contains'],
+  ['starts_with', 'cfg.op.starts_with'],
+  ['is_null', 'cfg.op.is_null'],
+  ['is_not_null', 'cfg.op.is_not_null'],
+  ['regex', 'cfg.op.regex'],
+] as const satisfies readonly (readonly [string, MsgKey])[]
 
 const CASTS = ['', 'str', 'int', 'float', 'bool', 'upper', 'lower', 'strip'] as const
 
@@ -78,6 +81,7 @@ const CONFIG_WIDTH_KEY = 'eai.configWidth'
  * 스크롤 영역은 안쪽 .config-scroll 로 분리해, 리사이저가 내용과 함께 스크롤되지 않게 한다.
  */
 function ConfigShell({ children }: { children: React.ReactNode }) {
+  const tr = useT()
   const [width, setWidth] = useState(() => {
     const saved = Number(localStorage.getItem(CONFIG_WIDTH_KEY))
     return saved >= CONFIG_MIN && saved <= CONFIG_MAX ? saved : 300
@@ -112,7 +116,7 @@ function ConfigShell({ children }: { children: React.ReactNode }) {
           setWidth(300)
           localStorage.setItem(CONFIG_WIDTH_KEY, '300')
         }}
-        title="드래그해서 너비 조절 · 더블클릭으로 초기화"
+        title={tr('cfg.resizeTip')}
       />
       <div className="config-scroll">{children}</div>
     </aside>
@@ -120,6 +124,7 @@ function ConfigShell({ children }: { children: React.ReactNode }) {
 }
 
 export function ConfigPanel() {
+  const tr = useT()
   const selectedId = useCanvasStore((s) => s.selectedId)
   const node = useCanvasStore((s) => s.nodes.find((n) => n.id === s.selectedId))
 
@@ -127,14 +132,10 @@ export function ConfigPanel() {
     <ConfigShell>
       {!selectedId || !node ? (
         <div className="empty">
-          노드를 선택하면
-          <br />
-          설정을 편집할 수 있습니다.
+          {tr('cfg.emptySelect')}
           <br />
           <br />
-          좌측 팔레트에서 노드를
-          <br />
-          캔버스로 드래그해 추가하세요.
+          {tr('cfg.emptyDrag')}
         </div>
       ) : (
         <NodeConfig key={node.id} node={node} />
@@ -151,6 +152,7 @@ export function ConfigPanel() {
  * 끝내 고치지 않고 포커스를 옮기면 마지막으로 유효했던 이름으로 되돌린다.
  */
 function NodeNameField({ node }: { node: EaiNode }) {
+  const tr = useT()
   const updateLabel = useCanvasStore((s) => s.updateLabel)
   const nodes = useCanvasStore((s) => s.nodes)
   const committed = node.data.label
@@ -164,14 +166,14 @@ function NodeNameField({ node }: { node: EaiNode }) {
 
   const trimmed = draft.trim()
   const error = !trimmed
-    ? '노드 이름을 입력하세요.'
+    ? tr('cfg.nameRequired')
     : isLabelTaken(nodes, trimmed, node.id)
-      ? '같은 이름의 노드가 이미 있습니다.'
+      ? tr('cfg.nameTaken')
       : null
 
   return (
     <div className="field">
-      <label>노드 이름</label>
+      <label>{tr('cfg.nodeName')}</label>
       <input
         className={error ? 'bad' : undefined}
         value={draft}
@@ -193,6 +195,7 @@ function NodeNameField({ node }: { node: EaiNode }) {
 }
 
 function NodeConfig({ node }: { node: EaiNode }) {
+  const tr = useT()
   const { updateParams, removeNode } = useCanvasStore()
   const spec = SPEC_BY_KIND[node.data.kind]
   const IconComp = spec?.icon
@@ -215,7 +218,7 @@ function NodeConfig({ node }: { node: EaiNode }) {
           {IconComp ? <IconComp /> : null}
         </div>
         <div style={{ minWidth: 0 }}>
-          <div className="ct">{spec?.title ?? node.data.kind}</div>
+          <div className="ct">{spec ? tr(spec.titleKey) : node.data.kind}</div>
           <div className="csub">{node.id}</div>
         </div>
       </div>
@@ -226,9 +229,9 @@ function NodeConfig({ node }: { node: EaiNode }) {
       {(isSource(node.data.kind) || isTarget(node.data.kind)) &&
         node.data.kind !== 'target.response' && (
         <div className="field">
-          <label>연결</label>
+          <label>{tr('cfg.connection')}</label>
           <select value={connectionId ?? ''} onChange={(e) => set({ connection_id: e.target.value })}>
-            <option value="">— 선택 —</option>
+            <option value="">{tr('cfg.choose')}</option>
             {usable.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name} ({c.type})
@@ -237,9 +240,7 @@ function NodeConfig({ node }: { node: EaiNode }) {
           </select>
           {usable.length === 0 && (
             <div className="hint">
-              {cdcSource
-                ? 'CDC 를 켠 연결이 없습니다. [연결] 화면에서 이 소스 타입 연결의 「CDC 사용」을 켜고 전제조건을 점검하세요.'
-                : '사용 가능한 연결이 없습니다. [연결] 화면에서 먼저 등록하세요.'}
+              {cdcSource ? tr('cfg.noCdcConnections') : tr('cfg.noConnections')}
             </div>
           )}
         </div>
@@ -285,7 +286,7 @@ function NodeConfig({ node }: { node: EaiNode }) {
       <div className="cfoot">
         <button className="btn danger" onClick={() => removeNode(node.id)}>
           <Icon.trash />
-          노드 삭제
+          {tr('cfg.deleteNode')}
         </button>
       </div>
     </>
@@ -295,26 +296,18 @@ function NodeConfig({ node }: { node: EaiNode }) {
 type FieldProps = { params: Record<string, unknown>; set: (patch: Record<string, unknown>) => void }
 
 function TriggerFields({ kind, params, set }: FieldProps & { kind: string }) {
+  const tr = useT()
   if (kind === 'trigger.cdc') {
     return (
       <div className="field">
-        <div className="hint">
-          CDC 트리거는 파이프라인을 <b>상시 스트리밍</b>으로 표시합니다. 별도 설정은 없으며,
-          저장 후 [스트림 시작] 버튼으로 켜고 [모니터] Streams 탭에서 상태를 봅니다.
-          배치 트리거(스케줄·수동)와 같은 파이프라인에 섞을 수 없습니다.
-        </div>
+        <div className="hint">{rich(tr('cfg.trg.cdcHint'))}</div>
       </div>
     )
   }
   if (kind === 'trigger.sync') {
     return (
       <div className="field">
-        <div className="hint">
-          실시간 동기화 트리거는 파이프라인을 <b>상시 복제</b>로 표시합니다. 별도 설정은 없으며,
-          저장 후 [동기화 시작] 버튼으로 켜고 [모니터] 스트림 탭에서 상태를 봅니다.
-          데이터가 워커를 지나지 않으므로 <b>변환 노드를 둘 수 없습니다</b> — 소스와 타깃을
-          바로 이으세요.
-        </div>
+        <div className="hint">{rich(tr('cfg.trg.syncHint'))}</div>
       </div>
     )
   }
@@ -324,29 +317,29 @@ function TriggerFields({ kind, params, set }: FieldProps & { kind: string }) {
   if (kind !== 'trigger.schedule') {
     return (
       <div className="field">
-        <div className="hint">수동 트리거는 별도 설정이 없습니다. 실행 버튼으로 시작합니다.</div>
+        <div className="hint">{tr('cfg.trg.manualHint')}</div>
       </div>
     )
   }
   return (
     <>
       <div className="field">
-        <label>실행 주기 (Cron)</label>
+        <label>{tr('cfg.trg.cron')}</label>
         <input
           value={String(params.cron ?? '')}
           placeholder="0 2 * * *"
           onChange={(e) => set({ cron: e.target.value })}
         />
-        <div className="hint">분 시 일 월 요일 · 예) 0 2 * * * = 매일 02:00</div>
+        <div className="hint">{tr('cfg.trg.cronHint')}</div>
       </div>
       <div className="field">
-        <label>타임존</label>
+        <label>{tr('cfg.trg.timezone')}</label>
         <select value={String(params.timezone ?? 'Asia/Seoul')} onChange={(e) => set({ timezone: e.target.value })}>
           <option>Asia/Seoul</option>
           <option>UTC</option>
         </select>
         <div className="hint">
-          실제 스케줄은 파이프라인 설정의 cron 을 따릅니다. 상단 [저장] 시 함께 반영됩니다.
+          {tr('cfg.trg.timezoneHint')}
         </div>
       </div>
     </>
@@ -360,6 +353,7 @@ function TriggerFields({ kind, params, set }: FieldProps & { kind: string }) {
  * `max_rows` 상한이 필수다 — 없으면 큰 테이블 하나가 워커를 통째로 삼킨다.
  */
 function ResponseFields({ params, set }: FieldProps) {
+  const tr = useT()
   const columns: string[] = Array.isArray(params.columns) ? (params.columns as string[]) : []
   const [draft, setDraft] = useState('')
 
@@ -373,15 +367,11 @@ function ResponseFields({ params, set }: FieldProps) {
   return (
     <>
       <div className="field">
-        <div className="hint">
-          이 노드에 흘러온 데이터를 <b>API 호출자에게 돌려줍니다.</b> 어디에도 적재하지 않으므로
-          연결이 필요 없습니다. API 트리거로 호출하면 실행이 끝날 때까지 기다렸다가 결과를
-          응답 본문으로 받습니다.
-        </div>
+        <div className="hint">{rich(tr('cfg.resp.hint'))}</div>
       </div>
 
       <div className="field">
-        <label>최대 행 수</label>
+        <label>{tr('cfg.resp.maxRows')}</label>
         <input
           type="number"
           min={1}
@@ -390,18 +380,14 @@ function ResponseFields({ params, set }: FieldProps) {
           onChange={(e) => set({ max_rows: Number(e.target.value) })}
         />
         <div className="hint">
-          응답은 행을 메모리에 모으므로 상한이 필요합니다 (최대 10,000). 넘치면 잘라서
-          돌려주고 <code>truncated: true</code> 로 알립니다 — 조용히 자르지 않습니다.
+          {rich(tr('cfg.resp.maxRowsHint', { code: 'truncated: true' }))}
         </div>
       </div>
 
       <div className="field">
-        <label>돌려줄 컬럼</label>
+        <label>{tr('cfg.resp.columns')}</label>
         {columns.length === 0 ? (
-          <div className="hint">
-            비워두면 <b>들어온 컬럼을 전부</b> 돌려줍니다. 외부에 무엇을 노출할지 정하려면
-            컬럼을 골라 넣으세요.
-          </div>
+          <div className="hint">{rich(tr('cfg.resp.columnsEmpty'))}</div>
         ) : (
           <div className="respcols">
             {columns.map((c) => (
@@ -409,8 +395,8 @@ function ResponseFields({ params, set }: FieldProps) {
                 <code>{c}</code>
                 <button
                   onClick={() => set({ columns: columns.filter((x) => x !== c) })}
-                  aria-label={`${c} 제거`}
-                  title="제거"
+                  aria-label={tr('cfg.resp.removeCol', { name: c })}
+                  title={tr('cfg.resp.remove')}
                 >
                   ×
                 </button>
@@ -421,7 +407,7 @@ function ResponseFields({ params, set }: FieldProps) {
         <div className="hook-new" style={{ marginTop: 8 }}>
           <input
             value={draft}
-            placeholder="컬럼명"
+            placeholder={tr('cfg.resp.colNamePh')}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
@@ -432,13 +418,10 @@ function ResponseFields({ params, set }: FieldProps) {
           />
           <button className="btn sm" onClick={add} disabled={!draft.trim()}>
             <Icon.plus />
-            추가
+            {tr('cfg.resp.add')}
           </button>
         </div>
-        <div className="hint">
-          <b>행</b>을 걸러내려면 상류에 [변환 &gt; 필터] 노드를 두세요. 여기서 고르는 것은
-          <b> 컬럼</b>입니다.
-        </div>
+        <div className="hint">{rich(tr('cfg.resp.rowsVsCols'))}</div>
       </div>
     </>
   )
@@ -454,6 +437,7 @@ function ResponseFields({ params, set }: FieldProps) {
  * 꽂는 것은 순환이라 저장 시점에 거절된다. 목록에 두면 눌러 볼 수밖에 없다.
  */
 function useEditorVariables(): EditorVariable[] {
+  const tr = useT()
   const nodes = useCanvasStore((s) => s.nodes)
   const runVariables = useCanvasStore((s) => s.runVariables)
   const nodeResults = useCanvasStore((s) => s.nodeResults)
@@ -495,7 +479,7 @@ function useEditorVariables(): EditorVariable[] {
       return columns.flatMap((column) => {
         const scalar: EditorVariable = {
           name: `${entry.label}.${column}`,
-          type: '첫 행',
+          type: tr('cfg.var.firstRow'),
           value: scalarOrNull(first[column]),
           isExample: false,
           insert: nodeRefText({ node: entry.label, column }),
@@ -508,7 +492,7 @@ function useEditorVariables(): EditorVariable[] {
           {
             ...scalar,
             name: `${entry.label}.${column}[]`,
-            type: '모든 행',
+            type: tr('cfg.var.allRows'),
             value: entry.sample.rows
               .slice(0, 3)
               .map((r) => String(r[column] ?? '∅'))
@@ -535,6 +519,7 @@ function scalarOrNull(value: unknown): string | number | boolean | null {
  * 여기 있는 이름은 테스트 실행 화면이 예시 값으로 미리 채운다.
  */
 function ApiTriggerFields({ params, set }: FieldProps) {
+  const tr = useT()
   const vars: TriggerVariable[] = Array.isArray(params.variables)
     ? (params.variables as TriggerVariable[])
     : []
@@ -553,19 +538,19 @@ function ApiTriggerFields({ params, set }: FieldProps) {
     <>
       <div className="field">
         <div className="hint">
-          외부에서 <b>REST 호출</b>로 이 파이프라인을 실행합니다. 호출 본문(JSON)의 값이 아래
-          변수로 들어오고, 다른 노드에서 <code>$이름</code> 으로 씁니다 — 예){' '}
-          <code>WHERE updated_at &gt;= &apos;$since&apos;</code>. 저장하면 상단 [API] 버튼에서
-          호출 주소·토큰과 테스트 실행을 볼 수 있습니다.
+          {rich(
+            tr('cfg.api.hint', {
+              var: tr('cui.ref.varName'),
+              example: "WHERE updated_at >= '$since'",
+            }),
+          )}
         </div>
       </div>
 
       <div className="field">
-        <label>입력 변수</label>
+        <label>{tr('cfg.api.varsLabel')}</label>
         {vars.length === 0 && (
-          <div className="hint">
-            아직 변수가 없습니다. 값을 받지 않고 실행만 시키는 창구라면 그대로 두어도 됩니다.
-          </div>
+          <div className="hint">{tr('cfg.api.noVars')}</div>
         )}
 
         <div className="varlist">
@@ -576,21 +561,23 @@ function ApiTriggerFields({ params, set }: FieldProps) {
                 <input
                   className="varname"
                   value={String(v.name ?? '')}
-                  placeholder="변수명 (영문/숫자/_)"
+                  placeholder={tr('cfg.api.varNamePh')}
                   onChange={(e) => patch(i, { name: e.target.value })}
                 />
                 <select
                   value={String(v.type ?? 'string')}
                   onChange={(e) => patch(i, { type: e.target.value as TriggerVariable['type'] })}
                 >
-                  <option value="string">문자</option>
-                  <option value="number">숫자</option>
-                  <option value="boolean">참/거짓</option>
+                  <option value="string">{tr('cfg.api.typeString')}</option>
+                  <option value="number">{tr('cfg.api.typeNumber')}</option>
+                  <option value="boolean">{tr('cfg.api.typeBoolean')}</option>
                 </select>
                 <button
                   className="btn sm danger"
-                  title="변수 삭제"
-                  aria-label={`${v.name || '이름 없는 변수'} 삭제`}
+                  title={tr('cfg.api.deleteVar')}
+                  aria-label={tr('cfg.api.deleteVarAria', {
+                    name: v.name || tr('cfg.api.unnamedVar'),
+                  })}
                   onClick={() => remove(i)}
                 >
                   <Icon.trash />
@@ -604,20 +591,20 @@ function ApiTriggerFields({ params, set }: FieldProps) {
                     checked={v.required !== false}
                     onChange={(e) => patch(i, { required: e.target.checked })}
                   />
-                  필수
+                  {tr('cfg.api.required')}
                 </label>
                 {v.required === false && (
                   <input
                     className="vardefault"
                     value={String(v.default ?? '')}
-                    placeholder="기본값 (없으면 실행 실패)"
+                    placeholder={tr('cfg.api.defaultPh')}
                     onChange={(e) => patch(i, { default: e.target.value })}
                   />
                 )}
                 <input
                   className="varexample"
                   value={String(v.example ?? '')}
-                  placeholder="예시 값 (테스트에 사용)"
+                  placeholder={tr('cfg.api.examplePh')}
                   onChange={(e) => patch(i, { example: e.target.value })}
                 />
               </div>
@@ -627,18 +614,16 @@ function ApiTriggerFields({ params, set }: FieldProps) {
 
         <button className="btn sm" onClick={add} style={{ marginTop: 8 }}>
           <Icon.plus />
-          변수 추가
+          {tr('cfg.api.addVar')}
         </button>
       </div>
 
       {vars.length > 0 && (
         <div className="field">
-          <label>호출 본문 예시</label>
+          <label>{tr('cfg.api.payloadLabel')}</label>
           <pre className="codeblock">{samplePayload(vars)}</pre>
           <div className="hint">
-            값이 없으면 실행을 <b>실패시킵니다</b>. 빈 값으로 넘기면{' '}
-            <code>WHERE dt &gt; &apos;&apos;</code> 같은 조건이 되어 전체 재적재가 조용히
-            일어나기 때문입니다.
+            {rich(tr('cfg.api.payloadHint', { example: "WHERE dt > ''" }))}
           </div>
         </div>
       )}
@@ -654,6 +639,7 @@ function ApiTriggerFields({ params, set }: FieldProps) {
  * 그래서 발급 직후 화면에서 놓치지 않도록 따로 띄우고, 목록에는 앞 8자만 남긴다.
  */
 function WebhookFields({ vars }: { vars: TriggerVariable[] }) {
+  const tr = useT()
   const { pipelineId } = useParams<{ pipelineId: string }>()
   const { data: triggers = [], isLoading } = useTriggers(pipelineId)
   const create = useCreateTrigger(pipelineId)
@@ -667,24 +653,21 @@ function WebhookFields({ vars }: { vars: TriggerVariable[] }) {
   const issue = async () => {
     setError(null)
     try {
-      setIssued(await create.mutateAsync({ name: name.trim() || '기본' }))
+      setIssued(await create.mutateAsync({ name: name.trim() || tr('cfg.hook.defaultName') }))
       setName('')
     } catch (e) {
-      setError(e instanceof Error ? e.message : '발급에 실패했습니다')
+      setError(e instanceof Error ? e.message : tr('cfg.hook.issueFailed'))
     }
   }
 
   return (
     <>
       <div className="field">
-        <label>외부 호출 창구</label>
-        <div className="hint">
-          외부 시스템이 이 주소로 POST 하면 파이프라인이 실행됩니다. 로그인 없이 <b>토큰</b>만으로
-          호출하므로, 토큰은 비밀번호처럼 다루세요.
-        </div>
+        <label>{tr('cfg.hook.label')}</label>
+        <div className="hint">{rich(tr('cfg.hook.hint'))}</div>
 
         {error && <Banner kind="error">{error}</Banner>}
-        {isLoading && <div className="hint">불러오는 중…</div>}
+        {isLoading && <div className="hint">{tr('cfg.hook.loading')}</div>}
 
         {triggers.length > 0 && (
           <div className="hook-list">
@@ -695,22 +678,24 @@ function WebhookFields({ vars }: { vars: TriggerVariable[] }) {
                   <code className="hook-prefix">{t.token_prefix}…</code>
                 </div>
                 <div className="hook-stat">
-                  {t.call_count > 0 ? `${t.call_count.toLocaleString()}회 호출` : '호출 없음'}
+                  {t.call_count > 0
+                    ? tr('cfg.hook.callCount', { n: t.call_count })
+                    : tr('cfg.hook.noCalls')}
                   {t.last_called_at && ` · ${formatDateTime(t.last_called_at)}`}
                 </div>
                 <div className="hook-actions">
                   <button
                     className="btn sm"
                     onClick={() => setEnabled.mutate({ id: t.id, enabled: !t.enabled })}
-                    title={t.enabled ? '호출을 잠시 막습니다' : '다시 받습니다'}
+                    title={t.enabled ? tr('cfg.hook.pauseTip') : tr('cfg.hook.resumeTip')}
                   >
-                    {t.enabled ? '중지' : '재개'}
+                    {t.enabled ? tr('cfg.hook.pause') : tr('cfg.hook.resume')}
                   </button>
                   <button
                     className="btn sm danger"
                     onClick={() => remove.mutate(t.id)}
-                    title="이 토큰을 폐기합니다 (되돌릴 수 없음)"
-                    aria-label={`${t.name} 창구 삭제`}
+                    title={tr('cfg.hook.revokeTip')}
+                    aria-label={tr('cfg.hook.revokeAria', { name: t.name })}
                   >
                     <Icon.trash />
                   </button>
@@ -723,29 +708,23 @@ function WebhookFields({ vars }: { vars: TriggerVariable[] }) {
         <div className="hook-new">
           <input
             value={name}
-            placeholder="창구 이름 (예: 주문시스템)"
+            placeholder={tr('cfg.hook.namePh')}
             onChange={(e) => setName(e.target.value)}
           />
           <button className="btn sm" onClick={issue} disabled={create.isPending}>
             <Icon.plus />
-            발급
+            {tr('cfg.hook.issue')}
           </button>
         </div>
       </div>
 
       {issued && (
         <div className="field">
-          <Banner kind="warn">
-            토큰은 <b>지금 한 번만</b> 보입니다. 서버는 해시만 저장하므로 다시 볼 수 없습니다 —
-            지금 복사해 두세요.
-          </Banner>
+          <Banner kind="warn">{rich(tr('cfg.hook.onceWarn'))}</Banner>
           <pre className="codeblock">{curlExample(issued, vars)}</pre>
-          <div className="hint">
-            토큰을 URL 대신 <code>X-EAI-Token</code> 헤더로 보내면 액세스 로그·프록시에 남지
-            않습니다. 위 예시가 그 방식입니다.
-          </div>
+          <div className="hint">{rich(tr('cfg.hook.headerHint', { header: 'X-EAI-Token' }))}</div>
           <button className="btn sm" onClick={() => setIssued(null)} style={{ marginTop: 8 }}>
-            복사했습니다 — 닫기
+            {tr('cfg.hook.copied')}
           </button>
         </div>
       )}
@@ -772,12 +751,13 @@ function samplePayload(vars: TriggerVariable[]): string {
     const example = v.example ?? ''
     if (v.type === 'number') body[v.name] = example === '' ? 0 : Number(example)
     else if (v.type === 'boolean') body[v.name] = example === '' ? false : example === 'true'
-    else body[v.name] = example === '' ? '값' : String(example)
+    else body[v.name] = example === '' ? t('cfg.api.sampleValue') : String(example)
   }
   return JSON.stringify(body, null, 2)
 }
 
 function SourceFields({ params, set, connectionId }: FieldProps & { connectionId?: string }) {
+  const tr = useT()
   const editorVariables = useEditorVariables()
   const { data: schema, isLoading, isError } = useConnectionSchema(connectionId)
   const tables = schema?.tables ?? []
@@ -792,10 +772,16 @@ function SourceFields({ params, set, connectionId }: FieldProps & { connectionId
   const schemaCounts = new Map<string, number>()
   for (const t of tables) schemaCounts.set(t.namespace ?? '', (schemaCounts.get(t.namespace ?? '') ?? 0) + 1)
   const schemaOptions: SelectOption[] = [
-    { value: '', label: '전체 스키마', hint: String(tables.length) },
+    { value: '', label: tr('cfg.src.allSchemas'), hint: String(tables.length) },
     ...[...schemaCounts.entries()]
       .sort((a, b) => b[1] - a[1])
-      .map(([ns, n]): SelectOption => ({ value: ns, label: ns || '(기본)', hint: String(n) })),
+      .map(
+        ([ns, n]): SelectOption => ({
+          value: ns,
+          label: ns || tr('cfg.src.defaultSchema'),
+          hint: String(n),
+        }),
+      ),
   ]
   const visibleTables = schemaSel ? tables.filter((t) => (t.namespace ?? '') === schemaSel) : tables
 
@@ -814,7 +800,7 @@ function SourceFields({ params, set, connectionId }: FieldProps & { connectionId
               )
             }
           />
-          커스텀 SQL 사용
+          {tr('cfg.src.customSql')}
         </label>
       </div>
 
@@ -822,12 +808,16 @@ function SourceFields({ params, set, connectionId }: FieldProps & { connectionId
         <div className="field">
           <div className="code-field-head">
             <label>SQL</label>
-            <button className="btn sm" onClick={() => setSqlExpanded(true)} title="큰 화면에서 편집">
+            <button
+              className="btn sm"
+              onClick={() => setSqlExpanded(true)}
+              title={tr('cfg.src.expandEdit')}
+            >
               <Icon.expand />
-              크게 편집
+              {tr('cfg.src.expand')}
             </button>
           </div>
-          <Suspense fallback={<div className="code-loading">에디터를 불러오는 중…</div>}>
+          <Suspense fallback={<div className="code-loading">{tr('cfg.src.editorLoading')}</div>}>
             <SqlEditor
               value={String(params.query ?? '')}
               onChange={(v) => set({ query: v })}
@@ -835,10 +825,7 @@ function SourceFields({ params, set, connectionId }: FieldProps & { connectionId
               completion={tables}
             />
           </Suspense>
-          <div className="hint">
-            소스에서 실행할 <code>SELECT</code> 문입니다. 커스텀 SQL 모드에서는 증분 워터마크가
-            적용되지 않습니다 — 전량을 읽습니다.
-          </div>
+          <div className="hint">{rich(tr('cfg.src.sqlHint', { select: 'SELECT' }))}</div>
           {sqlExpanded && (
             <Suspense fallback={null}>
               <SqlModal
@@ -857,23 +844,23 @@ function SourceFields({ params, set, connectionId }: FieldProps & { connectionId
         <>
           <div className="field">
             <div className="code-field-head">
-              <label>테이블</label>
-              <div className="mode-seg" role="group" aria-label="테이블 보기 방식">
+              <label>{tr('cfg.src.table')}</label>
+              <div className="mode-seg" role="group" aria-label={tr('cfg.src.tableViewAria')}>
                 <button
                   className={`mode-seg-btn ${tableView === 'list' ? 'active' : ''}`}
                   onClick={() => setTableView('list')}
                 >
-                  목록
+                  {tr('cfg.src.viewList')}
                 </button>
                 <button
                   className={`mode-seg-btn ${tableView === 'tree' ? 'active' : ''}`}
                   onClick={() => setTableView('tree')}
                 >
-                  트리
+                  {tr('cfg.src.viewTree')}
                 </button>
               </div>
             </div>
-            {isError && <div className="hint">스키마를 읽지 못했습니다. 연결 상태를 확인하세요.</div>}
+            {isError && <div className="hint">{tr('cfg.src.schemaError')}</div>}
 
             {tableView === 'tree' ? (
               <SchemaTableTree
@@ -898,8 +885,8 @@ function SourceFields({ params, set, connectionId }: FieldProps & { connectionId
                   options={schemaOptions}
                   disabled={!connectionId || tables.length === 0}
                   loading={isLoading}
-                  placeholder="스키마 선택 또는 검색…"
-                  emptyText="스키마가 없습니다"
+                  placeholder={tr('cfg.src.schemaPh')}
+                  emptyText={tr('cfg.src.schemaEmpty')}
                 />
                 <div style={{ height: 7 }} />
                 <SearchSelect
@@ -914,44 +901,42 @@ function SourceFields({ params, set, connectionId }: FieldProps & { connectionId
                   }))}
                   disabled={!connectionId}
                   loading={isLoading}
-                  placeholder={connectionId ? '테이블 선택 또는 검색…' : '먼저 연결을 고르세요'}
-                  emptyText="일치하는 테이블이 없습니다"
+                  placeholder={connectionId ? tr('cfg.src.tablePh') : tr('cfg.src.pickConnFirst')}
+                  emptyText={tr('cfg.src.tableEmpty')}
                 />
               </>
             )}
           </div>
 
           <div className="field">
-            <label>증분 컬럼 (watermark)</label>
+            <label>{tr('cfg.src.watermark')}</label>
             <SearchSelect
               value={String(params.incremental_column ?? '')}
               onChange={(v) => set({ incremental_column: v || undefined })}
               options={[
-                { value: '', label: '— 전체 적재 —' },
+                { value: '', label: tr('cfg.src.fullLoad') },
                 ...(selected?.columns.map(
                   (c): SelectOption => ({ value: c.name, label: c.name, hint: c.data_type }),
                 ) ?? []),
               ]}
               disabled={!selected}
-              placeholder="— 전체 적재 —"
-              emptyText="컬럼이 없습니다"
+              placeholder={tr('cfg.src.fullLoad')}
+              emptyText={tr('cfg.src.columnEmpty')}
             />
-            <div className="hint">
-              지정하면 이 컬럼이 마지막 실행값보다 큰 행만 읽습니다 (updated_at, id 등).
-            </div>
+            <div className="hint">{tr('cfg.src.watermarkHint')}</div>
           </div>
         </>
       )}
 
       <div className="field">
-        <label>배치 크기</label>
+        <label>{tr('cfg.src.batchSize')}</label>
         <input
           type="number"
           min={1}
           value={Number(params.batch_size ?? 5000)}
           onChange={(e) => set({ batch_size: Number(e.target.value) || 5000 })}
         />
-        <div className="hint">한 번에 읽어 흘려보낼 행 수. 클수록 빠르지만 메모리를 더 씁니다.</div>
+        <div className="hint">{tr('cfg.src.batchSizeHint')}</div>
       </div>
     </>
   )
@@ -964,6 +949,7 @@ function SourceFields({ params, set, connectionId }: FieldProps & { connectionId
  * 삭제 처리 → ExtractNewRecordState SMT. 백엔드 검증 규칙(dag.py _cdc_source_issues)과 짝이다.
  */
 function CdcSourceFields({ params, set, connectionId }: FieldProps & { connectionId?: string }) {
+  const tr = useT()
   const { data: schema, isLoading, isError } = useConnectionSchema(connectionId)
   const tables = schema?.tables ?? []
   const selected = asArray<string>(params.tables)
@@ -977,9 +963,12 @@ function CdcSourceFields({ params, set, connectionId }: FieldProps & { connectio
   return (
     <>
       <div className="field">
-        <label>캡처할 테이블 {selected.length > 0 ? `(${selected.length}개)` : ''}</label>
-        {isLoading && <div className="hint">테이블을 불러오는 중…</div>}
-        {isError && <div className="hint">스키마를 읽지 못했습니다. 연결·CDC 전제조건을 확인하세요.</div>}
+        <label>
+          {tr('cfg.cdc.tables')}{' '}
+          {selected.length > 0 ? tr('cfg.cdc.tablesCount', { n: selected.length }) : ''}
+        </label>
+        {isLoading && <div className="hint">{tr('cfg.cdc.tablesLoading')}</div>}
+        {isError && <div className="hint">{tr('cfg.cdc.schemaError')}</div>}
         {tables.length > 0 ? (
           <select
             multiple
@@ -1012,40 +1001,36 @@ function CdcSourceFields({ params, set, connectionId }: FieldProps & { connectio
           />
         )}
         <div className="hint">
-          변경을 실시간으로 잡아낼 테이블입니다. 최소 1개가 필요합니다.
-          {tables.length === 0 && ' 목록을 못 불러오면 한 줄에 하나씩 직접 입력하세요.'}
+          {tr('cfg.cdc.tablesHint')}
+          {tables.length === 0 && tr('cfg.cdc.tablesManual')}
         </div>
       </div>
 
       <div className="field">
-        <label>초기 스냅샷</label>
+        <label>{tr('cfg.cdc.snapshot')}</label>
         <select value={snapshot} onChange={(e) => set({ snapshot: e.target.value })}>
-          <option value="initial">initial — 기존 데이터를 먼저 전량 적재 후 변경 추적</option>
-          <option value="never">never — 지금 이후 변경만 추적</option>
-          <option value="when_needed">when_needed — 필요할 때만 스냅샷</option>
+          <option value="initial">{tr('cfg.cdc.snapInitial')}</option>
+          <option value="never">{tr('cfg.cdc.snapNever')}</option>
+          <option value="when_needed">{tr('cfg.cdc.snapWhenNeeded')}</option>
         </select>
         <div className="hint">
-          {snapshot === 'initial' && '처음 켤 때 테이블 전체를 한 번 읽고 이후 변경분을 잇습니다.'}
-          {snapshot === 'never' &&
-            '과거 데이터는 건너뛰고 켠 시점 이후의 변경만 반영합니다. SQL Server 는 no_data 로 대체됩니다.'}
-          {snapshot === 'when_needed' &&
-            'PostgreSQL 은 이 모드가 없어 initial 로 대체됩니다.'}
+          {snapshot === 'initial' && tr('cfg.cdc.snapInitialHint')}
+          {snapshot === 'never' && tr('cfg.cdc.snapNeverHint')}
+          {snapshot === 'when_needed' && tr('cfg.cdc.snapWhenNeededHint')}
         </div>
       </div>
 
       <div className="field">
-        <label>삭제(DELETE) 이벤트 처리</label>
+        <label>{tr('cfg.cdc.deleteMode')}</label>
         <select value={deleteMode} onChange={(e) => set({ delete_mode: e.target.value })}>
-          <option value="soft">soft — __deleted 플래그로 표시 (기본·안전)</option>
-          <option value="hard">hard — 타깃에서도 실제 삭제</option>
-          <option value="ignore">ignore — 삭제 이벤트 무시</option>
+          <option value="soft">{tr('cfg.cdc.delSoft')}</option>
+          <option value="hard">{tr('cfg.cdc.delHard')}</option>
+          <option value="ignore">{tr('cfg.cdc.delIgnore')}</option>
         </select>
         <div className="hint">
-          {deleteMode === 'soft' &&
-            '삭제된 행을 지우지 않고 __deleted=true 로 남깁니다. 이력 보존에 안전합니다.'}
-          {deleteMode === 'hard' &&
-            '소스에서 지워지면 타깃에서도 지웁니다. upsert 타깃 + 키 컬럼이 필요합니다.'}
-          {deleteMode === 'ignore' && '삽입·수정만 반영하고 삭제는 흘려보냅니다.'}
+          {deleteMode === 'soft' && tr('cfg.cdc.delSoftHint')}
+          {deleteMode === 'hard' && tr('cfg.cdc.delHardHint')}
+          {deleteMode === 'ignore' && tr('cfg.cdc.delIgnoreHint')}
         </div>
       </div>
     </>
@@ -1068,6 +1053,7 @@ type SyncTableRow = {
  * 채널을 점유해 재고·출고의 실시간성을 통째로 망치기 때문이다.
  */
 function SyncSourceFields({ params, set, connectionId }: FieldProps & { connectionId?: string }) {
+  const tr = useT()
   const { data: schema, isLoading } = useConnectionSchema(connectionId)
   const catalog = schema?.tables ?? []
   const rows = asArray<SyncTableRow>(params.tables)
@@ -1085,38 +1071,34 @@ function SyncSourceFields({ params, set, connectionId }: FieldProps & { connecti
   return (
     <>
       <div className="field">
-        <label>소스 스키마</label>
+        <label>{tr('cfg.sync.srcSchema')}</label>
         <input
           value={namespace}
           placeholder="dbo"
           onChange={(e) => set({ namespace: e.target.value })}
         />
-        <div className="hint">테이블마다 따로 적지 않으면 이 스키마를 씁니다.</div>
+        <div className="hint">{tr('cfg.sync.srcSchemaHint')}</div>
       </div>
 
       <div className="field">
-        <label>SymmetricDS 설정 DB (선택)</label>
+        <label>{tr('cfg.sync.configDb')}</label>
         <input
           value={String(params.sync_database ?? '')}
-          placeholder="비우면 소스와 같은 DB"
+          placeholder={tr('cfg.sync.configDbPh')}
           onChange={(e) => set({ sync_database: e.target.value })}
         />
-        <div className="hint">
-          SymmetricDS 는 자기 테이블 <b>45개</b>를 만듭니다. 여기에 DB 이름을 적으면 업무 DB
-          대신 그쪽에 만들어져 <b>dbo 가 깨끗해집니다.</b> 동기화 대상이 1개든 200개든 45개로
-          고정입니다. <b>같은 인스턴스</b>여야 하고, 그 DB 에 테이블 생성 권한이 필요합니다.
-          트리거는 그래도 업무 테이블에 붙고, 이 DB 가 꽉 차면 업무 쓰기가 실패하므로
-          장애가 격리되는 것은 아닙니다.
-        </div>
+        <div className="hint">{rich(tr('cfg.sync.configDbHint'))}</div>
       </div>
 
       <div className="field">
-        <label>동기화할 테이블 {rows.length > 0 ? `(${rows.length}개)` : ''}</label>
-        {isLoading && <div className="hint">테이블을 불러오는 중…</div>}
+        <label>
+          {tr('cfg.sync.tables')} {rows.length > 0 ? tr('cfg.cdc.tablesCount', { n: rows.length }) : ''}
+        </label>
+        {isLoading && <div className="hint">{tr('cfg.cdc.tablesLoading')}</div>}
         {rows.map((row, index) => (
           <div className="sync-row" key={index}>
             <input
-              placeholder="테이블명"
+              placeholder={tr('cfg.sync.tableNamePh')}
               list="sync-table-list"
               value={String(row.name ?? '')}
               onChange={(e) => update(index, { name: e.target.value })}
@@ -1124,31 +1106,31 @@ function SyncSourceFields({ params, set, connectionId }: FieldProps & { connecti
             <select
               value={String(row.channel ?? 'standard')}
               onChange={(e) => update(index, { channel: e.target.value })}
-              title="전송 채널"
+              title={tr('cfg.sync.channelTip')}
             >
               {SYNC_CHANNELS.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.label}
+                  {tr(`sync.channel.${c.id}.label`)}
                 </option>
               ))}
             </select>
             <input
               type="number"
               className="narrow"
-              title="초기 적재 순서 — 작을수록 먼저"
+              title={tr('cfg.sync.loadOrderTip')}
               value={String(row.initial_load_order ?? 100)}
               onChange={(e) => update(index, { initial_load_order: Number(e.target.value) })}
             />
             <button
               className="rm"
-              title="테이블 제외"
+              title={tr('cfg.sync.excludeTable')}
               onClick={() => set({ tables: rows.filter((_, i) => i !== index) })}
             >
               ×
             </button>
             <input
               className="wide"
-              placeholder="행 필터 (선택) — 예) c.WAREHOUSE_CD = 'WH01'"
+              placeholder={tr('cfg.sync.rowFilterPh')}
               value={String(row.row_filter ?? '')}
               onChange={(e) => update(index, { row_filter: e.target.value })}
             />
@@ -1161,30 +1143,22 @@ function SyncSourceFields({ params, set, connectionId }: FieldProps & { connecti
         </datalist>
         <button className="btn ghost" onClick={() => add()}>
           <Icon.plus />
-          테이블 추가
+          {tr('cfg.sync.addTable')}
         </button>
-        <div className="hint">
-          채널은 전송 단위이자 우선순위입니다. <b>대량 배치가 발생하는 테이블을 실시간 채널에
-          넣지 마세요</b> — 한 번의 대량 작업이 채널을 점유해 다른 테이블의 실시간성을 망칩니다.
-          숫자는 초기 적재 순서로, FK 의존을 고려해 마스터 테이블을 작은 값으로 둡니다.
-        </div>
+        <div className="hint">{rich(tr('cfg.sync.tablesHint'))}</div>
       </div>
 
       <div className="field">
-        <label>복제 데이터의 최종 용도</label>
+        <label>{tr('cfg.sync.purpose')}</label>
         <select value={purpose} onChange={(e) => set({ purpose: e.target.value })}>
           {SYNC_PURPOSES.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.label}
+              {tr(`sync.purpose.${p.id}`)}
             </option>
           ))}
         </select>
         {purpose === 'operational' && (
-          <div className="hint warn">
-            복제본은 아무리 빨라도 원본과 <b>순간적으로 다를 수 있습니다.</b> 출고·재고 판단에
-            쓰면 이중 출고 같은 사고로 이어집니다 — 원본 직접 조회나 API 연동이 맞는지 먼저
-            확인하세요.
-          </div>
+          <div className="hint warn">{rich(tr('cfg.sync.purposeWarn'))}</div>
         )}
       </div>
 
@@ -1195,11 +1169,9 @@ function SyncSourceFields({ params, set, connectionId }: FieldProps & { connecti
             checked={Boolean(params.initial_load ?? true)}
             onChange={(e) => set({ initial_load: e.target.checked })}
           />
-          시작할 때 기존 데이터를 전량 적재
+          {tr('cfg.sync.initialLoad')}
         </label>
-        <div className="hint">
-          끄면 켠 시점 이후의 변경만 반영됩니다. 운영계는 업무 저부하 시간대에 켜세요.
-        </div>
+        <div className="hint">{tr('cfg.sync.initialLoadHint')}</div>
       </div>
 
       <div className="field">
@@ -1209,14 +1181,9 @@ function SyncSourceFields({ params, set, connectionId }: FieldProps & { connecti
             checked={Boolean(params.load_test_ack)}
             onChange={(e) => set({ load_test_ack: e.target.checked })}
           />
-          부하 테스트를 마쳤습니다
+          {tr('cfg.sync.loadTestAck')}
         </label>
-        <div className="hint">
-          동기화를 켜면 <b>원본 테이블에 트리거가 생겨</b> 쓰기 트랜잭션이 느려집니다. 현장에서
-          스캐너로 실시간 처리하는 시스템이라면 응답 지연이 파이프라인 지연보다 훨씬 민감합니다.
-          현장 스캔 응답이 0.3초 이상 느려지면 재검토하세요. 이 확인이 없어도 시작은 되지만
-          점검 결과에 경고가 남습니다 — <b>운영 적용 전에는 필수</b>입니다.
-        </div>
+        <div className="hint">{rich(tr('cfg.sync.loadTestHint'))}</div>
       </div>
     </>
   )
@@ -1229,6 +1196,7 @@ function SyncSourceFields({ params, set, connectionId }: FieldProps & { connecti
  * 그 목록을 그대로 채워 준다.
  */
 function SyncTargetFields({ params, set }: FieldProps) {
+  const tr = useT()
   const nodes = useCanvasStore((s) => s.nodes)
   const source = nodes.find((n) => isSyncSource(n.data.kind))
   const sourceTables = asArray<SyncTableRow>(source?.data.params.tables)
@@ -1248,7 +1216,7 @@ function SyncTargetFields({ params, set }: FieldProps) {
   return (
     <>
       <div className="field">
-        <label>타깃 스키마</label>
+        <label>{tr('cfg.synct.schema')}</label>
         <input
           value={namespace}
           placeholder="public"
@@ -1257,23 +1225,23 @@ function SyncTargetFields({ params, set }: FieldProps) {
       </div>
 
       <div className="field">
-        <label>테이블명 매핑</label>
+        <label>{tr('cfg.synct.mappings')}</label>
         {mappings.map((m, index) => (
           <div className="map-row" key={index}>
             <input
-              placeholder="소스 테이블"
+              placeholder={tr('cfg.synct.srcTablePh')}
               value={String(m.source_table ?? '')}
               onChange={(e) => update(index, { source_table: e.target.value })}
             />
             <span className="arrow">→</span>
             <input
-              placeholder="타깃 테이블"
+              placeholder={tr('cfg.synct.tgtTablePh')}
               value={String(m.target_table ?? '')}
               onChange={(e) => update(index, { target_table: e.target.value })}
             />
             <button
               className="rm"
-              title="매핑 삭제"
+              title={tr('cfg.synct.deleteMapping')}
               onClick={() => set({ table_mappings: mappings.filter((_, i) => i !== index) })}
             >
               ×
@@ -1293,13 +1261,12 @@ function SyncTargetFields({ params, set }: FieldProps) {
             }
           >
             <Icon.plus />
-            소스에서 가져오기 ({missing.length}개)
+            {tr('cfg.synct.importFromSource', { n: missing.length })}
           </button>
         )}
         <div className="hint">
-          PostgreSQL 은 인용하지 않은 식별자를 <b>소문자로 접습니다</b> (INVENTORY → inventory).
-          비워 두면 서버가 소문자로 확정하지만, 여기에 적어 두면 무엇으로 들어갔는지 보입니다.
-          {sourceTables.length === 0 && ' 소스 노드에서 테이블을 먼저 고르세요.'}
+          {rich(tr('cfg.synct.hint'))}
+          {sourceTables.length === 0 && tr('cfg.synct.pickSourceFirst')}
         </div>
       </div>
     </>
@@ -1307,6 +1274,7 @@ function SyncTargetFields({ params, set }: FieldProps) {
 }
 
 function FilterFields({ params, set }: FieldProps) {
+  const tr = useT()
   const conditions = asArray<Cond>(params.conditions)
   const update = (index: number, patch: Partial<Cond>) =>
     set({ conditions: conditions.map((c, i) => (i === index ? { ...c, ...patch } : c)) })
@@ -1314,37 +1282,37 @@ function FilterFields({ params, set }: FieldProps) {
   return (
     <>
       <div className="field">
-        <label>결합 방식</label>
+        <label>{tr('cfg.flt.match')}</label>
         <select value={String(params.match ?? 'all')} onChange={(e) => set({ match: e.target.value })}>
-          <option value="all">모든 조건 만족 (AND)</option>
-          <option value="any">하나라도 만족 (OR)</option>
+          <option value="all">{tr('cfg.flt.matchAll')}</option>
+          <option value="any">{tr('cfg.flt.matchAny')}</option>
         </select>
       </div>
       <div className="field">
-        <label>조건</label>
+        <label>{tr('cfg.flt.conditions')}</label>
         {conditions.map((cond, index) => (
           <div className="map-row" key={index}>
             <input
-              placeholder="컬럼"
+              placeholder={tr('cfg.flt.columnPh')}
               value={String(cond.field ?? '')}
               onChange={(e) => update(index, { field: e.target.value })}
             />
             <select value={cond.op ?? 'eq'} onChange={(e) => update(index, { op: e.target.value })}>
-              {FILTER_OPS.map(([value, label]) => (
+              {FILTER_OPS.map(([value, labelKey]) => (
                 <option key={value} value={value}>
-                  {label}
+                  {tr(labelKey)}
                 </option>
               ))}
             </select>
             <input
-              placeholder="값"
+              placeholder={tr('cfg.flt.valuePh')}
               value={cond.value === undefined || cond.value === null ? '' : String(cond.value)}
               onChange={(e) => update(index, { value: e.target.value })}
               disabled={cond.op === 'is_null' || cond.op === 'is_not_null'}
             />
             <button
               className="rm"
-              title="조건 삭제"
+              title={tr('cfg.flt.deleteCond')}
               onClick={() => set({ conditions: conditions.filter((_, i) => i !== index) })}
             >
               ×
@@ -1356,7 +1324,7 @@ function FilterFields({ params, set }: FieldProps) {
           onClick={() => set({ conditions: [...conditions, { field: '', op: 'eq', value: '' }] })}
         >
           <Icon.plus />
-          조건 추가
+          {tr('cfg.flt.addCond')}
         </button>
       </div>
     </>
@@ -1364,6 +1332,7 @@ function FilterFields({ params, set }: FieldProps) {
 }
 
 function SwitchFields({ params, set }: FieldProps) {
+  const tr = useT()
   const cases = asArray<SwitchCase>(params.cases)
   const updateCase = (index: number, patch: Partial<SwitchCase>) =>
     set({ cases: cases.map((c, i) => (i === index ? { ...c, ...patch } : c)) })
@@ -1372,15 +1341,18 @@ function SwitchFields({ params, set }: FieldProps) {
     set({
       cases: [
         ...cases,
-        { id: newCaseId(), label: `분기 ${cases.length + 1}`, match: 'all', conditions: [] },
+        {
+          id: newCaseId(),
+          label: t('node.switch.case', { n: cases.length + 1 }),
+          match: 'all',
+          conditions: [],
+        },
       ],
     })
 
   return (
     <div className="switch-cfg">
-      <p className="switch-lead">
-        각 행을 <b>위에서부터 처음 맞는 분기</b>로 보냅니다.
-      </p>
+      <p className="switch-lead">{rich(tr('cfg.sw.lead'))}</p>
 
       {cases.map((c, ci) => {
         const conds = asArray<Cond>(c.conditions)
@@ -1392,13 +1364,13 @@ function SwitchFields({ params, set }: FieldProps) {
               <span className="switch-case-no">{ci + 1}</span>
               <input
                 className="switch-case-name"
-                placeholder={`분기 ${ci + 1}`}
+                placeholder={tr('node.switch.case', { n: ci + 1 })}
                 value={String(c.label ?? '')}
                 onChange={(e) => updateCase(ci, { label: e.target.value })}
               />
               <button
                 className="switch-case-del"
-                title="분기 삭제"
+                title={tr('cfg.sw.deleteCase')}
                 disabled={cases.length <= 1}
                 onClick={() => set({ cases: cases.filter((_, i) => i !== ci) })}
               >
@@ -1407,7 +1379,7 @@ function SwitchFields({ params, set }: FieldProps) {
             </div>
 
             {conds.length === 0 && (
-              <p className="switch-empty">조건을 추가하세요. 없으면 모든 행이 이 분기로 갑니다.</p>
+              <p className="switch-empty">{tr('cfg.sw.noCond')}</p>
             )}
             {conds.map((cond, i) => {
               const nullOp = cond.op === 'is_null' || cond.op === 'is_not_null'
@@ -1416,13 +1388,13 @@ function SwitchFields({ params, set }: FieldProps) {
                   <div className="cond-top">
                     <input
                       className="cond-field"
-                      placeholder="컬럼명"
+                      placeholder={tr('cfg.sw.columnPh')}
                       value={String(cond.field ?? '')}
                       onChange={(e) => setCond(i, { field: e.target.value })}
                     />
                     <button
                       className="cond-del"
-                      title="조건 삭제"
+                      title={tr('cfg.flt.deleteCond')}
                       onClick={() => updateConds(ci, conds.filter((_, j) => j !== i))}
                     >
                       <Icon.trash />
@@ -1434,16 +1406,16 @@ function SwitchFields({ params, set }: FieldProps) {
                       value={cond.op ?? 'eq'}
                       onChange={(e) => setCond(i, { op: e.target.value })}
                     >
-                      {FILTER_OPS.map(([value, label]) => (
+                      {FILTER_OPS.map(([value, labelKey]) => (
                         <option key={value} value={value}>
-                          {label}
+                          {tr(labelKey)}
                         </option>
                       ))}
                     </select>
                     {!nullOp && (
                       <input
                         className="cond-val"
-                        placeholder="값"
+                        placeholder={tr('cfg.flt.valuePh')}
                         value={
                           cond.value === undefined || cond.value === null ? '' : String(cond.value)
                         }
@@ -1461,7 +1433,7 @@ function SwitchFields({ params, set }: FieldProps) {
                 onClick={() => updateConds(ci, [...conds, { field: '', op: 'eq', value: '' }])}
               >
                 <Icon.plus />
-                조건 추가
+                {tr('cfg.flt.addCond')}
               </button>
               {conds.length >= 2 && (
                 <select
@@ -1469,8 +1441,8 @@ function SwitchFields({ params, set }: FieldProps) {
                   value={String(c.match ?? 'all')}
                   onChange={(e) => updateCase(ci, { match: e.target.value })}
                 >
-                  <option value="all">모두 만족(AND)</option>
-                  <option value="any">하나라도(OR)</option>
+                  <option value="all">{tr('cfg.sw.joinAll')}</option>
+                  <option value="any">{tr('cfg.sw.joinAny')}</option>
                 </select>
               )}
             </div>
@@ -1480,20 +1452,19 @@ function SwitchFields({ params, set }: FieldProps) {
 
       <button className="switch-add" onClick={addCase}>
         <Icon.plus />
-        분기 추가
+        {tr('cfg.sw.addCase')}
       </button>
 
       <div className="switch-default">
         <span className="switch-default-dot" />
-        <span>
-          <b>그 외</b> — 위 분기에 하나도 안 맞는 행이 나가는 출력 (자동)
-        </span>
+        <span>{rich(tr('cfg.sw.otherwise'))}</span>
       </div>
     </div>
   )
 }
 
 function MapFields({ params, set }: FieldProps) {
+  const tr = useT()
   const mappings = asArray<Mapping>(params.mappings)
   const update = (index: number, patch: Partial<Mapping>) =>
     set({ mappings: mappings.map((m, i) => (i === index ? { ...m, ...patch } : m)) })
@@ -1501,30 +1472,30 @@ function MapFields({ params, set }: FieldProps) {
   return (
     <>
       <div className="field">
-        <label>필드 매핑</label>
+        <label>{tr('cfg.map.label')}</label>
         {mappings.map((mapping, index) => (
           <div className="map-row" key={index}>
             <input
-              placeholder="원본"
+              placeholder={tr('cfg.map.sourcePh')}
               value={String(mapping.source ?? '')}
               onChange={(e) => update(index, { source: e.target.value })}
             />
             <span className="ar">→</span>
             <input
-              placeholder="대상"
+              placeholder={tr('cfg.map.targetPh')}
               value={String(mapping.target ?? '')}
               onChange={(e) => update(index, { target: e.target.value })}
             />
             <select value={mapping.cast ?? ''} onChange={(e) => update(index, { cast: e.target.value || undefined })}>
               {CASTS.map((c) => (
                 <option key={c} value={c}>
-                  {c || '변환없음'}
+                  {c || tr('cfg.map.noCast')}
                 </option>
               ))}
             </select>
             <button
               className="rm"
-              title="매핑 삭제"
+              title={tr('cfg.map.deleteMapping')}
               onClick={() => set({ mappings: mappings.filter((_, i) => i !== index) })}
             >
               ×
@@ -1536,7 +1507,7 @@ function MapFields({ params, set }: FieldProps) {
           onClick={() => set({ mappings: [...mappings, { source: '', target: '' }] })}
         >
           <Icon.plus />
-          매핑 추가
+          {tr('cfg.map.addMapping')}
         </button>
       </div>
       <div className="field">
@@ -1546,7 +1517,7 @@ function MapFields({ params, set }: FieldProps) {
             checked={params.drop_unmapped !== false}
             onChange={(e) => set({ drop_unmapped: e.target.checked })}
           />
-          매핑에 없는 컬럼 버리기
+          {tr('cfg.map.dropUnmapped')}
         </label>
       </div>
     </>
@@ -1562,19 +1533,24 @@ export function detectPyMode(code: string): 'row' | 'batch' | null {
 
 /** 커스텀 코드를 덮어써도 안전한가 — 비어 있거나 기본 골격 그대로면 확인 없이 교체한다. */
 export function isReplaceablePyCode(code: string): boolean {
-  const t = code.trim()
-  if (!t) return true
-  if (t === DEFAULT_PYCODE.trim() || t === DEFAULT_PYCODE_BATCH.trim()) return true
+  const trimmed = code.trim()
+  if (!trimmed) return true
+  if (isDefaultPycode(code)) return true // 어느 언어로 만들어졌든 기본 골격이면 안전
   return !/^\s*def\s+/m.test(code) // def 가 없으면 주석·빈 골격뿐 → 안전
 }
 
-const MODE_LABEL: Record<'row' | 'batch', string> = { row: '행 단위', batch: '배치 단위' }
+// 라벨은 MsgKey 로만 들고 렌더 시점에 t() 로 푼다 — 모듈 상수에 번역문을 담으면 언어 전환을 못 따라온다.
+const MODE_LABEL = { row: 'cfg.py.rowMode', batch: 'cfg.py.batchMode' } as const satisfies Record<
+  'row' | 'batch',
+  MsgKey
+>
 
 function scaffoldFor(target: 'row' | 'batch'): string {
-  return target === 'batch' ? DEFAULT_PYCODE_BATCH : DEFAULT_PYCODE
+  return defaultPycode(target)
 }
 
 function PyCodeFields({ params, set }: FieldProps) {
+  const tr = useT()
   const [expanded, setExpanded] = useState(false)
   // 커스텀 코드를 덮어쓰기 전 앱 내부 확인 — 네이티브 confirm() 은 브라우저가 막으면
   // 조용히 false 를 돌려줘 토글이 안 먹는 것처럼 보인다.
@@ -1604,60 +1580,49 @@ function PyCodeFields({ params, set }: FieldProps) {
   return (
     <div className="field">
       <div className="code-field-head">
-        <label>Python 코드</label>
-        <button className="btn sm" onClick={() => setExpanded(true)} title="큰 화면에서 편집">
+        <label>{tr('cfg.py.label')}</label>
+        <button className="btn sm" onClick={() => setExpanded(true)} title={tr('cfg.src.expandEdit')}>
           <Icon.expand />
-          크게 편집
+          {tr('cfg.src.expand')}
         </button>
       </div>
-      <div className="mode-seg" role="group" aria-label="처리 모드">
+      <div className="mode-seg" role="group" aria-label={tr('cfg.py.modeAria')}>
         <button
           className={`mode-seg-btn ${mode === 'row' ? 'active' : ''}`}
           onClick={() => selectMode('row')}
-          title="각 행마다 transform(row) 호출"
+          title={tr('cfg.py.rowTip')}
         >
-          행 단위
+          {tr('cfg.py.rowMode')}
         </button>
         <button
           className={`mode-seg-btn ${mode === 'batch' ? 'active' : ''}`}
           onClick={() => selectMode('batch')}
-          title="전체 행을 transform_batch(df) 로 한 번에"
+          title={tr('cfg.py.batchTip')}
         >
-          배치 단위
+          {tr('cfg.py.batchMode')}
         </button>
       </div>
       {pendingSwap && (
         <div className="mode-swap-confirm">
-          <span>
-            작성한 코드를 <b>{MODE_LABEL[pendingSwap]}</b> 골격으로 교체합니다. 되돌릴 수 없어요.
-          </span>
+          <span>{rich(tr('cfg.py.swapWarn', { mode: tr(MODE_LABEL[pendingSwap]) }))}</span>
           <div className="mode-swap-actions">
             <button className="btn sm" onClick={() => setPendingSwap(null)}>
-              취소
+              {tr('common.cancel')}
             </button>
             <button className="btn sm danger" onClick={confirmSwap}>
-              교체
+              {tr('cfg.py.swap')}
             </button>
           </div>
         </div>
       )}
-      <Suspense fallback={<div className="code-loading">에디터를 불러오는 중…</div>}>
+      <Suspense fallback={<div className="code-loading">{tr('cfg.src.editorLoading')}</div>}>
         <PyCodeEditor value={code} onChange={setCode} height="220px" />
       </Suspense>
       <div className="hint">
-        <strong>행 단위</strong> — <code>transform(row: dict)</code> 가 각 레코드마다 호출됩니다.
-        변환한 dict 를 반환하고, <code>None</code> 을 반환하면 그 행은 제외됩니다.
+        {rich(tr('cfg.py.rowHint', { fn: 'transform(row: dict)', none: 'None' }))}
       </div>
-      <div className="hint">
-        <strong>배치 단위</strong> — <code>transform_batch(df)</code> 를 대신 정의하면 전체 행을
-        pandas DataFrame 으로 한 번에 받아 DataFrame 을 반환합니다(groupby·정렬·중복제거 등).
-        둘 중 하나만 정의하세요.
-      </div>
-      <div className="hint">
-        코드는 격리된 프로세스에서 실행됩니다 — DB·시크릿·네트워크에 접근할 수 없습니다.
-        <code>import pandas as pd</code> 및 표준 모듈 일부(datetime·re·json·math·hashlib·decimal
-        등)를 쓸 수 있습니다. 값은 JSON 기준으로 정규화됩니다(날짜→ISO 문자열, Decimal→숫자).
-      </div>
+      <div className="hint">{rich(tr('cfg.py.batchHint', { fn: 'transform_batch(df)' }))}</div>
+      <div className="hint">{rich(tr('cfg.py.sandboxHint', { import: 'import pandas as pd' }))}</div>
       {expanded && (
         <Suspense fallback={null}>
           <PyCodeModal value={code} onChange={setCode} onClose={() => setExpanded(false)} />
@@ -1712,6 +1677,7 @@ function ColumnMapModal({
   onSave: (next: ColEntry[]) => void
   onClose: () => void
 }) {
+  const tr = useT()
   const [srcTable, setSrcTable] = useState(() => sourceTables[0] ?? '')
   const { data: srcSchema, isLoading: srcLoading } = useConnectionSchema(sourceConnId)
   const { data: tgtSchema } = useConnectionSchema(targetConnId)
@@ -1742,8 +1708,8 @@ function ColumnMapModal({
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="mh">
-          <h3>컬럼 매핑</h3>
-          <button className="x" onClick={onClose} aria-label="닫기">
+          <h3>{tr('cfg.cm.title')}</h3>
+          <button className="x" onClick={onClose} aria-label={tr('common.close')}>
             ×
           </button>
         </div>
@@ -1751,7 +1717,7 @@ function ColumnMapModal({
         <div className="mb" style={{ padding: '14px 20px' }}>
           {sourceTables.length > 1 && (
             <div className="field">
-              <label>소스 테이블</label>
+              <label>{tr('cfg.cm.srcTable')}</label>
               <select value={srcTable} onChange={(e) => setSrcTable(e.target.value)}>
                 {sourceTables.map((t) => (
                   <option key={t} value={t}>
@@ -1763,14 +1729,12 @@ function ColumnMapModal({
           )}
 
           <div className="hint" style={{ marginBottom: 10 }}>
-            설정하지 않은 컬럼은 <b>동일 이름</b>으로 자동 저장됩니다. 필요 없는 컬럼은 [비활성화]로 제외하세요.
+            {rich(tr('cfg.cm.hint'))}
           </div>
 
-          {srcLoading && <div className="hint">소스 컬럼을 불러오는 중…</div>}
+          {srcLoading && <div className="hint">{tr('cfg.cm.srcLoading')}</div>}
           {!srcLoading && sourceCols.length === 0 && (
-            <Banner kind="warn">
-              소스 컬럼을 읽지 못했습니다. CDC 소스 연결·테이블을 확인하세요.
-            </Banner>
+            <Banner kind="warn">{tr('cfg.cm.srcFailed')}</Banner>
           )}
 
           <div className="colmap-list">
@@ -1786,7 +1750,7 @@ function ColumnMapModal({
                     value={disabled ? '' : e.target ?? ''}
                     onChange={(ev) => setEntry(col, { target: ev.target.value || undefined, disabled: false })}
                   >
-                    <option value="">(동일 이름: {col})</option>
+                    <option value="">{tr('cfg.cm.sameName', { col })}</option>
                     {targetCols.map((tc) => (
                       <option key={tc} value={tc}>
                         {tc}
@@ -1796,28 +1760,26 @@ function ColumnMapModal({
                   <button
                     className={`btn sm ${disabled ? 'danger' : ''}`}
                     onClick={() => setEntry(col, { disabled: !disabled })}
-                    title={disabled ? '다시 포함' : '이 컬럼 제외'}
+                    title={disabled ? tr('cfg.cm.include') : tr('cfg.cm.exclude')}
                   >
-                    {disabled ? '제외됨' : '비활성화'}
+                    {disabled ? tr('cfg.cm.excluded') : tr('cfg.cm.disable')}
                   </button>
                 </div>
               )
             })}
           </div>
           {targetCols.length === 0 && targetTable && (
-            <div className="hint" style={{ marginTop: 8 }}>
-              타깃 테이블 컬럼을 못 읽었습니다. 직접 이름을 맞추려면 대상 테이블을 먼저 고르세요.
-            </div>
+            <div className="hint" style={{ marginTop: 8 }}>{tr('cfg.cm.tgtFailed')}</div>
           )}
         </div>
 
         <div className="mf">
           <button className="btn" onClick={onClose}>
-            취소
+            {tr('common.cancel')}
           </button>
           <button className="btn primary" onClick={save}>
             <Icon.save />
-            적용
+            {tr('cfg.cm.apply')}
           </button>
         </div>
       </div>
@@ -1827,6 +1789,7 @@ function ColumnMapModal({
 
 function TargetDbFields({ params, set, connectionId }: FieldProps & { connectionId?: string }) {
   // CDC 파이프라인이면 컬럼 매핑 옵션(팝업)을 추가로 보여준다. 나머지는 기존 단일 테이블 UI 그대로.
+  const tr = useT()
   const nodes = useCanvasStore((s) => s.nodes)
   const cdcSource = nodes.find((n) => isCdcSource(n.data.kind))
   const [showColMap, setShowColMap] = useState(false)
@@ -1840,7 +1803,7 @@ function TargetDbFields({ params, set, connectionId }: FieldProps & { connection
   return (
     <>
       <div className="field">
-        <label>대상 테이블</label>
+        <label>{tr('cfg.tgt.table')}</label>
         <select
           value={selected ? `${selected.namespace ?? ''}|${selected.name}` : ''}
           onChange={(e) => {
@@ -1849,7 +1812,7 @@ function TargetDbFields({ params, set, connectionId }: FieldProps & { connection
           }}
           disabled={tables.length === 0}
         >
-          <option value="">— 선택 —</option>
+          <option value="">{tr('cfg.choose')}</option>
           {tables.map((t) => (
             <option key={t.qualified_name} value={`${t.namespace ?? ''}|${t.name}`}>
               {t.qualified_name}
@@ -1859,22 +1822,22 @@ function TargetDbFields({ params, set, connectionId }: FieldProps & { connection
       </div>
 
       <div className="field">
-        <label>적재 모드</label>
+        <label>{tr('cfg.tgt.mode')}</label>
         <select value={mode} onChange={(e) => set({ mode: e.target.value })}>
-          <option value="upsert">Upsert (키 기준 갱신)</option>
-          <option value="append">Append (단순 추가)</option>
-          <option value="overwrite">Overwrite (전체 교체)</option>
+          <option value="upsert">{tr('cfg.tgt.upsert')}</option>
+          <option value="append">{tr('cfg.tgt.append')}</option>
+          <option value="overwrite">{tr('cfg.tgt.overwrite')}</option>
         </select>
         <div className="hint">
-          {mode === 'upsert' && '재실행해도 결과가 같습니다 (멱등).'}
-          {mode === 'append' && '재실행하면 행이 중복될 수 있습니다.'}
-          {mode === 'overwrite' && '적재 전에 대상 테이블을 비웁니다.'}
+          {mode === 'upsert' && tr('cfg.tgt.upsertHint')}
+          {mode === 'append' && tr('cfg.tgt.appendHint')}
+          {mode === 'overwrite' && tr('cfg.tgt.overwriteHint')}
         </div>
       </div>
 
       {mode === 'upsert' && (
         <div className="field">
-          <label>키 컬럼</label>
+          <label>{tr('cfg.tgt.keyColumns')}</label>
           {selected ? (
             <select
               multiple
@@ -1905,41 +1868,37 @@ function TargetDbFields({ params, set, connectionId }: FieldProps & { connection
               }
             />
           )}
-          <div className="hint">이 컬럼들이 같으면 같은 행으로 보고 갱신합니다.</div>
+          <div className="hint">{tr('cfg.tgt.keyColumnsHint')}</div>
         </div>
       )}
 
       {cdcSource && (
         <div className="field">
-          <label>컬럼 매핑 (옵션)</label>
+          <label>{tr('cfg.tgt.colMap')}</label>
           <div className="colmap-status">
             <span className={`tag ${colMap.length > 0 ? 'ok' : 'stopped'}`}>
-              {colMap.length > 0 ? `● 설정됨 · ${colMap.length}개` : '○ 미설정'}
+              {colMap.length > 0
+                ? tr('cfg.tgt.colMapSet', { n: colMap.length })
+                : tr('cfg.tgt.colMapUnset')}
             </span>
             <button className="btn sm" onClick={() => setShowColMap(true)}>
               <Icon.map />
-              {colMap.length > 0 ? '편집' : '설정'}
+              {colMap.length > 0 ? tr('cfg.tgt.colMapEdit') : tr('cfg.tgt.colMapConfigure')}
             </button>
             {colMap.length > 0 && (
               <button
                 className="btn sm danger"
                 onClick={() => set({ column_map: undefined })}
-                title="컬럼 매핑 초기화 (전부 동일 이름으로)"
+                title={tr('cfg.tgt.colMapResetTip')}
               >
-                초기화
+                {tr('cfg.tgt.colMapReset')}
               </button>
             )}
           </div>
           <div className="hint">
-            {colMap.length > 0 ? (
-              <>
-                지정한 컬럼만 이름 변경/제외되고, <b>나머지는 동일 이름으로 자동 저장</b>됩니다.
-              </>
-            ) : (
-              <>
-                설정하지 않으면 모든 컬럼이 소스와 <b>동일한 이름</b>으로 자동 저장됩니다.
-              </>
-            )}
+            {colMap.length > 0
+              ? rich(tr('cfg.tgt.colMapSetHint'))
+              : rich(tr('cfg.tgt.colMapUnsetHint'))}
           </div>
         </div>
       )}
@@ -1961,34 +1920,33 @@ function TargetDbFields({ params, set, connectionId }: FieldProps & { connection
 }
 
 function TargetS3Fields({ params, set }: FieldProps) {
+  const tr = useT()
   return (
     <>
       <div className="field">
-        <label>경로 prefix</label>
+        <label>{tr('cfg.s3.prefix')}</label>
         <input
           placeholder="raw/customers"
           value={String(params.path_prefix ?? '')}
           onChange={(e) => set({ path_prefix: e.target.value })}
         />
-        <div className="hint">실제 경로는 prefix/run_id=&lt;실행ID&gt;/part-00000.parquet 입니다.</div>
+        <div className="hint">{tr('cfg.s3.prefixHint')}</div>
       </div>
       <div className="field">
-        <label>파일 포맷</label>
+        <label>{tr('cfg.s3.format')}</label>
         <select value={String(params.file_format ?? 'parquet')} onChange={(e) => set({ file_format: e.target.value })}>
-          <option value="parquet">Parquet (권장)</option>
+          <option value="parquet">{tr('cfg.s3.parquet')}</option>
           <option value="jsonl">JSON Lines</option>
           <option value="csv">CSV</option>
         </select>
       </div>
       <div className="field">
-        <label>적재 모드</label>
+        <label>{tr('cfg.s3.mode')}</label>
         <select value={String(params.mode ?? 'append')} onChange={(e) => set({ mode: e.target.value })}>
           <option value="append">Append</option>
-          <option value="overwrite">Overwrite (실행 경로 선정리)</option>
+          <option value="overwrite">{tr('cfg.s3.overwrite')}</option>
         </select>
-        <div className="hint">
-          S3 는 upsert 를 지원하지 않습니다. 실행별 경로 분리로 멱등성을 확보합니다.
-        </div>
+        <div className="hint">{tr('cfg.s3.modeHint')}</div>
       </div>
     </>
   )
@@ -1996,10 +1954,11 @@ function TargetS3Fields({ params, set }: FieldProps) {
 
 
 function ColorSwatches({ value, onPick }: { value: unknown; onPick: (key: string) => void }) {
+  const tr = useT()
   const current = value ?? DEFAULT_MEMO_COLOR
   return (
     <div className="field">
-      <label>색상</label>
+      <label>{tr('cfg.memo.color')}</label>
       <div className="memo-swatches">
         {MEMO_COLORS.map((c) => (
           <button
@@ -2007,8 +1966,8 @@ function ColorSwatches({ value, onPick }: { value: unknown; onPick: (key: string
             type="button"
             className={`memo-swatch ${current === c.key ? 'active' : ''}`}
             style={{ background: c.bg, borderColor: current === c.key ? c.dot : undefined }}
-            title={c.label}
-            aria-label={c.label}
+            title={tr(c.label)}
+            aria-label={tr(c.label)}
             onClick={() => onPick(c.key)}
           />
         ))}
@@ -2018,17 +1977,18 @@ function ColorSwatches({ value, onPick }: { value: unknown; onPick: (key: string
 }
 
 function MemoFields({ params, set }: FieldProps) {
+  const tr = useT()
   return (
     <>
       <div className="field">
-        <label>메모 내용</label>
+        <label>{tr('cfg.memo.text')}</label>
         <textarea
           rows={6}
           value={String(params.text ?? '')}
-          placeholder="이 파이프라인에 대한 설명, 할 일, 주의사항 등을 적어두세요."
+          placeholder={tr('cfg.memo.textPh')}
           onChange={(e) => set({ text: e.target.value })}
         />
-        <div className="hint">메모는 문서용 주석입니다 — 실행되지 않고 다른 노드와 연결할 수 없습니다.</div>
+        <div className="hint">{tr('cfg.memo.hint')}</div>
       </div>
       <ColorSwatches value={params.color} onPick={(color) => set({ color })} />
     </>
@@ -2036,18 +1996,17 @@ function MemoFields({ params, set }: FieldProps) {
 }
 
 function GroupFields({ params, set }: FieldProps) {
+  const tr = useT()
   return (
     <>
       <div className="field">
-        <label>영역 제목</label>
+        <label>{tr('cfg.grp.title')}</label>
         <input
           value={String(params.title ?? '')}
-          placeholder="예: 수집 · 적재"
+          placeholder={tr('cfg.grp.titlePh')}
           onChange={(e) => set({ title: e.target.value })}
         />
-        <div className="hint">
-          노드를 사각형으로 묶어 구분하는 영역입니다. 모서리를 끌어 크기를 조절하세요 — 실행·연결과 무관합니다.
-        </div>
+        <div className="hint">{tr('cfg.grp.hint')}</div>
       </div>
       <ColorSwatches value={params.color} onPick={(color) => set({ color })} />
     </>
@@ -2055,6 +2014,7 @@ function GroupFields({ params, set }: FieldProps) {
 }
 
 function TargetFileFields({ params, set }: FieldProps) {
+  const tr = useT()
   const { data: defaults } = useConnectorDefaults()
   const root = defaults?.local_file?.root
   const fmt = String(params.file_format ?? 'jsonl')
@@ -2062,41 +2022,42 @@ function TargetFileFields({ params, set }: FieldProps) {
   return (
     <>
       <div className="field">
-        <label>경로 prefix (선택)</label>
+        <label>{tr('cfg.s3.prefixOptional')}</label>
         <input
           placeholder="customers"
           value={String(params.path_prefix ?? '')}
           onChange={(e) => set({ path_prefix: e.target.value })}
         />
         <div className="hint">
-          실제 경로: {root ? `${root}/` : ''}
-          &lt;연결 폴더&gt;/{params.path_prefix ? `${String(params.path_prefix)}/` : ''}run_id=&lt;실행ID&gt;/part-00000.
-          {fmt}
+          {tr('cfg.file.pathHint', {
+            root: root ? `${root}/` : '',
+            prefix: params.path_prefix ? `${String(params.path_prefix)}/` : '',
+            fmt,
+          })}
         </div>
       </div>
       <div className="field">
-        <label>파일 포맷</label>
+        <label>{tr('cfg.s3.format')}</label>
         <select value={fmt} onChange={(e) => set({ file_format: e.target.value })}>
-          <option value="jsonl">JSON Lines (권장)</option>
+          <option value="jsonl">{tr('cfg.s3.jsonl')}</option>
           <option value="csv">CSV</option>
           <option value="parquet">Parquet</option>
         </select>
       </div>
       <div className="field">
-        <label>적재 모드</label>
+        <label>{tr('cfg.s3.mode')}</label>
         <select value={mode} onChange={(e) => set({ mode: e.target.value })}>
           <option value="append">Append</option>
-          <option value="overwrite">Overwrite (실행 경로 선정리)</option>
+          <option value="overwrite">{tr('cfg.s3.overwrite')}</option>
         </select>
-        <div className="hint">
-          로컬 파일은 upsert 를 지원하지 않습니다. 실행별 경로 분리로 멱등성을 확보합니다.
-        </div>
+        <div className="hint">{tr('cfg.file.modeHint')}</div>
       </div>
     </>
   )
 }
 
 function MongoSourceFields({ params, set, connectionId }: FieldProps & { connectionId?: string }) {
+  const tr = useT()
   const { data: schema, isLoading, isError } = useConnectionSchema(connectionId)
   const collections = schema?.tables ?? []
   const selected = collections.find(
@@ -2107,9 +2068,9 @@ function MongoSourceFields({ params, set, connectionId }: FieldProps & { connect
   return (
     <>
       <div className="field">
-        <label>컬렉션</label>
-        {isLoading && <div className="hint">컬렉션을 불러오는 중…</div>}
-        {isError && <div className="hint">읽지 못했습니다. 연결 상태를 확인하세요.</div>}
+        <label>{tr('cfg.mgo.collection')}</label>
+        {isLoading && <div className="hint">{tr('cfg.mgo.loading')}</div>}
+        {isError && <div className="hint">{tr('cfg.mgo.readError')}</div>}
         <select
           value={selected ? `${selected.namespace ?? ''}|${selected.name}` : ''}
           onChange={(e) => {
@@ -2118,7 +2079,7 @@ function MongoSourceFields({ params, set, connectionId }: FieldProps & { connect
           }}
           disabled={!connectionId || collections.length === 0}
         >
-          <option value="">— 선택 —</option>
+          <option value="">{tr('cfg.choose')}</option>
           {collections.map((c) => (
             <option key={c.qualified_name} value={`${c.namespace ?? ''}|${c.name}`}>
               {c.qualified_name}
@@ -2128,7 +2089,7 @@ function MongoSourceFields({ params, set, connectionId }: FieldProps & { connect
       </div>
 
       <div className="field">
-        <label>필터 (JSON)</label>
+        <label>{tr('cfg.mgo.filter')}</label>
         <textarea
           rows={4}
           value={String(params.query ?? '')}
@@ -2140,29 +2101,29 @@ function MongoSourceFields({ params, set, connectionId }: FieldProps & { connect
             {filterError}
           </div>
         ) : (
-          <div className="hint">비우면 전체 조회. Mongo 필터는 증분 컬럼과 함께 쓸 수 있습니다.</div>
+          <div className="hint">{tr('cfg.mgo.filterHint')}</div>
         )}
       </div>
 
       <div className="field">
-        <label>증분 필드 (watermark)</label>
+        <label>{tr('cfg.mgo.watermark')}</label>
         <select
           value={String(params.incremental_column ?? '')}
           onChange={(e) => set({ incremental_column: e.target.value || undefined })}
           disabled={!selected}
         >
-          <option value="">— 전체 적재 —</option>
+          <option value="">{tr('cfg.src.fullLoad')}</option>
           {(selected?.columns ?? []).map((c) => (
             <option key={c.name} value={c.name}>
               {c.name} ({c.data_type})
             </option>
           ))}
         </select>
-        <div className="hint">표본 문서에서 추론한 필드 목록입니다.</div>
+        <div className="hint">{tr('cfg.mgo.watermarkHint')}</div>
       </div>
 
       <div className="field">
-        <label>배치 크기</label>
+        <label>{tr('cfg.src.batchSize')}</label>
         <input
           type="number"
           min={1}
@@ -2175,6 +2136,7 @@ function MongoSourceFields({ params, set, connectionId }: FieldProps & { connect
 }
 
 function MongoTargetFields({ params, set, connectionId }: FieldProps & { connectionId?: string }) {
+  const tr = useT()
   const { data: schema } = useConnectionSchema(connectionId)
   const collections = schema?.tables ?? []
   const selected = collections.find(
@@ -2186,7 +2148,7 @@ function MongoTargetFields({ params, set, connectionId }: FieldProps & { connect
   return (
     <>
       <div className="field">
-        <label>대상 컬렉션</label>
+        <label>{tr('cfg.mgo.targetCollection')}</label>
         <select
           value={selected ? `${selected.namespace ?? ''}|${selected.name}` : ''}
           onChange={(e) => {
@@ -2194,36 +2156,36 @@ function MongoTargetFields({ params, set, connectionId }: FieldProps & { connect
             set({ namespace: namespace || undefined, table: name || undefined })
           }}
         >
-          <option value="">— 선택 —</option>
+          <option value="">{tr('cfg.choose')}</option>
           {collections.map((c) => (
             <option key={c.qualified_name} value={`${c.namespace ?? ''}|${c.name}`}>
               {c.qualified_name}
             </option>
           ))}
         </select>
-        <div className="hint">목록에 없으면 직접 입력하세요 — 없는 컬렉션은 적재 시 생성됩니다.</div>
+        <div className="hint">{tr('cfg.mgo.targetHint')}</div>
         <input
           style={{ marginTop: 6 }}
-          placeholder="컬렉션 이름 직접 입력"
+          placeholder={tr('cfg.mgo.targetPh')}
           value={String(params.table ?? '')}
           onChange={(e) => set({ table: e.target.value || undefined })}
         />
       </div>
 
       <div className="field">
-        <label>적재 모드</label>
+        <label>{tr('cfg.tgt.mode')}</label>
         <select value={mode} onChange={(e) => set({ mode: e.target.value })}>
-          <option value="upsert">Upsert (키 기준 교체)</option>
-          <option value="append">Append (단순 추가)</option>
-          <option value="overwrite">Overwrite (전체 교체)</option>
+          <option value="upsert">{tr('cfg.mgo.upsert')}</option>
+          <option value="append">{tr('cfg.tgt.append')}</option>
+          <option value="overwrite">{tr('cfg.tgt.overwrite')}</option>
         </select>
       </div>
 
       {mode === 'upsert' && (
         <div className="field">
-          <label>키 필드</label>
+          <label>{tr('cfg.mgo.keyFields')}</label>
           <input
-            placeholder="_id 또는 order_no, tenant_id"
+            placeholder={tr('cfg.mgo.keyFieldsPh')}
             value={keyColumns.join(', ')}
             onChange={(e) =>
               set({
@@ -2234,7 +2196,7 @@ function MongoTargetFields({ params, set, connectionId }: FieldProps & { connect
               })
             }
           />
-          <div className="hint">이 필드들이 같으면 같은 문서로 보고 교체합니다.</div>
+          <div className="hint">{tr('cfg.mgo.keyFieldsHint')}</div>
         </div>
       )}
     </>
@@ -2248,10 +2210,10 @@ function jsonError(raw: unknown): string | null {
   try {
     const parsed = JSON.parse(text)
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      return 'JSON 객체여야 합니다'
+      return t('cfg.json.mustBeObject')
     }
   } catch (e) {
-    return `올바른 JSON 이 아닙니다: ${e instanceof Error ? e.message : ''}`
+    return t('cfg.json.invalid', { detail: e instanceof Error ? e.message : '' })
   }
   return null
 }
@@ -2263,6 +2225,7 @@ function jsonError(raw: unknown): string | null {
  * 테이블마다 연결을 만들 필요가 없다.
  */
 function SapSourceFields({ params, set, connectionId }: FieldProps & { connectionId?: string }) {
+  const tr = useT()
   const mode = String(params.mode ?? 'read_table')
   const table = String(params.table ?? '')
   const columns = asArray<string>(params.columns)
@@ -2284,22 +2247,20 @@ function SapSourceFields({ params, set, connectionId }: FieldProps & { connectio
   return (
     <>
       <div className="field">
-        <label>읽기 방식</label>
+        <label>{tr('cfg.sap.mode')}</label>
         <select value={mode} onChange={(e) => set({ mode: e.target.value })}>
-          <option value="bapi">BAPI 호출 (권장)</option>
+          <option value="bapi">{tr('cfg.sap.bapi')}</option>
           <option value="read_table">RFC_READ_TABLE</option>
         </select>
         <div className="hint">
-          {mode === 'bapi'
-            ? 'BAPI 는 512자 행폭 제약이 없고 결과가 구조화되어 있습니다.'
-            : 'RFC_READ_TABLE 은 행폭 512자 제약이 있어 넓은 테이블은 나눠 호출합니다.'}
+          {mode === 'bapi' ? tr('cfg.sap.bapiHint') : tr('cfg.sap.readTableHint')}
         </div>
       </div>
 
       {mode === 'bapi' ? (
         <>
           <div className="field">
-            <label>함수 이름</label>
+            <label>{tr('cfg.sap.functionName')}</label>
             <input
               placeholder="BAPI_MATERIAL_GETLIST"
               value={String(params.function_name ?? '')}
@@ -2307,16 +2268,16 @@ function SapSourceFields({ params, set, connectionId }: FieldProps & { connectio
             />
           </div>
           <div className="field">
-            <label>결과 테이블 (선택)</label>
+            <label>{tr('cfg.sap.resultTable')}</label>
             <input
-              placeholder="MATNRLIST — 비우면 자동 판별"
+              placeholder={tr('cfg.sap.resultTablePh')}
               value={String(params.result_table ?? '')}
               onChange={(e) => set({ result_table: e.target.value.toUpperCase() || undefined })}
             />
-            <div className="hint">결과 테이블 후보가 여러 개면 반드시 지정해야 합니다.</div>
+            <div className="hint">{tr('cfg.sap.resultTableHint')}</div>
           </div>
           <div className="field">
-            <label>파라미터 (JSON)</label>
+            <label>{tr('cfg.sap.parameters')}</label>
             <textarea
               rows={4}
               placeholder={'{"MAXROWS": 1000}'}
@@ -2345,7 +2306,7 @@ function SapSourceFields({ params, set, connectionId }: FieldProps & { connectio
       ) : (
         <>
           <div className="field">
-            <label>테이블</label>
+            <label>{tr('cfg.sap.table')}</label>
             <input
               placeholder="MARA"
               value={table}
@@ -2355,27 +2316,32 @@ function SapSourceFields({ params, set, connectionId }: FieldProps & { connectio
                 set({ table: next || undefined, columns: [], incremental_column: undefined })
               }}
             />
-            {isLoading && <div className="hint">필드를 불러오는 중…</div>}
+            {isLoading && <div className="hint">{tr('cfg.sap.fieldsLoading')}</div>}
             {isError && (
               <div className="hint" style={{ color: 'var(--red)' }}>
-                {error instanceof Error ? error.message : '테이블을 읽지 못했습니다'}
+                {error instanceof Error ? error.message : tr('cfg.sap.tableReadFailed')}
               </div>
             )}
-            {!table && (
-              <div className="hint">
-                SAP 테이블 이름을 입력하면 필드를 조회합니다 (예: MARA, MAKT, CSKT).
-              </div>
-            )}
+            {!table && <div className="hint">{tr('cfg.sap.tableHint')}</div>}
             {found && (
               <div className="hint">
-                {found.name} · 필드 {fields.length}개 · 전체 폭 {totalWidth}자
+                {tr('cfg.sap.tableMeta', {
+                  name: found.name,
+                  n: fields.length,
+                  width: totalWidth,
+                })}
               </div>
             )}
           </div>
 
           {fields.length > 0 && (
             <div className="field">
-              <label>필드 {columns.length > 0 ? `(${columns.length}개 선택)` : '(전체)'}</label>
+              <label>
+                {tr('cfg.sap.fields')}{' '}
+                {columns.length > 0
+                  ? tr('cfg.sap.fieldsChosen', { n: columns.length })
+                  : tr('cfg.sap.fieldsAll')}
+              </label>
               <select
                 multiple
                 size={8}
@@ -2391,50 +2357,50 @@ function SapSourceFields({ params, set, connectionId }: FieldProps & { connectio
                 ))}
               </select>
               <div className="hint" style={{ color: willSplit ? 'var(--amber)' : undefined }}>
-                선택 폭 {effectiveWidth}자 / 한계 512자
-                {willSplit && ' — 512자를 넘어 나눠 호출합니다. 필드를 줄이거나 BAPI 를 쓰세요.'}
+                {tr('cfg.sap.widthMeter', { width: effectiveWidth })}
+                {willSplit && tr('cfg.sap.willSplit')}
               </div>
             </div>
           )}
 
           <div className="field">
-            <label>WHERE 조건</label>
+            <label>{tr('cfg.sap.where')}</label>
             <input
               placeholder="MTART = 'FERT'"
               value={String(params.where ?? '')}
               onChange={(e) => set({ where: e.target.value })}
             />
-            <div className="hint">ABAP OpenSQL 문법. 72자 단위 분할은 서버가 처리합니다.</div>
+            <div className="hint">{tr('cfg.sap.whereHint')}</div>
           </div>
 
           <div className="field">
-            <label>증분 필드 (watermark)</label>
+            <label>{tr('cfg.mgo.watermark')}</label>
             <select
               value={String(params.incremental_column ?? '')}
               onChange={(e) => set({ incremental_column: e.target.value || undefined })}
               disabled={fields.length === 0}
             >
-              <option value="">— 전체 적재 —</option>
+              <option value="">{tr('cfg.src.fullLoad')}</option>
               {fields.map((c) => (
                 <option key={c.name} value={c.name}>
                   {c.name} · {c.data_type}
                 </option>
               ))}
             </select>
-            <div className="hint">SAP 날짜(YYYYMMDD)는 사전순 비교가 곧 크기순 비교입니다.</div>
+            <div className="hint">{tr('cfg.sap.watermarkHint')}</div>
           </div>
         </>
       )}
 
       <div className="field">
-        <label>배치 크기</label>
+        <label>{tr('cfg.src.batchSize')}</label>
         <input
           type="number"
           min={1}
           value={Number(params.batch_size ?? 2000)}
           onChange={(e) => set({ batch_size: Number(e.target.value) || 2000 })}
         />
-        <div className="hint">SAP 게이트웨이 타임아웃을 피하려면 한 번에 다 읽지 않습니다.</div>
+        <div className="hint">{tr('cfg.sap.batchHint')}</div>
       </div>
     </>
   )

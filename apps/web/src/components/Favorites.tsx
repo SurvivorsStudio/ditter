@@ -8,6 +8,8 @@ import { SearchSelect, type SelectOption } from './SearchSelect'
 import { specFor } from '../api/connectorFields'
 import type { Favorite } from '../api/favoritesStore'
 import type { Connection } from '../api/types'
+import { useT } from '../i18n'
+import { rich } from '../i18n/rich'
 
 /** 즐겨찾기 추가/편집용 작은 SQL 에디터 — 구문 색상 강조가 되는 입력창.
  *  자동완성·라인번호 없이 가볍게, 편집 중에도 미리보기와 같은 색으로 보이게 한다. */
@@ -116,7 +118,13 @@ function tokenizeSql(sql: string): SqlTok[] {
 
 /** 즐겨찾기 항목이 속한 연결의 배지(PG/MG…). 연결이 지워졌으면 회색 물음표. */
 function ConnBadge({ conn }: { conn?: Connection }) {
-  if (!conn) return <span className="fav-conn-badge missing" title="삭제된 연결">?</span>
+  const tr = useT()
+  if (!conn)
+    return (
+      <span className="fav-conn-badge missing" title={tr('saved.deletedConn')}>
+        ?
+      </span>
+    )
   const spec = specFor(conn.type)
   return (
     <span className="fav-conn-badge" style={{ background: spec.color }} title={conn.name}>
@@ -145,6 +153,7 @@ export function FavoritesPanel({
   onUpdate: (id: string, patch: { name?: string; sql?: string; connId?: string }) => void
   onDelete: (id: string) => void
 }) {
+  const tr = useT()
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
   const [sql, setSql] = useState('')
@@ -243,35 +252,43 @@ export function FavoritesPanel({
     )
   })
   const filterOptions: SelectOption[] = [
-    { value: '', label: '전체 연결' },
+    { value: '', label: tr('saved.allConnections') },
     ...connOptions,
   ]
 
   return (
     <div className="fav-panel">
       <div className="fav-head">
-        <span className="fav-title">즐겨찾기</span>
-        <button className="fav-newbtn" onClick={() => setAdding((a) => !a)} title="즐겨찾기 추가">
+        <span className="fav-title">{tr('saved.favTitle')}</span>
+        <button
+          className="fav-newbtn"
+          onClick={() => setAdding((a) => !a)}
+          title={tr('saved.favAddTip')}
+        >
           <Icon.plus />
-          추가
+          {tr('saved.add')}
         </button>
       </div>
       <div className="fav-hint">
-        편집기에서 <code>/loadQueryList</code> 로 목록 팝업을, <code>/loadQuery.이름</code> 으로 바로 불러옵니다.
+        {tr('saved.favHintPre')}
+        <code>/loadQueryList</code>
+        {tr('saved.favHintMid')}
+        <code>{tr('saved.favHintLoadQuery')}</code>
+        {tr('saved.favHintPost')}
       </div>
 
       {adding && (
         <div className="fav-form">
           <div className="fav-conn-row">
-            <span className="fav-conn-label">연결</span>
+            <span className="fav-conn-label">{tr('saved.connLabel')}</span>
             {connections.length === 0 ? (
-              <span className="fav-conn-none">등록된 연결이 없습니다</span>
+              <span className="fav-conn-none">{tr('saved.noConnections')}</span>
             ) : (
               <SearchSelect
                 value={connId}
                 onChange={setConnId}
                 options={connOptions}
-                placeholder="연결 선택…"
+                placeholder={tr('saved.connSelectPh')}
                 leading={connLead(connId)}
               />
             )}
@@ -279,7 +296,7 @@ export function FavoritesPanel({
           <input
             className="fav-name-input"
             value={name}
-            placeholder="이름 (예: 일일집계)"
+            placeholder={tr('saved.favNamePh')}
             onChange={(e) => setName(e.target.value)}
           />
           <FavSqlInput value={sql} onChange={setSql} placeholder="SELECT * FROM ..." />
@@ -290,10 +307,10 @@ export function FavoritesPanel({
               disabled={!name.trim() || !sql.trim() || !connId}
             >
               <Icon.save />
-              저장
+              {tr('saved.save')}
             </button>
             <button className="btn sm" onClick={resetAdd}>
-              취소
+              {tr('common.cancel')}
             </button>
           </div>
         </div>
@@ -307,7 +324,7 @@ export function FavoritesPanel({
                 value={filterConnId}
                 onChange={setFilterConnId}
                 options={filterOptions}
-                placeholder="전체 연결"
+                placeholder={tr('saved.allConnections')}
                 leading={filterConnId ? connLead(filterConnId) : null}
               />
             </div>
@@ -316,11 +333,15 @@ export function FavoritesPanel({
             <Icon.search />
             <input
               value={search}
-              placeholder="이름·SQL 로 검색…"
+              placeholder={tr('saved.favSearchPh')}
               onChange={(e) => setSearch(e.target.value)}
             />
             {search && (
-              <button className="tree-search-x" onClick={() => setSearch('')} aria-label="지우기">
+              <button
+                className="tree-search-x"
+                onClick={() => setSearch('')}
+                aria-label={tr('saved.clear')}
+              >
                 ×
               </button>
             )}
@@ -331,28 +352,30 @@ export function FavoritesPanel({
       <div className="fav-body">
         {favorites.length === 0 && !adding ? (
           <div className="fav-empty">
-            등록된 즐겨찾기가 없습니다.
+            {tr('saved.favEmptyTitle')}
             <br />
-            <b>추가</b> 를 눌러 자주 쓰는 쿼리를 이름과 함께 담아 두세요.
+            {rich(tr('saved.favEmptyBody'))}
           </div>
         ) : shown.length === 0 ? (
           <div className="fav-empty">
-            {term ? `“${search.trim()}” 검색 결과가 없습니다.` : '이 연결의 즐겨찾기가 없습니다.'}
+            {term
+              ? tr('saved.noSearchResults', { term: search.trim() })
+              : tr('saved.favEmptyForConn')}
           </div>
         ) : (
           shown.map((f) =>
             editId === f.id ? (
               <div key={f.id} className="fav-form">
                 <div className="fav-conn-row">
-                  <span className="fav-conn-label">연결</span>
+                  <span className="fav-conn-label">{tr('saved.connLabel')}</span>
                   {connections.length === 0 ? (
-                    <span className="fav-conn-none">등록된 연결이 없습니다</span>
+                    <span className="fav-conn-none">{tr('saved.noConnections')}</span>
                   ) : (
                     <SearchSelect
                       value={editConnId}
                       onChange={setEditConnId}
                       options={connOptions}
-                      placeholder="연결 선택…"
+                      placeholder={tr('saved.connSelectPh')}
                       leading={connLead(editConnId)}
                     />
                   )}
@@ -367,10 +390,10 @@ export function FavoritesPanel({
                 <div className="fav-form-actions">
                   <button className="btn sm primary" onClick={commitEdit} disabled={!editName.trim()}>
                     <Icon.save />
-                    저장
+                    {tr('saved.save')}
                   </button>
                   <button className="btn sm" onClick={() => setEditId(null)}>
-                    취소
+                    {tr('common.cancel')}
                   </button>
                 </div>
               </div>
@@ -383,19 +406,19 @@ export function FavoritesPanel({
                   </span>
                   <button
                     className={`fav-icon-btn ${copiedId === f.id ? 'copied' : ''}`}
-                    title={copiedId === f.id ? '복사됨' : 'SQL 복사'}
+                    title={copiedId === f.id ? tr('saved.copied') : tr('saved.copySql')}
                     onClick={() => copySql(f)}
                   >
                     {copiedId === f.id ? <Icon.check /> : <Icon.copy />}
                   </button>
-                  <button className="fav-icon-btn" title="편집" onClick={() => startEdit(f)}>
+                  <button className="fav-icon-btn" title={tr('saved.edit')} onClick={() => startEdit(f)}>
                     <Icon.edit />
                   </button>
                   <button
                     className="fav-icon-btn"
-                    title="삭제"
+                    title={tr('saved.delete')}
                     onClick={() => {
-                      if (confirm(`즐겨찾기 "${f.name}" 를 삭제할까요?`)) onDelete(f.id)
+                      if (confirm(tr('saved.favDeleteConfirm', { name: f.name }))) onDelete(f.id)
                     }}
                   >
                     <Icon.trash />
@@ -418,7 +441,7 @@ export function FavoritesPanel({
                       </pre>
                       {long && (
                         <button className="fav-sql-toggle" onClick={() => toggleExpand(f.id)}>
-                          {isOpen ? '접기' : '더 보기'}
+                          {isOpen ? tr('saved.collapse') : tr('saved.more')}
                         </button>
                       )}
                     </>
@@ -443,6 +466,7 @@ export function FavoritePickerModal({
   onPick: (sql: string) => void
   onClose: () => void
 }) {
+  const tr = useT()
   const [search, setSearch] = useState('')
   const term = search.trim().toLowerCase()
   const shown = useMemo(
@@ -495,9 +519,14 @@ export function FavoritePickerModal({
         <div className="fp-head">
           <span className="fp-title">
             <Icon.star />
-            즐겨찾기 불러오기
+            {tr('saved.favPickerTitle')}
           </span>
-          <button className="fp-x" onClick={onClose} aria-label="닫기" title="닫기 (Esc)">
+          <button
+            className="fp-x"
+            onClick={onClose}
+            aria-label={tr('common.close')}
+            title={tr('saved.closeEsc')}
+          >
             ×
           </button>
         </div>
@@ -506,20 +535,20 @@ export function FavoritePickerModal({
           <input
             autoFocus
             value={search}
-            placeholder="이름·SQL 로 검색…"
+            placeholder={tr('saved.favSearchPh')}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         {favorites.length === 0 ? (
           <div className="fp-empty">
-            등록된 즐겨찾기가 없습니다.
+            {tr('saved.favEmptyTitle')}
             <br />
-            좌측 <b>즐겨찾기</b> 탭에서 자주 쓰는 쿼리를 먼저 등록하세요.
+            {rich(tr('saved.favPickerEmptyBody'))}
           </div>
         ) : (
           <div className="fp-body">
             <div className="fp-list">
-              {shown.length === 0 && <div className="fp-list-empty">검색 결과가 없습니다.</div>}
+              {shown.length === 0 && <div className="fp-list-empty">{tr('saved.noResults')}</div>}
               {shown.map((f) => (
                 <button
                   key={f.id}
@@ -545,20 +574,20 @@ export function FavoritePickerModal({
                   </pre>
                 </>
               ) : (
-                <div className="fp-preview-empty">항목을 선택하세요.</div>
+                <div className="fp-preview-empty">{tr('saved.pickItem')}</div>
               )}
             </div>
           </div>
         )}
         <div className="fp-foot">
-          <span className="fp-hint">↑↓ 이동 · Enter 불러오기 · Esc 닫기</span>
+          <span className="fp-hint">{tr('saved.pickerKeys')}</span>
           <div className="fp-foot-actions">
             <button className="btn sm" onClick={onClose}>
-              취소
+              {tr('common.cancel')}
             </button>
             <button className="btn sm primary" onClick={() => sel && onPick(sel.sql)} disabled={!sel}>
               <Icon.play />
-              불러오기
+              {tr('saved.load')}
             </button>
           </div>
         </div>

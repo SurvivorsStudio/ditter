@@ -4,10 +4,11 @@
  * 스티키 노트는 배경·테두리·헤더·글자 대비가 함께 어울려야 보기 좋기 때문이다.
  * 저장은 `params.color` 에 키만 넣는다(예: "yellow"). 키를 모르면 노랑으로 되돌린다.
  */
+import type { MsgKey } from '../i18n'
 
 export type MemoColor = {
   key: string
-  label: string
+  label: MsgKey
   /** 노트 배경 */
   bg: string
   /** 테두리 */
@@ -23,12 +24,12 @@ export type MemoColor = {
 }
 
 export const MEMO_COLORS: MemoColor[] = [
-  { key: 'yellow', label: '노랑', bg: '#fff6da', border: '#f0d488', header: '#ffefc0', text: '#5b4a12', dot: '#d9ab3e', ring: 'rgba(244,183,64,0.4)' },
-  { key: 'pink', label: '분홍', bg: '#ffe9ef', border: '#f3b6c7', header: '#ffd9e2', text: '#7a2740', dot: '#e06a8b', ring: 'rgba(224,106,139,0.4)' },
-  { key: 'blue', label: '파랑', bg: '#e6f0ff', border: '#a9c6f0', header: '#d5e4ff', text: '#1f3d6b', dot: '#5b8ee0', ring: 'rgba(91,142,224,0.4)' },
-  { key: 'green', label: '초록', bg: '#e6f7ec', border: '#a6dcbb', header: '#d3f0de', text: '#1c5236', dot: '#3ea96b', ring: 'rgba(62,169,107,0.4)' },
-  { key: 'purple', label: '보라', bg: '#f0e9ff', border: '#c8b6f0', header: '#e4d9ff', text: '#3f2a6b', dot: '#8b6ae0', ring: 'rgba(139,106,224,0.4)' },
-  { key: 'gray', label: '회색', bg: '#eef0f4', border: '#cfd4de', header: '#e2e6ee', text: '#3a4150', dot: '#9aa2b2', ring: 'rgba(120,130,150,0.4)' },
+  { key: 'yellow', label: 'cui.color.yellow', bg: '#fff6da', border: '#f0d488', header: '#ffefc0', text: '#5b4a12', dot: '#d9ab3e', ring: 'rgba(244,183,64,0.4)' },
+  { key: 'pink', label: 'cui.color.pink', bg: '#ffe9ef', border: '#f3b6c7', header: '#ffd9e2', text: '#7a2740', dot: '#e06a8b', ring: 'rgba(224,106,139,0.4)' },
+  { key: 'blue', label: 'cui.color.blue', bg: '#e6f0ff', border: '#a9c6f0', header: '#d5e4ff', text: '#1f3d6b', dot: '#5b8ee0', ring: 'rgba(91,142,224,0.4)' },
+  { key: 'green', label: 'cui.color.green', bg: '#e6f7ec', border: '#a6dcbb', header: '#d3f0de', text: '#1c5236', dot: '#3ea96b', ring: 'rgba(62,169,107,0.4)' },
+  { key: 'purple', label: 'cui.color.purple', bg: '#f0e9ff', border: '#c8b6f0', header: '#e4d9ff', text: '#3f2a6b', dot: '#8b6ae0', ring: 'rgba(139,106,224,0.4)' },
+  { key: 'gray', label: 'cui.color.gray', bg: '#eef0f4', border: '#cfd4de', header: '#e2e6ee', text: '#3a4150', dot: '#9aa2b2', ring: 'rgba(120,130,150,0.4)' },
 ]
 
 export const DEFAULT_MEMO_COLOR = 'yellow'

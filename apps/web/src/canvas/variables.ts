@@ -5,6 +5,7 @@
  * 되는데 실행하면 다르다"가 나므로, 양쪽 테스트에 **같은 사례**를 넣어 함께 깨지게 했다
  * (`variables.test.ts` ↔ `tests/test_variables.py`).
  */
+import { t } from '../i18n'
 
 /** 변수 이름 규칙 — 영문/숫자/밑줄, 숫자로 시작 불가 */
 const NAME = '[A-Za-z_][A-Za-z0-9_]*'
@@ -183,7 +184,7 @@ export function substitute(
         : (braced ?? bare ?? '')
       if (!(key in values) || values[key] === undefined) {
         throw new VariableError(
-          isRef ? `노드 결과 값이 없습니다: \${${key}}` : `변수 값이 없습니다: $${key}`,
+          isRef ? t('vars.noNodeValue', { ref: key }) : t('vars.noVarValue', { name: key }),
         )
       }
       const raw = values[key]
@@ -209,9 +210,9 @@ export function renderList(
   raw: unknown,
   options: { guard?: boolean; python?: boolean } = {},
 ): string {
-  if (!Array.isArray(raw)) throw new VariableError(`\${${name}} 는 목록이어야 합니다`)
+  if (!Array.isArray(raw)) throw new VariableError(t('vars.mustBeList', { name }))
   if (raw.length === 0) {
-    throw new VariableError(`\${${name}} 가 빈 목록입니다 — 참조한 노드가 행을 내지 않았습니다`)
+    throw new VariableError(t('vars.emptyList', { name }))
   }
   return raw
     .map((item) => {
@@ -277,17 +278,14 @@ export function missing(text: string, values: VariableValues): string[] {
 function assertSqlSafe(name: string, rendered: string): void {
   for (const token of INJECTION_TOKENS) {
     if (rendered.includes(token)) {
-      throw new VariableError(
-        `$${name} 의 값에 SQL 로 해석될 수 있는 문자가 있습니다: ${JSON.stringify(token)}. ` +
-          '쿼리·조건절에 꽂는 값에는 따옴표·세미콜론·주석을 넣을 수 없습니다.',
-      )
+      throw new VariableError(t('vars.sqlUnsafe', { name, token: JSON.stringify(token) }))
     }
   }
   // 제어문자 검사. 정규식 대신 코드포인트로 본다 — 소스에 제어문자를 직접 적으면
   // 에디터·도구마다 다르게 보여 유지보수가 어렵다.
   for (const ch of rendered) {
     if ((ch.codePointAt(0) ?? 0) < 0x20) {
-      throw new VariableError(`$${name} 의 값에 제어문자가 있습니다.`)
+      throw new VariableError(t('vars.controlChars', { name }))
     }
   }
 }

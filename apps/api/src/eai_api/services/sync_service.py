@@ -29,6 +29,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
+from ..i18n import t
 from ..models import CDC_ACTIVE_STATUSES, CdcStream, CdcStreamStatus, StreamEngine
 from ..schemas.dag import (
     DEFAULT_SYNC_CHANNEL,
@@ -81,9 +82,9 @@ class SyncSpec:
 
 def _one(nodes: list[PipelineNode], what: str) -> PipelineNode:
     if not nodes:
-        raise ValidationError(f"{what} 노드가 없습니다 — 이 파이프라인은 실시간 동기화가 아닙니다")
+        raise ValidationError(t("sync.node.missing", name=what))
     if len(nodes) > 1:
-        raise ValidationError(f"{what} 노드가 {len(nodes)}개입니다 — 하나만 지원합니다")
+        raise ValidationError(t("sync.node.too_many", name=what, n=len(nodes)))
     return nodes[0]
 
 
@@ -95,15 +96,15 @@ def extract_sync_spec(definition: PipelineDefinition) -> SyncSpec:
     타깃에서 안 잡힌다 (기획안 §6). 매핑이 없으면 **소문자로 내려 확정하고**, 무엇으로
     등록했는지는 ``stream.config`` 에 남겨 화면에서 보이게 한다 — 조용히 바꾸지 않는다.
     """
-    source = _one([n for n in definition.nodes if n.is_sync_source], "실시간 동기화 소스")
-    target = _one([n for n in definition.nodes if n.is_sync_target], "실시간 동기화 타깃")
+    source = _one([n for n in definition.nodes if n.is_sync_source], t("sync.node.source"))
+    target = _one([n for n in definition.nodes if n.is_sync_target], t("sync.node.target"))
 
     source_conn = str(source.params.get("connection_id") or "")
     if not source_conn:
-        raise ValidationError(f"동기화 소스 '{source.id}' 에 connection_id 가 없습니다")
+        raise ValidationError(t("sync.spec.source_no_connection", name=source.id))
     target_conn = str(target.params.get("connection_id") or "")
     if not target_conn:
-        raise ValidationError(f"동기화 타깃 '{target.id}' 에 connection_id 가 없습니다")
+        raise ValidationError(t("sync.spec.target_no_connection", name=target.id))
 
     source_ns = str(source.params.get("namespace") or symmetric_config.DEFAULT_SOURCE_SCHEMA)
     target_ns = str(target.params.get("namespace") or "")
@@ -116,15 +117,15 @@ def extract_sync_spec(definition: PipelineDefinition) -> SyncSpec:
 
     raw_tables = source.params.get("tables")
     if not isinstance(raw_tables, list) or not raw_tables:
-        raise ValidationError(f"동기화 소스 '{source.id}' 에 동기화할 테이블이 없습니다")
+        raise ValidationError(t("sync.spec.no_tables", name=source.id))
 
     tables: list[symmetric_config.SyncTable] = []
     for item in raw_tables:
         if not isinstance(item, dict):
-            raise ValidationError("테이블 항목은 이름·채널을 담은 객체여야 합니다")
+            raise ValidationError(t("sync.spec.table_bad_shape"))
         name = str(item.get("name") or "").strip()
         if not name:
-            raise ValidationError("테이블 이름이 비어 있습니다")
+            raise ValidationError(t("sync.spec.table_name_empty"))
         mapping = mappings.get(name.casefold(), {})
         tables.append(
             symmetric_config.SyncTable(
@@ -165,7 +166,7 @@ def _with_catalog(spec: SyncSpec, source_database: str) -> SyncSpec:
     if not spec.sync_database or not source_database:
         return spec
     return replace(
-        spec, tables=[replace(t, catalog=source_database) for t in spec.tables]
+        spec, tables=[replace(tbl, catalog=source_database) for tbl in spec.tables]
     )
 
 
@@ -200,9 +201,7 @@ def _tables_from_config(stream: CdcStream) -> list[symmetric_config.SyncTable]:
         if isinstance(t, dict) and str(t.get("name", "")).strip()
     ]
     if not tables:
-        raise ValidationError(
-            "이 스트림에 등록된 테이블 정보가 없습니다 — 원본의 SYM_TRIGGER 를 직접 확인하세요"
-        )
+        raise ValidationError(t("sync.stream.no_registered_tables"))
     return tables
 
 
@@ -214,7 +213,7 @@ def _sql_connector(session: Session, connection_id: str) -> SqlConnector:
     conn = connection_service.get_connection(session, connection_id)
     connector = connection_service.open_cached_connector(session, conn)
     if not isinstance(connector, SqlConnector):
-        raise ValidationError(f"SQL 연결이 아닙니다: {conn.type}")
+        raise ValidationError(t("sync.conn.not_sql", name=conn.type))
     return connector
 
 
@@ -240,7 +239,7 @@ def _config_connector(
     config["database"] = sync_database
     connector = build(conn.type, config)
     if not isinstance(connector, SqlConnector):
-        raise ValidationError(f"SQL 연결이 아닙니다: {conn.type}")
+        raise ValidationError(t("sync.conn.not_sql", name=conn.type))
     return connector
 
 
@@ -253,6 +252,15 @@ def _wrap(exc: SQLAlchemyError, what: str) -> DependencyError:
     원인이 화면에 닿지 않는 것이 이 래핑이 막으려는 것이다.
     """
     detail = str(getattr(exc, "orig", exc)).splitlines()[0]
+    # **번역하지 않는다.** 이 예외의 문자열은 `start_stream`·`stop_stream` 에서
+    # `cdc_streams.error` 로, `notes` 를 거쳐 `config` jsonb 로 **영구 저장**된다.
+    # 요청 언어로 번역하면 en 사용자가 누른 순간 영어가 DB 에 박히고 나중에 ko 사용자가
+    # 그것을 읽는다 — `i18n/locale.py` 가 워커에 대해 못 박은 규칙이 API 경로에서 깨진다.
+    # 같은 컬럼에 미번역 ko 문구도 들어가므로 한 스트림 안에서 두 언어가 섞이기도 한다.
+    #
+    # 502 응답의 detail 도 이 문자열이라 en 화면에서 한국어로 뜬다. 커넥터 예외(`main.py`
+    # 의 ConnectorError 핸들러)가 이미 그렇고, 저장 문구를 code+params 로 옮기는 것은
+    # 스키마 변경이라 별건이다 (CLAUDE.md §27 「아직 한국어인 것」).
     return DependencyError(f"{what} 실패: {detail}")
 
 
@@ -353,8 +361,19 @@ WHERE c.object_id = OBJECT_ID(:tbl) AND c.name = 'row_data'
 """
 
 
-def _check(key: str, label: str, ok: bool, detail: str, level: str = "error") -> PreflightCheck:
-    return PreflightCheck(key=key, label=label, ok=ok, detail=detail, level=level)
+def _check(key: str, ok: bool, detail: str, level: str = "error") -> PreflightCheck:
+    """점검 항목 하나. **label 은 key 에서 유도한다.**
+
+    `PreflightCheck` 는 이미 안정 식별자(`key`)를 갖고 있으므로 이름을 따로 받을 이유가
+    없다 — 받으면 같은 항목의 이름이 호출 자리마다 갈릴 수 있다(`config_db` 처럼 한 key 가
+    네 자리에서 만들어진다).
+
+    이 키는 **계산해서 만들므로** `test_i18n.py` 의 AST 검사가 잡지 못한다.
+    `test_i18n.py::test_every_preflight_key_has_a_label` 이 `_check()` 의 첫 인자를 모아 따로 본다.
+    """
+    return PreflightCheck(
+        key=key, label=t(f"sync.pre.{key}.label"), ok=ok, detail=detail, level=level
+    )
 
 
 def _major_version(product_version: str) -> int:
@@ -376,12 +395,12 @@ def preflight(session: Session, pipeline_id: str) -> SyncPreflightOut:
     try:
         spec = extract_sync_spec(pipeline_service.parse_definition(pipeline))
     except Exception as exc:
-        out.checks = [_check("definition", "동기화 파이프라인 구조", False, str(exc))]
+        out.checks = [_check("definition", False, str(exc))]
         return out
 
     out.source_connection_id = spec.source_connection_id
     out.target_connection_id = spec.target_connection_id
-    checks.append(_check("definition", "동기화 파이프라인 구조", True, "소스·타깃 한 쌍 확인"))
+    checks.append(_check("definition", True, t("sync.pre.definition.ok")))
 
     source_conn = connection_service.get_connection(session, spec.source_connection_id)
     target_conn = connection_service.get_connection(session, spec.target_connection_id)
@@ -394,22 +413,22 @@ def preflight(session: Session, pipeline_id: str) -> SyncPreflightOut:
     checks.append(
         _check(
             "source_type",
-            "소스 연결 타입",
             source_conn.type in SYNC_SOURCE_TYPES,
-            f"{source_conn.type}"
-            + ("" if source_conn.type in SYNC_SOURCE_TYPES else " — SQL Server 만 지원합니다"),
+            source_conn.type
+            if source_conn.type in SYNC_SOURCE_TYPES
+            else t("sync.pre.source_type.unsupported", name=source_conn.type),
         )
     )
     checks.append(
         _check(
             "target_type",
-            "타깃 연결 타입",
             target_conn.type in SYNC_TARGET_TYPES,
-            f"{target_conn.type}"
-            + (
-                ""
-                if target_conn.type in SYNC_TARGET_TYPES
-                else f" — 지원: {', '.join(sorted(SYNC_TARGET_TYPES))}"
+            target_conn.type
+            if target_conn.type in SYNC_TARGET_TYPES
+            else t(
+                "sync.pre.target_type.unsupported",
+                name=target_conn.type,
+                allowed=", ".join(sorted(SYNC_TARGET_TYPES)),
             ),
         )
     )
@@ -420,9 +439,9 @@ def preflight(session: Session, pipeline_id: str) -> SyncPreflightOut:
     checks.append(
         _check(
             "source_reachable",
-            "소스 접속 (TLS·드라이버)",
             source_ok,
-            source_health.message or ("연결 정상" if source_ok else "접속 실패"),
+            source_health.message
+            or (t("sync.pre.reachable.ok") if source_ok else t("sync.pre.reachable.fail")),
         )
     )
 
@@ -431,9 +450,9 @@ def preflight(session: Session, pipeline_id: str) -> SyncPreflightOut:
     checks.append(
         _check(
             "target_reachable",
-            "타깃 접속",
             target_ok,
-            target_health.message or ("연결 정상" if target_ok else "접속 실패"),
+            target_health.message
+            or (t("sync.pre.reachable.ok") if target_ok else t("sync.pre.reachable.fail")),
         )
     )
 
@@ -447,12 +466,7 @@ def preflight(session: Session, pipeline_id: str) -> SyncPreflightOut:
         checks.append(_config_db_check(session, spec))
     else:
         checks.append(
-            _check(
-                "tables",
-                "대상 테이블·기본키",
-                False,
-                "소스에 접속하지 못해 확인하지 못했습니다",
-            )
+            _check("tables", False, t("sync.pre.tables.unreachable"))
         )
         tables_out = [
             SyncTableCheck(name=t.name, namespace=t.namespace, channel=t.channel)
@@ -478,8 +492,8 @@ def _sidecar_checks() -> list[PreflightCheck]:
     settings = get_settings()
     client = get_symmetric_client()
     engines = [
-        ("소스", settings.symmetric_source_engine),
-        ("타깃", settings.symmetric_target_engine),
+        (t("sync.engine.source"), settings.symmetric_source_engine),
+        (t("sync.engine.target"), settings.symmetric_target_engine),
     ]
 
     found: list[str] = []
@@ -489,27 +503,19 @@ def _sidecar_checks() -> list[PreflightCheck]:
             ok = client.probe_engine(name)
         except SymmetricUnavailableError as exc:
             return [
-                _check("sidecar", "SymmetricDS 사이드카", False, str(exc)),
-                _check(
-                    "sidecar_engines",
-                    "사이드카 엔진 등록",
-                    False,
-                    "사이드카에 닿지 못해 확인하지 못했습니다",
-                ),
+                _check("sidecar", False, str(exc)),
+                _check("sidecar_engines", False, t("sync.pre.sidecar_engines.unreachable")),
             ]
         (found if ok else missing).append(f"{label} {name}")
 
-    checks = [_check("sidecar", "SymmetricDS 사이드카", True, "응답함")]
+    checks = [_check("sidecar", True, t("sync.pre.sidecar.ok"))]
     checks.append(
         _check(
             "sidecar_engines",
-            "사이드카 엔진 등록",
             not missing,
-            f"{', '.join(found)} 확인"
+            t("sync.pre.sidecar_engines.ok", list=", ".join(found))
             if not missing
-            else f"등록되지 않은 엔진: {', '.join(missing)} "
-            "— sync/symmetricds/engines/ 에 해당 이름의 .properties 를 만들었는지, "
-            "그 안의 engine.name 이 같은지 확인하세요",
+            else t("sync.pre.sidecar_engines.missing", list=", ".join(missing)),
         )
     )
     return checks
@@ -526,24 +532,18 @@ def _judgement_checks(spec: SyncSpec) -> list[PreflightCheck]:
     checks.append(
         _check(
             "purpose",
-            "복제 데이터의 최종 용도",
             not operational,
-            "조회/분석 용도"
-            if not operational
-            else "업무 판단 근거 — 복제본은 원본과 순간적으로 다를 수 있습니다. "
-            "출고/재고 판단에 쓰면 이중 출고 같은 사고로 이어집니다 (원본 직접 조회·API 연동 검토)",
+            t("sync.pre.purpose.operational") if operational else t("sync.pre.purpose.readonly"),
             level="warning",
         )
     )
     checks.append(
         _check(
             "load_test",
-            "부하 테스트 (운영 적용 게이트)",
             spec.load_test_ack,
-            "완료 표시됨"
+            t("sync.pre.load_test.done")
             if spec.load_test_ack
-            else "원본 테이블에 트리거가 생겨 쓰기 트랜잭션이 느려집니다. "
-            "현장 스캔 응답이 0.3초 이상 느려지면 재검토 — 운영 적용 전 필수",
+            else t("sync.pre.load_test.pending"),
             level="warning",
         )
     )
@@ -565,7 +565,6 @@ def _source_checks(
     checks.append(
         _check(
             "sql_server_version",
-            "SQL Server 버전·에디션",
             True,
             f"{out.edition} / {product_version} {info.get('product_level') or ''}".strip(),
             level="info",
@@ -575,10 +574,8 @@ def _source_checks(
         checks.append(
             _check(
                 "cdc_available",
-                "CDC 사용 가능 여부",
                 True,
-                "2016 이상입니다 — CDC 가 Standard 에서도 정식 지원되므로, "
-                "트리거 부하를 지지 않는 CDC 방식을 먼저 검토할 가치가 있습니다",
+                t("sync.pre.cdc_available.warn"),
                 level="warning",
             )
         )
@@ -587,9 +584,10 @@ def _source_checks(
     checks.append(
         _check(
             "create_table_permission",
-            "SYM_* 테이블 생성 권한",
             bool(can_create),
-            "있음" if can_create else "없음 — SymmetricDS 가 설정 테이블을 만들지 못합니다",
+            t("sync.pre.permission.granted")
+            if can_create
+            else t("sync.pre.create_table_permission.denied"),
         )
     )
 
@@ -602,54 +600,55 @@ def _source_checks(
     missing: list[str] = []
     no_pk: list[str] = []
     no_alter: list[str] = []
-    for t in spec.tables:
-        key = (t.namespace.casefold(), t.name.casefold())
+    for tbl in spec.tables:
+        key = (tbl.namespace.casefold(), tbl.name.casefold())
         exists = key in catalog
         has_pk = catalog.get(key, False)
         if not exists:
-            missing.append(f"{t.namespace}.{t.name}")
+            missing.append(f"{tbl.namespace}.{tbl.name}")
         elif not has_pk:
-            no_pk.append(f"{t.namespace}.{t.name}")
+            no_pk.append(f"{tbl.namespace}.{tbl.name}")
         if exists:
-            can_alter = _scalar(connector, _ALTER_PERM_SQL, {"obj": f"{t.namespace}.{t.name}"})
+            can_alter = _scalar(connector, _ALTER_PERM_SQL, {"obj": f"{tbl.namespace}.{tbl.name}"})
             if not can_alter:
-                no_alter.append(f"{t.namespace}.{t.name}")
+                no_alter.append(f"{tbl.namespace}.{tbl.name}")
         tables_out.append(
             SyncTableCheck(
-                name=t.name,
-                namespace=t.namespace,
+                name=tbl.name,
+                namespace=tbl.namespace,
                 exists=exists,
                 has_primary_key=has_pk,
-                channel=t.channel,
+                channel=tbl.channel,
             )
         )
 
     checks.append(
         _check(
             "tables_exist",
-            "대상 테이블 존재",
             not missing,
-            f"{len(spec.tables)}개 확인" if not missing else f"없는 테이블: {', '.join(missing)}",
+            t("sync.pre.tables_exist.ok", n=len(spec.tables))
+            if not missing
+            else t("sync.pre.tables_exist.missing", list=", ".join(missing)),
         )
     )
     # PK 가 없으면 갱신·삭제를 어느 행에 적용할지 정할 수 없다 — 동기화가 성립하지 않는다.
     checks.append(
         _check(
             "primary_keys",
-            "대상 테이블 기본키",
             not no_pk,
-            "모두 있음"
+            t("sync.pre.primary_keys.ok")
             if not no_pk
-            else f"PK 없음: {', '.join(no_pk)} — PK 를 추가하거나 대상에서 빼세요",
+            else t("sync.pre.primary_keys.missing", list=", ".join(no_pk)),
         )
     )
     # 트리거 생성에는 대상 테이블의 ALTER 권한이 필요하다 (기획안 §1.2 — 불가하면 방식 자체가 탈락).
     checks.append(
         _check(
             "trigger_permission",
-            "원본 트리거 생성 권한",
             not no_alter,
-            "있음" if not no_alter else f"ALTER 권한 없음: {', '.join(no_alter)}",
+            t("sync.pre.permission.granted")
+            if not no_alter
+            else t("sync.pre.trigger_permission.denied", list=", ".join(no_alter)),
         )
     )
     checks.append(_unicode_capture_check(connector, spec))
@@ -664,35 +663,27 @@ def _config_db_check(session: Session, spec: SyncSpec) -> PreflightCheck:
     실제로 겪은 실패라 error 로 막는다.
     """
     if not spec.sync_database:
-        return _check(
-            "config_db",
-            "SymmetricDS 설정 DB",
-            True,
-            "소스와 같은 DB 에 SYM_* 를 만듭니다",
-            level="info",
-        )
+        return _check("config_db", True, t("sync.pre.config_db.same"), level="info")
     try:
         connector = _config_connector(
             session, spec.source_connection_id, spec.sync_database
         )
     except Exception as exc:
-        return _check("config_db", "SymmetricDS 설정 DB", False, str(exc))
+        return _check("config_db", False, str(exc))
     try:
         can_create = _scalar(connector, _CREATE_TABLE_PERM_SQL)
         return _check(
             "config_db",
-            "SymmetricDS 설정 DB",
             bool(can_create),
-            f"{spec.sync_database} 접속·테이블 생성 가능"
+            t("sync.pre.config_db.ok", name=spec.sync_database)
             if can_create
-            else f"{spec.sync_database} 에 테이블 생성 권한이 없습니다",
+            else t("sync.pre.config_db.denied", name=spec.sync_database),
         )
     except Exception as exc:
         return _check(
             "config_db",
-            "SymmetricDS 설정 DB",
             False,
-            f"{spec.sync_database} 에 붙지 못했습니다: {exc}",
+            t("sync.pre.config_db.connect_failed", name=spec.sync_database, cause=exc),
         )
     finally:
         _release(connector, spec.sync_database)
@@ -721,13 +712,7 @@ def _unicode_capture_check(connector: SqlConnector, spec: SyncSpec) -> Preflight
         if (t.namespace.casefold(), t.name.casefold()) in unicode_tables
     )
     if not at_risk:
-        return _check(
-            "unicode_capture",
-            "유니코드(한글) 캡처",
-            True,
-            "대상 테이블에 유니코드 컬럼이 없습니다",
-            level="info",
-        )
+        return _check("unicode_capture", True, t("sync.pre.unicode_capture.none"), level="info")
 
     prefix = get_settings().symmetric_table_prefix
     # SYM_DATA 는 **설정 DB** 에 있다. 소스에서 찾으면 전용 DB 를 쓸 때 항상 "없음" 이 되어
@@ -739,11 +724,8 @@ def _unicode_capture_check(connector: SqlConnector, spec: SyncSpec) -> Preflight
         # 다만 지금 켜 두지 않으면 나중에 못 고치므로 미리 알린다.
         return _check(
             "unicode_capture",
-            "유니코드(한글) 캡처",
             True,
-            f"{', '.join(at_risk)} 에 유니코드 컬럼이 있습니다 — 소스 엔진 properties 에 "
-            "mssql.use.ntypes.for.sync=true 가 켜져 있는지 확인하세요. "
-            "이 값은 SYM_* 를 처음 만들 때 반영되므로 시작 전에 켜 두어야 합니다",
+            t("sync.pre.unicode_capture.unverified", list=", ".join(at_risk)),
             level="warning",
         )
 
@@ -751,13 +733,15 @@ def _unicode_capture_check(connector: SqlConnector, spec: SyncSpec) -> Preflight
     ok = capture_type.startswith("n")  # nvarchar / ntext
     return _check(
         "unicode_capture",
-        "유니코드(한글) 캡처",
         ok,
-        f"{prefix}_DATA.row_data = {capture_type} (유니코드 보존)"
+        t("sync.pre.unicode_capture.ok", name=prefix, value=capture_type)
         if ok
-        else f"{prefix}_DATA.row_data 가 {capture_type} 입니다 — {', '.join(at_risk)} 의 한글이 "
-        "글자마다 '?' 로 손실됩니다. 소스 엔진에 mssql.use.ntypes.for.sync=true 를 켜고 "
-        f"{prefix}_* 를 다시 만들어야 합니다",
+        else t(
+            "sync.pre.unicode_capture.lossy",
+            name=prefix,
+            value=capture_type,
+            list=", ".join(at_risk),
+        ),
     )
 
 
@@ -767,7 +751,7 @@ def _unicode_capture_check(connector: SqlConnector, spec: SyncSpec) -> Preflight
 def get_stream(session: Session, stream_id: str) -> CdcStream:
     stream = session.get(CdcStream, stream_id)
     if stream is None:
-        raise NotFoundError(f"동기화 스트림을 찾을 수 없습니다: {stream_id}")
+        raise NotFoundError(t("sync.stream.not_found", name=stream_id))
     return stream
 
 
@@ -785,7 +769,7 @@ def _assert_no_table_conflict(session: Session, spec: SyncSpec, exclude_id: str 
     SymmetricDS 는 테이블 하나에 트리거를 여럿 걸 수 있지만, 그렇게 되면 어느 스트림을
     멈춰야 그 테이블이 멈추는지 알 수 없게 된다. 시작 시점에 막는다.
     """
-    wanted = {f"{t.namespace}.{t.name}".casefold() for t in spec.tables}
+    wanted = {f"{tbl.namespace}.{tbl.name}".casefold() for tbl in spec.tables}
     for other in session.query(CdcStream).filter(
         CdcStream.engine == StreamEngine.SYMMETRICDS,
         CdcStream.status.in_(sorted(str(s) for s in CDC_ACTIVE_STATUSES)),
@@ -793,14 +777,13 @@ def _assert_no_table_conflict(session: Session, spec: SyncSpec, exclude_id: str 
         if other.id == exclude_id or other.source_connection_id != spec.source_connection_id:
             continue
         theirs = {
-            f"{t.get('namespace', '')}.{t.get('name', '')}".casefold()
-            for t in (other.config or {}).get("tables") or []
+            f"{row.get('namespace', '')}.{row.get('name', '')}".casefold()
+            for row in (other.config or {}).get("tables") or []
         }
         overlap = sorted(wanted & theirs)
         if overlap:
             raise ConflictError(
-                f"같은 테이블을 이미 다른 동기화가 잡고 있습니다: {', '.join(overlap)} "
-                f"(스트림 {other.id[:8]}) — 먼저 정지하세요"
+                t("sync.stream.table_conflict", list=", ".join(overlap), name=other.id[:8])
             )
 
 
@@ -839,16 +822,14 @@ def start_stream(session: Session, pipeline_id: str, *, skip_preflight: bool = F
     spec = _with_catalog(spec, source_db)
 
     if active_stream_for(session, pipeline_id) is not None:
-        raise ConflictError("이미 실행 중인 동기화가 있습니다 — 먼저 정지하세요")
+        raise ConflictError(t("sync.stream.already_running"))
     _assert_no_table_conflict(session, spec)
 
     if not skip_preflight:
         result = preflight(session, pipeline_id)
         if not result.ready:
             failed = [c.label for c in result.checks if c.level == "error" and not c.ok]
-            raise ValidationError(
-                "착수 점검을 통과하지 못했습니다: " + ", ".join(failed) + " (점검 결과를 확인하세요)"
-            )
+            raise ValidationError(t("sync.stream.preflight_failed", list=", ".join(failed)))
 
     settings = get_settings()
     stream = CdcStream(
@@ -967,7 +948,7 @@ def pause_stream(session: Session, stream_id: str) -> CdcStream:
     """
     stream = _require_symmetricds(get_stream(session, stream_id))
     if stream.status != CdcStreamStatus.RUNNING:
-        raise ValidationError(f"실행 중인 동기화만 일시정지할 수 있습니다 (현재: {stream.status})")
+        raise ValidationError(t("sync.stream.pause_wrong_status", name=stream.status))
     _set_enabled(session, stream, enabled=False)
     stream.status = CdcStreamStatus.PAUSED
     session.flush()
@@ -977,7 +958,7 @@ def pause_stream(session: Session, stream_id: str) -> CdcStream:
 def resume_stream(session: Session, stream_id: str) -> CdcStream:
     stream = _require_symmetricds(get_stream(session, stream_id))
     if stream.status != CdcStreamStatus.PAUSED:
-        raise ValidationError(f"일시정지된 동기화만 재개할 수 있습니다 (현재: {stream.status})")
+        raise ValidationError(t("sync.stream.resume_wrong_status", name=stream.status))
     _set_enabled(session, stream, enabled=True)
     stream.status = CdcStreamStatus.RUNNING
     session.flush()

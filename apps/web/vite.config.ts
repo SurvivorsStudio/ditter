@@ -34,6 +34,8 @@ export default defineConfig({
         lines: 15,
         'src/store/**': { lines: 92 },
         'src/api/**': { lines: 55 },
+        // 사전(messages/)은 데이터라 실행 줄이 거의 없고, 로직(locale·t)은 전부 테스트가 있다.
+        'src/i18n/**': { lines: 90 },
       },
     },
   },

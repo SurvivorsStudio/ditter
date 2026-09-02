@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom'
 import { useCanvasStore } from '../store/canvasStore'
 import { Banner } from '../components/common'
+import { t, useT } from '../i18n'
 
 /** 엣지 하나로 넘어간 값을 펼쳐 본다.
  *
@@ -19,6 +20,7 @@ export function EdgeValueModal({
   targetId: string
   onClose: () => void
 }) {
+  const tr = useT()
   const nodes = useCanvasStore((s) => s.nodes)
   const source = nodes.find((n) => n.id === sourceId)
   const target = nodes.find((n) => n.id === targetId)
@@ -38,32 +40,38 @@ export function EdgeValueModal({
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="mh">
           <h3>
-            넘어간 값 — {source?.data.label || sourceId} → {target?.data.label || targetId}
+            {tr('cui.edge.title', {
+              source: source?.data.label || sourceId,
+              target: target?.data.label || targetId,
+            })}
           </h3>
-          <button className="x" onClick={onClose} aria-label="닫기">
+          <button className="x" onClick={onClose} aria-label={tr('common.close')}>
             ×
           </button>
         </div>
 
         <div className="mb" style={{ padding: '18px 22px 8px' }}>
           {handedRows.length === 0 && rows.length === 0 ? (
-            <Banner kind="warn">이 선으로 넘어간 값이 없습니다.</Banner>
+            <Banner kind="warn">{tr('cui.edge.empty')}</Banner>
           ) : (
             <>
               {handedRows.length > 0 && (
                 <div className="field">
-                  <label>넘어간 값</label>
+                  <label>{tr('cui.edge.handed')}</label>
                   <pre className="codeblock">{JSON.stringify(handed, null, 2)}</pre>
                   <div className="hint">
-                    호출 본문 그대로입니다. 하류 노드는 이 값을 <code>$이름</code> 으로 받습니다.
+                    {tr('cui.edge.handedHint1')}
+                    <code>{tr('cui.ref.varName')}</code>
+                    {tr('cui.edge.handedHint2')}
                   </div>
                 </div>
               )}
 
               {rows.length > 0 && (
                 <div className="hint" style={{ margin: '16px 0 12px' }}>
-                  이 값으로 <b>{target?.data.label || targetId}</b> 의 설정이 아래와 같이 바뀐
-                  상태로 실행됩니다.
+                  {tr('cui.edge.applied1')}
+                  <b>{target?.data.label || targetId}</b>
+                  {tr('cui.edge.applied2')}
                 </div>
               )}
               <div className="edge-val-list">
@@ -72,11 +80,11 @@ export function EdgeValueModal({
                     <div className="evi-key">{key}</div>
                     <div className="evi-pair">
                       <div className="evi-before">
-                        <span className="evi-tag">저작</span>
+                        <span className="evi-tag">{tr('cui.edge.authored')}</span>
                         <pre>{text(before[key])}</pre>
                       </div>
                       <div className="evi-after">
-                        <span className="evi-tag on">실행</span>
+                        <span className="evi-tag on">{tr('cui.edge.executed')}</span>
                         <pre>{text(after)}</pre>
                       </div>
                     </div>
@@ -89,7 +97,7 @@ export function EdgeValueModal({
 
         <div className="mf">
           <button className="btn primary" onClick={onClose}>
-            닫기
+            {tr('common.close')}
           </button>
         </div>
       </div>
@@ -100,7 +108,7 @@ export function EdgeValueModal({
 
 /** 값 하나를 그대로 읽을 수 있게. 자르지 않는다 — 여기가 전문을 보는 자리다. */
 function text(value: unknown): string {
-  if (value === undefined) return '(없음)'
+  if (value === undefined) return t('cui.edge.noValue')
   if (typeof value === 'string') return value
   return JSON.stringify(value, null, 2)
 }

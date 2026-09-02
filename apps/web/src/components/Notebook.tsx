@@ -18,6 +18,7 @@ import type { DuckTable } from '../canvas/duckRefs'
 import type { QueryResult } from '../api/types'
 import type { SqlStatement } from '../api/statements'
 import { mutedRunMessage } from '../api/statements'
+import { useT } from '../i18n'
 import {
   DUCK_MARKER_NAME,
   connName,
@@ -197,7 +198,7 @@ function NbJsonView({ rows }: { rows: Record<string, unknown>[] }) {
 }
 
 /** 아주 작은 마크다운 렌더러 — 제목/굵게/기울임/코드/링크/목록. 입력은 먼저 이스케이프한다. */
-function renderMd(src: string): string {
+function renderMd(src: string, emptyHint: string): string {
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const inline = (s: string) =>
     esc(s)
@@ -225,7 +226,7 @@ function renderMd(src: string): string {
     }
   }
   if (list) out.push('</ul>')
-  return out.join('') || '<p class="nb-md-placeholder">빈 메모 — 더블클릭하면 편집</p>'
+  return out.join('') || `<p class="nb-md-placeholder">${esc(emptyHint)}</p>`
 }
 
 /** 셀 공통 액션(에디트 모드의 Jupyter 키). CodeMirror/textarea 가 먹기 전에 capture 로 가로챈다. */
@@ -273,6 +274,7 @@ function CellConnPicker({
   broken: boolean
   onPick: (name: string | null) => void
 }) {
+  const t = useT()
   const raw = findMarkers(src)[0]?.name ?? ''
   const norm = (v: string) => v.trim().toLowerCase()
   // 저장된 표기가 아니라 **목록에 있는 그대로의 이름**을 골라야 값이 맞물린다.
@@ -282,12 +284,12 @@ function CellConnPicker({
   const unknown = Boolean(raw) && !hit && !isDuck
 
   const options: SelectOption[] = [
-    { value: '', label: '기본 연결', hint: fallback.label || '탭 설정' },
-    { value: DUCK_MARKER_NAME, label: DUCK_MARKER_NAME, hint: '여러 연결', accent: true },
+    { value: '', label: t('nb.defaultConn'), hint: fallback.label || t('nb.tabSetting') },
+    { value: DUCK_MARKER_NAME, label: DUCK_MARKER_NAME, hint: t('nb.multiConn'), accent: true },
     ...conns.map((c) => ({ value: c.name, label: c.name, hint: specFor(c.type).label })),
     // 이름이 바뀌었거나 지워진 연결 — 값을 조용히 갈아치우지 않고 그대로 보여준다.
     // 기본값으로 되돌리면 사용자가 무엇을 잃었는지 모른 채 다른 DB 로 나간다.
-    ...(unknown ? [{ value: raw, label: raw, hint: '없는 연결' }] : []),
+    ...(unknown ? [{ value: raw, label: raw, hint: t('nb.missingConn') }] : []),
   ]
 
   // 배지는 연결 **타입**의 색을 쓴다 — 툴바·연결 관리와 같은 어휘라 따로 배울 것이 없다.
@@ -315,8 +317,8 @@ function CellConnPicker({
       className={`nb-conn-pick ${raw ? 'on' : ''} ${broken ? 'broken' : ''}`}
       title={
         raw
-          ? `이 셀은 「${raw}」 으로 실행됩니다`
-          : `기본 연결(${fallback.label || '탭 설정'})을 따릅니다`
+          ? t('nb.runsAs', { name: raw })
+          : t('nb.followsDefault', { name: fallback.label || t('nb.tabSetting') })
       }
     >
       {/* 「기본 연결」도 값이 `''` 인 **항목으로** 목록에 있으므로, 그때도 배지가 그려진다
@@ -325,7 +327,7 @@ function CellConnPicker({
         value={value}
         onChange={(v) => onPick(v || null)}
         options={options}
-        placeholder="기본 연결"
+        placeholder={t('nb.defaultConn')}
         leading={leading}
       />
     </div>
@@ -410,6 +412,7 @@ function SqlCell({
   onDuplicate: () => void
   onAddBelow: () => void
 }) {
+  const t = useT()
   const runQuery = useRunQuery()
   const runMongo = useRunMongo()
   const runDuck = useRunDuck()
@@ -642,7 +645,7 @@ function SqlCell({
       setPending(false)
       if (e instanceof DOMException && e.name === 'AbortError') return
       setData(null)
-      const msg = e instanceof ApiError ? e.message : '실행에 실패했습니다.'
+      const msg = e instanceof ApiError ? e.message : t('nb.runFailed')
       setError(msg)
       const ec = nextExecCount()
       setExecCount(ec)
@@ -759,7 +762,7 @@ function SqlCell({
       }
     } catch (e) {
       if (!(e instanceof DOMException && e.name === 'AbortError')) {
-        setError(e instanceof ApiError ? e.message : '전체 로드에 실패했습니다.')
+        setError(e instanceof ApiError ? e.message : t('nb.loadAllFailed'))
       }
     } finally {
       setLoadingAll(false)
@@ -889,8 +892,8 @@ function SqlCell({
         type="button"
         className={`nb-collapse-bar ${collapsed ? 'collapsed' : ''}`}
         onClick={() => setCollapsed((c) => !c)}
-        title={collapsed ? '펼치기' : '접기'}
-        aria-label={collapsed ? '셀 펼치기' : '셀 접기'}
+        title={collapsed ? t('nb.expand') : t('nb.collapse')}
+        aria-label={collapsed ? t('nb.expandCell') : t('nb.collapseCell')}
       />
       <div className="nb-cell-gutter" onClick={onSelectCommand}>
         <span className="nb-cell-no">[{pending ? '*' : (execCount ?? ' ')}]</span>
@@ -898,7 +901,7 @@ function SqlCell({
       <div className="nb-cell-main">
         <div className={`nb-cell-editor ${collapsed ? 'collapsed' : ''}`}>
           {collapsed ? (
-            <button type="button" className="nb-collapsed" onClick={() => setCollapsed(false)} title="펼치기">
+            <button type="button" className="nb-collapsed" onClick={() => setCollapsed(false)} title={t('nb.expand')}>
               {/* 마커 줄이 아니라 SQL 첫 줄을 보여준다 — `-- @conn "…"` 만 보이면
                   접어 둔 셀이 무엇을 하는 셀인지 알 수 없다. */}
               <span className="nb-collapsed-code">{firstLine(stripMarkers(cell.src))}</span>
@@ -945,7 +948,7 @@ function SqlCell({
                 effMode === 'mongo'
                   ? 'collection.find({ })'
                   : effMode === 'duck'
-                    ? 'SELECT * FROM 연결이름.데이터베이스.테이블 …'
+                    ? t('nb.duckPlaceholder')
                     : 'SELECT * FROM ...'
               }
             />
@@ -955,15 +958,15 @@ function SqlCell({
               className={`nb-tool-run ${pending ? 'busy' : ''}`}
               onClick={() => (pending ? abortRef.current?.abort() : run())}
               disabled={!pending && !canRun}
-              title={pending ? '실행 취소' : '실행 (⌘/Ctrl+Enter)'}
+              title={pending ? t('nb.cancelRun') : t('nb.runShortcut')}
             >
               {pending ? <Icon.stop /> : <Icon.play />}
             </button>
-            <button title="아래에 셀 추가" onClick={onAddBelow}><Icon.plus /></button>
-            <button title="위로" onClick={() => onMove(-1)}>↑</button>
-            <button title="아래로" onClick={() => onMove(1)}>↓</button>
-            <button title="복제" onClick={onDuplicate}><Icon.copy /></button>
-            <button title="삭제" onClick={onDelete}><Icon.trash /></button>
+            <button title={t('nb.addCellBelow')} onClick={onAddBelow}><Icon.plus /></button>
+            <button title={t('nb.moveUp')} onClick={() => onMove(-1)}>↑</button>
+            <button title={t('nb.moveDown')} onClick={() => onMove(1)}>↓</button>
+            <button title={t('nb.duplicate')} onClick={onDuplicate}><Icon.copy /></button>
+            <button title={t('nb.delete')} onClick={onDelete}><Icon.trash /></button>
           </div>
           </>
           )}
@@ -974,23 +977,23 @@ function SqlCell({
             <div className="nb-result-hd" onClick={() => setResultOpen((o) => !o)}>
               <span className={`nb-caret ${resultOpen ? 'open' : ''}`}><Icon.chevron /></span>
               {pending ? (
-                <span className="nb-running">실행 중…</span>
+                <span className="nb-running">{t('nb.running')}</span>
               ) : error ? (
-                <span className="nb-err-label">오류</span>
+                <span className="nb-err-label">{t('status.error')}</span>
               ) : data ? (
                 <span>
                   {/* 쓰기 문장은 돌려줄 행이 없다 — 행 수 대신 바꾼 건수를 말한다 */}
                   {data.statement !== 'select' && data.columns.length === 0
                     ? `${data.statement.toUpperCase()} · ${
                         data.affected_rows == null
-                          ? '실행됨'
-                          : `${data.affected_rows.toLocaleString()}행 적용`
+                          ? t('nb.executed')
+                          : t('nb.affected', { n: data.affected_rows })
                       }`
                     : data.total != null
-                      ? `${data.total.toLocaleString()} 행`
-                      : `${data.row_count.toLocaleString()} 행`}
+                      ? t('nb.totalRows', { n: data.total })
+                      : t('nb.totalRows', { n: data.row_count })}
                   {(data.truncated || (data.total != null && data.rows.length < data.total)) &&
-                    ` · ${data.rows.length.toLocaleString()} 로드됨`}
+                    ` · ${t('nb.loaded', { n: data.rows.length })}`}
                   {' · '}{data.elapsed_ms} ms
                 </span>
               ) : null}
@@ -999,16 +1002,16 @@ function SqlCell({
                   <button
                     className={`nb-loadall ${copied ? 'busy' : ''}`}
                     onClick={copyResult}
-                    title={resultView === 'json' ? 'JSON 복사' : '표(TSV) 복사 — 엑셀·시트에 붙여넣기'}
+                    title={resultView === 'json' ? t('nb.copyJson') : t('nb.copyTsv')}
                   >
                     {copied ? <Icon.check /> : <Icon.copy />}
-                    {copied ? '복사됨' : '복사'}
+                    {copied ? t('nb.copied') : t('nb.copy')}
                   </button>
                   {(data.truncated || loadingAll) && (
                     <button
                       className={`nb-loadall ${loadingAll ? 'busy' : ''}`}
                       onClick={loadAll}
-                      title={loadingAll ? '중단' : '전체 데이터를 모두 불러옵니다'}
+                      title={loadingAll ? t('nb.stopLoad') : t('nb.loadAllTitle')}
                     >
                       {loadingAll ? (
                         <>
@@ -1019,7 +1022,7 @@ function SqlCell({
                       ) : (
                         <>
                           <Icon.stack />
-                          전체 로드
+                          {t('nb.loadAll')}
                         </>
                       )}
                     </button>
@@ -1028,21 +1031,21 @@ function SqlCell({
                     <button
                       className={resultView === 'table' ? 'on' : ''}
                       onClick={() => setResultView('table')}
-                      title="표로 보기"
+                      title={t('nb.viewTable')}
                     >
                       <Icon.table />
                     </button>
                     <button
                       className={resultView === 'json' ? 'on' : ''}
                       onClick={() => setResultView('json')}
-                      title="JSON 으로 보기"
+                      title={t('nb.viewJson')}
                     >
                       <Icon.code />
                     </button>
                     <button
                       className={resultView === 'chart' ? 'on' : ''}
                       onClick={showChart}
-                      title="차트로 보기"
+                      title={t('nb.viewChart')}
                     >
                       <Icon.chart />
                     </button>
@@ -1051,7 +1054,7 @@ function SqlCell({
                     <button
                       className={`nb-filter-toggle ${showFilters || Object.values(colFilters).some((v) => v.trim()) ? 'on' : ''}`}
                       onClick={() => toggleFilters()}
-                      title="컬럼 필터"
+                      title={t('nb.colFilter')}
                     >
                       <Icon.filter />
                     </button>
@@ -1094,9 +1097,9 @@ function SqlCell({
                         <button
                           className="btn sm ai-fix-btn"
                           onClick={() => setShowFix((v) => !v)}
-                          title="수행된 쿼리와 오류를 AI 가 보고 고칩니다"
+                          title={t('nb.aiFixTitle')}
                         >
-                          <Icon.bolt /> AI로 고치기
+                          <Icon.bolt /> {t('nb.aiFix')}
                         </button>
                       )}
                     </div>
@@ -1130,7 +1133,7 @@ function SqlCell({
                               key={c}
                               className={`nb-th ${sort?.col === c ? 'sorted' : ''}`}
                               onClick={() => cycleSort(c)}
-                              title="클릭하면 정렬 (오름 → 내림 → 해제)"
+                              title={t('nb.sortHint')}
                             >
                               <span className="nb-th-label">{c}</span>
                               <span className="nb-th-arrow">
@@ -1147,7 +1150,7 @@ function SqlCell({
                                 <input
                                   className="nb-col-filter"
                                   value={colFilters[c] ?? ''}
-                                  placeholder="필터…"
+                                  placeholder={t('nb.filterPlaceholder')}
                                   onChange={(e) => onColFilter(c, e.target.value)}
                                 />
                               </th>
@@ -1169,12 +1172,12 @@ function SqlCell({
                     </table>
                     {(data.truncated || loadingMore) && (
                       <div className="nb-more" onClick={loadMore}>
-                        {loadingMore ? '더 불러오는 중…' : '스크롤하거나 눌러 더 불러오기'}
+                        {loadingMore ? t('nb.loadingMore') : t('nb.loadMoreHint')}
                       </div>
                     )}
                   </div>
                 ) : data ? (
-                  <div className="nb-empty">결과 행이 없습니다.</div>
+                  <div className="nb-empty">{t('nb.noRows')}</div>
                 ) : null}
               </div>
             ) : null}
@@ -1250,6 +1253,7 @@ function MdCell({
   onDuplicate: () => void
   onAddBelow: () => void
 }) {
+  const t = useT()
   const [showEdit, setShowEdit] = useState(cell.src.trim() === '')
   const taRef = useRef<HTMLTextAreaElement>(null)
 
@@ -1288,7 +1292,7 @@ function MdCell({
             className="nb-md-input"
             autoFocus
             value={cell.src}
-            placeholder="# 메모 (마크다운) — **굵게**, `코드`, - 목록"
+            placeholder={t('nb.mdPlaceholder')}
             onChange={(e) => onChange(e.target.value)}
             onBlur={() => cell.src.trim() && setShowEdit(false)}
           />
@@ -1296,17 +1300,17 @@ function MdCell({
           <div
             className="nb-md-view"
             onDoubleClick={() => setShowEdit(true)}
-            title="더블클릭(또는 Enter)하면 편집"
-            dangerouslySetInnerHTML={{ __html: renderMd(cell.src) }}
+            title={t('nb.mdEditHint')}
+            dangerouslySetInnerHTML={{ __html: renderMd(cell.src, t('nb.mdEmpty')) }}
           />
         )}
         <div className="nb-cell-tools">
-          <button title={showEdit ? '미리보기' : '편집'} onClick={() => setShowEdit((e) => !e)}><Icon.edit /></button>
-          <button title="아래에 셀 추가" onClick={onAddBelow}><Icon.plus /></button>
-          <button title="위로" onClick={() => onMove(-1)}>↑</button>
-          <button title="아래로" onClick={() => onMove(1)}>↓</button>
-          <button title="복제" onClick={onDuplicate}><Icon.copy /></button>
-          <button title="삭제" onClick={onDelete}><Icon.trash /></button>
+          <button title={showEdit ? t('nb.preview') : t('nb.edit')} onClick={() => setShowEdit((e) => !e)}><Icon.edit /></button>
+          <button title={t('nb.addCellBelow')} onClick={onAddBelow}><Icon.plus /></button>
+          <button title={t('nb.moveUp')} onClick={() => onMove(-1)}>↑</button>
+          <button title={t('nb.moveDown')} onClick={() => onMove(1)}>↓</button>
+          <button title={t('nb.duplicate')} onClick={onDuplicate}><Icon.copy /></button>
+          <button title={t('nb.delete')} onClick={onDelete}><Icon.trash /></button>
         </div>
       </div>
     </div>
@@ -1352,6 +1356,7 @@ export function Notebook({
   /** 셀 오류 수정 패널의 「AI 탭에서 이어가기」 — 페이지가 처리한다. */
   onAiEscalate?: (payload: { sql: string; error?: string; explain?: string; assistant: string; dbConnId?: string }) => void
 }) {
+  const t = useT()
   const [selId, setSelId] = useState<string | null>(cells[0]?.id ?? null)
   const [editing, setEditing] = useState(false)
 
@@ -1594,38 +1599,38 @@ export function Notebook({
         {/* 오른쪽 동작은 한 덩어리다 — 좁아지면 통째로 다음 줄로 내려간다.
             낱개로 두면 「저장」만 아래로 떨어지는 식으로 묶음이 갈라진다. */}
         <div className="nb-toolbar-actions">
-          <button className="btn sm" onClick={() => selectCommand(insertAt('sql', cells.length))} title="SQL 셀 추가">
+          <button className="btn sm" onClick={() => selectCommand(insertAt('sql', cells.length))} title={t('nb.addSqlCellTitle')}>
             <Icon.plus />
-            SQL 셀
+            {t('nb.sqlCell')}
           </button>
-          <button className="btn sm" onClick={() => selectCommand(insertAt('md', cells.length))} title="메모 셀 추가">
+          <button className="btn sm" onClick={() => selectCommand(insertAt('md', cells.length))} title={t('nb.addMdCellTitle')}>
             <Icon.note />
-            메모 셀
+            {t('nb.mdCell')}
           </button>
           <span className="nb-toolbar-div" />
-          <button className="btn sm" onClick={() => cells.filter((c) => c.type === 'sql').forEach((c) => apiRef.current.get(c.id)?.run())} title="모든 SQL 셀 실행">
+          <button className="btn sm" onClick={() => cells.filter((c) => c.type === 'sql').forEach((c) => apiRef.current.get(c.id)?.run())} title={t('nb.runAllTitle')}>
             <Icon.play />
-            전체 실행
+            {t('nb.runAll')}
           </button>
-          <button className="btn sm" onClick={resetSession} title="세션 초기화 — 실행 번호와 모든 셀 출력을 지웁니다">
+          <button className="btn sm" onClick={resetSession} title={t('nb.resetTitle')}>
             <Icon.refresh />
-            세션 초기화
+            {t('nb.reset')}
           </button>
           {onSave && (
-            <button className="btn sm" onClick={onSave} title="저장 (⌘/Ctrl+S) — 셀을 하나의 쿼리로 저장">
+            <button className="btn sm" onClick={onSave} title={t('nb.saveTitle')}>
               <Icon.save />
-              저장
+              {t('nb.save')}
             </button>
           )}
-          <span className="nb-help" title="Shift+Enter 실행·다음 · ⌘/Ctrl+Enter 실행 · Alt+Enter 실행·삽입 · Esc 커맨드 · Enter 편집 · A/B 위·아래 추가 · DD 삭제 · M/Y 메모·코드 · Z 되돌리기">
-            단축키 ⓘ
+          <span className="nb-help" title={t('nb.shortcutsTitle')}>
+            {t('nb.shortcuts')}
           </span>
           {viewToggle}
         </div>
       </div>
       <div className="nb-body" ref={bodyRef} tabIndex={0} onKeyDown={onCommandKeys}>
         {cells.length === 0 && (
-          <div className="nb-empty-hint">셀이 없습니다. 아래에서 SQL 또는 메모 셀을 추가하세요.</div>
+          <div className="nb-empty-hint">{t('nb.emptyHint')}</div>
         )}
         {cells.map((cell, i) =>
           cell.type === 'md' ? (

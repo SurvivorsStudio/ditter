@@ -5,20 +5,21 @@ import { nodeStateSchema, type NodeState } from '../api/types'
 import {
   Banner,
   Spinner,
-  TRIGGER_LABEL,
   Tag,
   formatDateTime,
   formatDuration,
   formatNumber,
   formatTime,
+  triggerLabel,
 } from '../components/common'
 import { Icon } from '../components/icons'
+import { useT } from '../i18n'
 
 const LEVELS = [
-  { key: undefined, label: '전체' },
-  { key: 'info', label: 'info+' },
-  { key: 'warning', label: 'warning+' },
-  { key: 'error', label: 'error' },
+  { key: undefined, labelKey: 'monitor.filter.all' },
+  { key: 'info', labelKey: 'monitor.level.info' },
+  { key: 'warning', labelKey: 'monitor.level.warning' },
+  { key: 'error', labelKey: 'monitor.level.error' },
 ] as const
 
 const NODE_STATUS_COLOR: Record<string, string> = {
@@ -31,9 +32,11 @@ const NODE_STATUS_COLOR: Record<string, string> = {
 
 /** 실행 상세 — 노드별 분해, 로그, 재실행 (Phase 2 Monitor 고도화) */
 export function RunDetail({ runId, onClose }: { runId: string; onClose: () => void }) {
+  const t = useT()
   const [level, setLevel] = useState<string | undefined>(undefined)
   const [nodeFilter, setNodeFilter] = useState<string | undefined>(undefined)
-  const [message, setMessage] = useState<string | null>(null)
+  // 성공/실패를 문구가 아니라 값으로 든다 — 문구('시작')로 판정하면 번역되는 순간 색이 어긋난다
+  const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
 
   const { data: run, isLoading } = useRun(runId)
   const { data: logs, isLoading: logsLoading } = useRunLogs(runId, { level, nodeId: nodeFilter })
@@ -48,9 +51,12 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose: () => vo
     setMessage(null)
     try {
       const created = await retry.mutateAsync({ id: runId, fullRefresh })
-      setMessage(`재실행을 시작했습니다 (#${created.id.slice(0, 8)})`)
+      setMessage({ kind: 'ok', text: t('monitor.detail.retryStarted', { id: created.id.slice(0, 8) }) })
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : '재실행에 실패했습니다')
+      setMessage({
+        kind: 'error',
+        text: e instanceof Error ? e.message : t('monitor.detail.retryFailed'),
+      })
     }
   }
 
@@ -58,29 +64,29 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose: () => vo
     <div className="overlay" onClick={onClose}>
       <div className="modal wide" onClick={(e) => e.stopPropagation()}>
         <div className="mh">
-          <h3>실행 상세 · #{runId.slice(0, 8)}</h3>
+          <h3>{t('monitor.detail.title', { id: runId.slice(0, 8) })}</h3>
           {run && <Tag status={run.status} />}
-          <button className="x" onClick={onClose} aria-label="닫기">
+          <button className="x" onClick={onClose} aria-label={t('common.close')}>
             ×
           </button>
         </div>
 
         <div className="mb" style={{ padding: '14px 22px' }}>
           {isLoading && <Spinner />}
-          {message && <Banner kind={message.includes('시작') ? 'ok' : 'error'}>{message}</Banner>}
+          {message && <Banner kind={message.kind}>{message.text}</Banner>}
 
           {run && (
             <>
               {run.error && <Banner kind="error">{run.error}</Banner>}
 
               <div className="detail-grid">
-                <Field label="트리거" value={TRIGGER_LABEL[run.trigger] ?? run.trigger} />
-                <Field label="파이프라인 버전" value={`v${run.pipeline_version}`} />
-                <Field label="처리 건수" value={formatNumber(run.records)} />
-                <Field label="진행률" value={`${run.progress}%`} />
-                <Field label="시작" value={formatDateTime(run.started_at)} />
+                <Field label={t('monitor.th.trigger')} value={triggerLabel(run.trigger)} />
+                <Field label={t('monitor.detail.version')} value={`v${run.pipeline_version}`} />
+                <Field label={t('monitor.th.records')} value={formatNumber(run.records)} />
+                <Field label={t('monitor.th.progress')} value={`${run.progress}%`} />
+                <Field label={t('monitor.detail.started')} value={formatDateTime(run.started_at)} />
                 <Field
-                  label="소요"
+                  label={t('monitor.th.duration')}
                   value={formatDuration(
                     run.started_at && run.finished_at
                       ? (new Date(run.finished_at).getTime() - new Date(run.started_at).getTime()) / 1000
@@ -89,20 +95,20 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose: () => vo
                 />
               </div>
 
-              <h4 className="detail-h">노드별 결과</h4>
+              <h4 className="detail-h">{t('monitor.detail.nodeResults')}</h4>
               {Object.keys(nodeStates).length === 0 ? (
                 <div className="hint" style={{ padding: '0 0 10px' }}>
-                  아직 노드 상태가 기록되지 않았습니다.
+                  {t('monitor.detail.noNodeStates')}
                 </div>
               ) : (
                 <div className="table" style={{ marginBottom: 18 }}>
                   <table>
                     <thead>
                       <tr>
-                        <th>노드</th>
-                        <th style={{ width: 90 }}>상태</th>
-                        <th style={{ width: 110 }}>건수</th>
-                        <th>결과 / 위치</th>
+                        <th>{t('monitor.detail.th.node')}</th>
+                        <th style={{ width: 90 }}>{t('monitor.th.status')}</th>
+                        <th style={{ width: 110 }}>{t('monitor.detail.th.records')}</th>
+                        <th>{t('monitor.detail.th.result')}</th>
                         <th style={{ width: 70 }} />
                       </tr>
                     </thead>
@@ -129,7 +135,9 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose: () => vo
                               className="btn sm"
                               onClick={() => setNodeFilter(nodeFilter === id ? undefined : id)}
                             >
-                              {nodeFilter === id ? '해제' : '로그'}
+                              {nodeFilter === id
+                                ? t('monitor.detail.clearFilter')
+                                : t('monitor.detail.logs')}
                             </button>
                           </td>
                         </tr>
@@ -141,17 +149,21 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose: () => vo
 
               <div className="detail-h-row">
                 <h4 className="detail-h">
-                  로그
-                  {nodeFilter && <span className="detail-chip">노드: {nodeFilter}</span>}
+                  {t('monitor.detail.logs')}
+                  {nodeFilter && (
+                    <span className="detail-chip">
+                      {t('monitor.detail.nodeChip', { node: nodeFilter })}
+                    </span>
+                  )}
                 </h4>
                 <div className="filter-row" style={{ margin: 0 }}>
                   {LEVELS.map((l) => (
                     <span
-                      key={l.label}
+                      key={l.labelKey}
                       className={`pill sm ${level === l.key ? 'on' : ''}`}
                       onClick={() => setLevel(l.key)}
                     >
-                      {l.label}
+                      {t(l.labelKey)}
                     </span>
                   ))}
                 </div>
@@ -159,7 +171,7 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose: () => vo
 
               {logsLoading && <Spinner />}
               {logs && logs.length === 0 && (
-                <div className="hint">해당 조건의 로그가 없습니다.</div>
+                <div className="hint">{t('monitor.detail.noLogs')}</div>
               )}
               {logs && logs.length > 0 && (
                 <div className="logbox">
@@ -180,14 +192,14 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose: () => vo
           {canOperate && isActive && (
             <button className="btn danger" disabled={cancel.isPending} onClick={() => cancel.mutate(runId)}>
               <Icon.stop />
-              실행 취소
+              {t('monitor.cancelRun')}
             </button>
           )}
           {canOperate && !isActive && (
             <>
               <button className="btn" disabled={retry.isPending} onClick={() => handleRetry(true)}>
                 <Icon.refresh />
-                전체 재적재로 재실행
+                {t('monitor.detail.retryFull')}
               </button>
               <button
                 className="btn primary"
@@ -195,12 +207,12 @@ export function RunDetail({ runId, onClose }: { runId: string; onClose: () => vo
                 onClick={() => handleRetry(false)}
               >
                 {retry.isPending ? <Spinner /> : <Icon.play />}
-                재실행
+                {t('monitor.detail.retry')}
               </button>
             </>
           )}
           <button className="btn" onClick={onClose}>
-            닫기
+            {t('common.close')}
           </button>
         </div>
       </div>

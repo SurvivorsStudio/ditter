@@ -2,52 +2,60 @@ import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { Icon } from '../components/icons'
 import type { EaiNode as EaiNodeType } from '../store/canvasStore'
 import { useNodeActions } from './nodeActions'
-import { SPEC_BY_KIND, isSource, isTarget, isTrigger, switchOutputs } from './nodeCatalog'
+import { CATEGORY_KEY, SPEC_BY_KIND, isSource, isTarget, isTrigger, switchOutputs } from './nodeCatalog'
+import { t, useT, type MsgKey } from '../i18n'
 
-const STATUS_LABEL: Record<string, string> = {
-  pending: '대기',
-  running: '실행중',
-  success: '완료',
-  failed: '실패',
-  skipped: '건너뜀',
+// 라벨은 MsgKey 로만 들고 렌더 시점에 t() 로 푼다 — 모듈 상수에 번역문을 담으면
+// 언어 전환을 못 따라온다. success 가 status.success('성공') 가 아닌 이유는
+// 노드 뱃지에서는 '완료' 라고 부르기 때문이다 — 뜻이 다른 말은 키도 가른다.
+const STATUS_LABEL: Record<string, MsgKey> = {
+  pending: 'status.pending',
+  running: 'status.running',
+  success: 'cui.node.statusDone',
+  failed: 'status.failed',
+  skipped: 'cui.node.statusSkipped',
 }
 
-/** 노드 부제 — 무엇을 대상으로 하는지 한 줄로 보여준다 */
+/** 노드 부제 — 무엇을 대상으로 하는지 한 줄로 보여준다.
+ *  렌더마다 불리므로 여기서 t() 를 불러도 언어 전환을 따라온다. */
 function subtitle(kind: string, params: Record<string, unknown>): string {
   if (isTrigger(kind)) {
-    return kind === 'trigger.schedule' ? String(params.cron ?? 'cron 미설정') : '버튼 실행'
+    return kind === 'trigger.schedule'
+      ? String(params.cron ?? t('cui.node.cronUnset'))
+      : t('cui.node.buttonRun')
   }
   if (isSource(kind)) {
-    if (params.query) return '커스텀 쿼리'
-    const table = params.table ? String(params.table) : '테이블 미지정'
-    return params.incremental_column ? `${table} · 증분` : table
+    if (params.query) return t('cui.node.customQuery')
+    const table = params.table ? String(params.table) : t('cui.node.noTable')
+    return params.incremental_column ? t('cui.node.incremental', { table }) : table
   }
   if (kind === 'target.s3' || kind === 'target.file') {
-    const fallback = kind === 'target.file' ? '연결 폴더' : '경로 미지정'
+    const fallback = kind === 'target.file' ? t('cui.node.connFolder') : t('cui.node.noPath')
     const prefix = params.path_prefix ? String(params.path_prefix) : fallback
     const defaultFmt = kind === 'target.file' ? 'jsonl' : 'parquet'
     return `${prefix} · ${String(params.file_format ?? defaultFmt)}`
   }
   if (isTarget(kind)) {
-    return `${String(params.table ?? '테이블 미지정')} · ${String(params.mode ?? 'upsert')}`
+    return `${String(params.table ?? t('cui.node.noTable'))} · ${String(params.mode ?? 'upsert')}`
   }
   if (kind === 'transform.filter') {
     const n = Array.isArray(params.conditions) ? params.conditions.length : 0
-    return n ? `조건 ${n}개` : '조건 없음'
+    return n ? t('cui.node.condCount', { n }) : t('cui.node.noCond')
   }
   if (kind === 'transform.python') {
     const code = String(params.code ?? '').trim()
-    return code ? `코드 ${code.split('\n').length}줄` : '코드 없음'
+    return code ? t('cui.node.codeLines', { n: code.split('\n').length }) : t('cui.node.noCode')
   }
   if (kind === 'logic.switch') {
     const n = Array.isArray(params.cases) ? params.cases.length : 0
-    return n ? `분기 ${n}개 + 그 외` : '분기 없음'
+    return n ? t('cui.node.caseCount', { n }) : t('cui.node.noCase')
   }
   const n = Array.isArray(params.mappings) ? params.mappings.length : 0
-  return n ? `매핑 ${n}개` : '매핑 없음'
+  return n ? t('cui.node.mapCount', { n }) : t('cui.node.noMap')
 }
 
 export function EaiNode({ id, data, selected }: NodeProps<EaiNodeType>) {
+  const tr = useT()
   const spec = SPEC_BY_KIND[data.kind]
   const IconComp = spec?.icon
   const status = data.runState?.status ?? 'idle'
@@ -67,7 +75,7 @@ export function EaiNode({ id, data, selected }: NodeProps<EaiNodeType>) {
           트리거에는 두지 않는다. 트리거는 흐름의 **시작**이라 받을 것이 없다.
           타깃에 출구가 없는 것과 같은 이유다 — 못 하는 일은 그릴 수 없게 한다. */}
       {!isTrigger(data.kind) && (
-        <Handle type="target" position={Position.Left} title="입구 — 여기로 값이 들어옵니다" />
+        <Handle type="target" position={Position.Left} title={tr('cui.node.inTitle')} />
       )}
 
       {canShowRun && (
@@ -75,8 +83,8 @@ export function EaiNode({ id, data, selected }: NodeProps<EaiNodeType>) {
           className="node-run-btn nodrag"
           title={
             isApiTrigger
-              ? '테스트 실행 — 값을 채워 파이프라인 전체를 돌립니다'
-              : '이 노드만 실행 (그 노드까지 필요한 상류만)'
+              ? tr('cui.node.testRunTitle')
+              : tr('cui.node.runOneTitle')
           }
           disabled={!actions.canRun && !isRunningThis}
           onClick={(e) => {
@@ -106,7 +114,13 @@ export function EaiNode({ id, data, selected }: NodeProps<EaiNodeType>) {
 
       <div className="nfoot">
         <span className={`st ${status}`} />
-        <span>{STATUS_LABEL[status] ?? spec?.category ?? '준비'}</span>
+        <span>
+          {STATUS_LABEL[status]
+            ? tr(STATUS_LABEL[status])
+            : spec
+              ? tr(CATEGORY_KEY[spec.category])
+              : tr('cui.node.ready')}
+        </span>
         {/* 결과는 출구 쪽 엣지에 뜨지만, 하류가 없는 노드(타깃 등)는 그 엣지가 없다.
             그런 노드의 결과도 볼 수 있어야 하므로 건수 자체를 여는 버튼으로 둔다. */}
         {records > 0 &&
@@ -114,17 +128,17 @@ export function EaiNode({ id, data, selected }: NodeProps<EaiNodeType>) {
             <button
               className="node-records nodrag"
               style={{ marginLeft: 'auto' }}
-              title="이 노드가 내놓은 값 보기"
+              title={tr('cui.node.recordsTitle')}
               onClick={(e) => {
                 e.stopPropagation()
                 actions.openResult(id)
               }}
             >
-              {records.toLocaleString()}건
-            </button>
-          ) : (
-            <span style={{ marginLeft: 'auto' }}>{records.toLocaleString()}건</span>
-          ))}
+              {tr('common.count', { n: records })}
+</button>
+) : (
+<span style={{ marginLeft: 'auto' }}>{tr('common.count', { n: records })}</span>
+))}
       </div>
 
       {data.kind === 'logic.switch' ? (
@@ -138,7 +152,7 @@ export function EaiNode({ id, data, selected }: NodeProps<EaiNodeType>) {
                 type="source"
                 position={Position.Right}
                 id={out.id}
-                title={`출구 (${out.label}) — 이 분기의 값이 나갑니다`}
+                title={tr('cui.node.outBranchTitle', { label: out.label })}
               />
             </div>
           ))}
@@ -151,7 +165,7 @@ export function EaiNode({ id, data, selected }: NodeProps<EaiNodeType>) {
         // 것처럼 보이는데, 엔진은 타깃을 종점으로 보고 있어 실행 시점에 깨진다.
         // 못 하는 일은 애초에 그릴 수 없게 하는 편이 낫다.
         !isTarget(data.kind) && (
-          <Handle type="source" position={Position.Right} title="출구 — 이 노드의 결과값이 나갑니다" />
+          <Handle type="source" position={Position.Right} title={tr('cui.node.outTitle')} />
         )
       )}
     </div>

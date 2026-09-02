@@ -9468,3 +9468,45 @@ tbody tr:hover {
   gap: 12px;
   align-items: center;
 }
+
+/* ---------- 언어 전환 ---------- */
+/* 레일의 아바타 위에 앉는 작은 토글 — 눌린 언어가 아니라 "누르면 갈 언어"를 보여준다 */
+.lang-toggle {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  background: transparent;
+  color: #a7abbd;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition: 0.15s;
+}
+.lang-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+/* 로그인 화면에는 레일이 없다 — 우상단에 같은 토글을 둔다 (밝은 배경용 색) */
+.login-page {
+  position: relative;
+}
+.login-lang {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--panel);
+  color: #5b6070;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.login-lang:hover {
+  color: #14172a;
+  border-color: #c9cddb;
+}

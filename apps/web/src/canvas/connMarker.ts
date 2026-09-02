@@ -31,6 +31,7 @@
    `--` 는 줄 끝까지 먹는다. 문장 중간에 끼우면 뒤가 통째로 주석이 되어 조용히 깨진다.
    그래서 넣는 쪽(`upsertMarker`)이 **언제나 문장 맨 앞의 제 줄에** 놓는다.
    ───────────────────────────────────────────────────────────── */
+import { t } from '../i18n'
 
 import { DUCK_CONN, quotePart } from './duckRefs'
 
@@ -129,12 +130,12 @@ export function resolveConn(text: string, connections: readonly ConnLike[]): Con
     // 마지막이 이기게 두면, 위에 있는 마커를 보고 있는 사용자가 다른 DB 로 쏜다.
     return {
       kind: 'error',
-      message: `한 문장에 연결 마커가 ${marks.length}개 있습니다 — 하나만 남기세요.`,
+      message: t('cui.mk.tooMany', { n: marks.length }),
     }
   }
   const raw = marks[0].name
   if (!raw) {
-    return { kind: 'error', message: '연결 마커에 연결 이름이 없습니다 (`-- @conn "이름"`).' }
+    return { kind: 'error', message: t('cui.mk.noName') }
   }
   // 실제 연결을 먼저 본다 — 「연합 조회」라는 이름의 연결이 실제로 있다면 그쪽이 구체적이다.
   const hit = connections.find((c) => norm(c.name) === norm(raw))
@@ -142,7 +143,7 @@ export function resolveConn(text: string, connections: readonly ConnLike[]): Con
   if (norm(raw) === norm(DUCK_MARKER_NAME)) return { kind: 'duck', name: DUCK_MARKER_NAME }
   return {
     kind: 'error',
-    message: `연결 「${raw}」 을(를) 찾을 수 없습니다 — 이름이 바뀌었거나 지워졌습니다.`,
+    message: t('cui.mk.notFound', { name: raw }),
   }
 }
 
@@ -161,7 +162,7 @@ export function targetFor(
     return {
       ...fallback,
       overridden: false,
-      error: `「${target.name}」 은(는) MongoDB 라 문장별 연결로 지정할 수 없습니다 (문법이 다릅니다).`,
+      error: t('cui.mk.mongo', { name: target.name }),
     }
   }
   return { mode: 'sql', connId: target.connId, overridden: true }

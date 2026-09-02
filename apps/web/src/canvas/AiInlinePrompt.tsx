@@ -22,6 +22,7 @@ import { Icon } from '../components/icons'
 import { useAiChat, useConnectionSchema, useConnections } from '../api/hooks'
 import { useAiConn } from '../api/aiDefault'
 import { specFor } from '../api/connectorFields'
+import { useT, type TFunc } from '../i18n'
 import type { SelectOption } from '../components/SearchSelect'
 import { MiniSelect } from './AiChatPane'
 import type { CompletionTable } from './SqlEditor'
@@ -31,10 +32,10 @@ type Msg = { role: 'user' | 'assistant'; content: string }
 /** 프롬프트용 스키마 자동완성 — **`@` 로 테이블을 멘션**하고, 이후 `.` 로 그 컬럼을 낸다.
  *  산문 아무 단어에서 뜨지 않게 `@` 를 트리거로 둔다(먼저 테이블, 다음 컬럼).
  *  쿼리 편집기의 makeTableCompletion 은 FROM/JOIN 문맥 전용이라 여기선 못 쓴다. */
-function schemaPromptCompletion(tables: CompletionTable[]): CompletionSource {
+function schemaPromptCompletion(tables: CompletionTable[], tr: TFunc): CompletionSource {
   const tableOptions = tables.map((t) => {
     const qualified = t.namespace ? `${t.namespace}.${t.name}` : t.name
-    return { label: t.name, detail: t.namespace ?? '테이블', type: 'class', apply: qualified }
+    return { label: t.name, detail: t.namespace ?? tr('chat.kindTable'), type: 'class', apply: qualified }
   })
   const colsByTable = new Map<string, NonNullable<CompletionTable['columns']>>()
   for (const t of tables) {
@@ -79,6 +80,7 @@ export function AiInlinePrompt({
   onClose: () => void
 }) {
   const navigate = useNavigate()
+  const t = useT()
   const { data: conns = [] } = useConnections()
   const aiConns = useMemo(() => conns.filter((c) => specFor(c.type).category === 'ai'), [conns])
   const chat = useAiChat()
@@ -119,7 +121,7 @@ export function AiInlinePrompt({
   // 최신 submit 을 키맵에서 부르기 위한 ref (에디터를 재구성하지 않는다).
   const submitRef = useRef<() => void>(() => {})
   const extensions = useMemo(() => {
-    const src = tables.length ? schemaPromptCompletion(tables) : null
+    const src = tables.length ? schemaPromptCompletion(tables, t) : null
     const keys = Prec.highest(
       keymap.of([
         // 팝업이 열려 있으면 Enter 로 확정, 아니면 전송. Shift+Enter 는 줄바꿈(기본).
@@ -147,7 +149,7 @@ export function AiInlinePrompt({
       trigger,
       autocompletion(src ? { override: [src] } : {}),
     ]
-  }, [tables])
+  }, [tables, t])
 
   const submit = () => {
     const text = input.trim()
@@ -173,7 +175,7 @@ export function AiInlinePrompt({
             setNote(out.message.content)
           }
         },
-        onError: (err) => setError(err instanceof Error ? err.message : 'AI 호출에 실패했습니다.'),
+        onError: (err) => setError(err instanceof Error ? err.message : t('chat.callFailed')),
       },
     )
   }
@@ -186,17 +188,17 @@ export function AiInlinePrompt({
           <span className="ai-badge">
             <Icon.bolt /> AI
           </span>
-          <span className="ai-inline-title">SQL 생성</span>
-          <button className="ai-inline-x" onClick={onClose} aria-label="닫기">
+          <span className="ai-inline-title">{t('chat.inlineTitle')}</span>
+          <button className="ai-inline-x" onClick={onClose} aria-label={t('common.close')}>
             ×
           </button>
         </div>
 
         {aiConns.length === 0 ? (
           <div className="ai-inline-empty">
-            <p>등록된 AI 연결이 없습니다.</p>
+            <p>{t('chat.inlineNoAi')}</p>
             <button className="btn primary" onClick={() => navigate('/connections?add=gemini')}>
-              <Icon.plus /> AI 모델 등록하기
+              <Icon.plus /> {t('chat.registerAi')}
             </button>
           </div>
         ) : (
@@ -210,11 +212,7 @@ export function AiInlinePrompt({
               extensions={extensions}
               theme="light"
               autoFocus
-              placeholder={
-                note
-                  ? '이어서 답하거나 더 구체적으로…'
-                  : '만들 SQL 을 자연어로… @ 로 테이블, 이후 . 로 컬럼 (Enter 생성 · Shift+Enter 줄바꿈)'
-              }
+              placeholder={note ? t('chat.inlineContinue') : t('chat.inlinePlaceholder')}
               basicSetup={{
                 lineNumbers: false,
                 foldGutter: false,
@@ -227,34 +225,32 @@ export function AiInlinePrompt({
               }}
             />
             <div className="ai-inline-bar">
-              <MiniSelect value={model} options={aiOptions} onChange={setModel} placeholder="AI 모델" />
+              <MiniSelect value={model} options={aiOptions} onChange={setModel} placeholder={t('chat.aiModel')} />
               {/* 예시 데이터 — 언급 테이블의 실제 행을 AI 에 보내 정확도를 높인다(데이터가 전송됨). 기본 꺼짐. */}
               {dbConnId && (
                 <button
                   className={`ai-icon-btn ${samples ? 'on' : ''}`}
                   onClick={() => setSamples((v) => !v)}
-                  title={`예시 데이터 ${samples ? '켜짐' : '꺼짐'} — 언급한 테이블의 실제 행을 AI 에 보내 정확도를 높입니다(데이터가 전송됩니다)`}
+                  title={t('chat.samplesTitle', { state: t(samples ? 'chat.on' : 'chat.off') })}
                 >
                   <Icon.table />
                 </button>
               )}
               <span className="ai-inline-sp" />
               {chat.isPending ? (
-                <span className="ai-inline-loading">생성 중…</span>
+                <span className="ai-inline-loading">{t('chat.generating')}</span>
               ) : (
                 <button
                   className="btn primary ai-inline-go"
                   onClick={submit}
                   disabled={!input.trim() || !model}
                 >
-                  <Icon.bolt /> 생성
+                  <Icon.bolt /> {t('chat.generate')}
                 </button>
               )}
             </div>
             <div className="ai-inline-hint">
-              {dbConnId
-                ? '이 탭의 연결 스키마에 맞춰 만듭니다. @ 로 테이블, 이후 . 로 컬럼을 자동완성합니다.'
-                : '대상 연결이 없어 일반 SQL 로 만듭니다.'}
+              {dbConnId ? t('chat.inlineHintDb') : t('chat.inlineHintNoDb')}
             </div>
           </>
         )}

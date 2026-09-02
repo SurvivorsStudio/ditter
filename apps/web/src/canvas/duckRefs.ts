@@ -14,6 +14,7 @@
  * 여기(트리 클릭·자동완성)는 **항상 전체 형태**를 넣는다. 생략형은 손으로 칠 때의 편의고,
  * 넣어 주는 이름은 어느 데이터베이스인지가 눈에 보이는 편이 낫다.
  */
+import { t } from '../i18n'
 
 /** 연결 선택 드롭다운에서 「연합 조회」를 고른 상태를 나타내는 값.
  *
@@ -95,9 +96,9 @@ export function duckStarter(
   const usable = conns.filter((c) => isDuckType(c.type) && duckDatabase(c.config))
   if (usable.length === 0) {
     return [
-      '-- 여러 연결의 테이블을 한 번에 조회합니다 (MySQL · PostgreSQL · SQL Server).',
-      '--   MySQL             연결이름.데이터베이스.테이블',
-      '--   PostgreSQL·MSSQL  연결이름.데이터베이스.스키마.테이블',
+      t('cui.duck.starterLead'),
+      t('cui.duck.starterMysql'),
+      t('cui.duck.starterPg'),
       '',
       'SELECT ',
     ].join('\n')
@@ -106,7 +107,7 @@ export function duckStarter(
   const db = duckDatabase(first.config)!
   const shape =
     first.type === 'mysql'
-      ? `${quotePart(first.name)}.${quotePart(db)}.테이블`
-      : `${quotePart(first.name)}.${quotePart(db)}.스키마.테이블`
-  return `-- 왼쪽 「연결」 트리에서 테이블을 누르면 이름이 커서에 들어옵니다.\nSELECT *\nFROM ${shape}\n`
+      ? `${quotePart(first.name)}.${quotePart(db)}.${t('cui.duck.partTable')}`
+      : `${quotePart(first.name)}.${quotePart(db)}.${t('cui.duck.partSchema')}.${t('cui.duck.partTable')}`
+  return `${t('cui.duck.starterHint')}\nSELECT *\nFROM ${shape}\n`
 }

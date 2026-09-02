@@ -289,7 +289,13 @@ export function useAiChat() {
       error?: string | null
       explain?: string | null
       include_samples?: boolean
-    }) => api.parsed(aiChatOutSchema, '/ai/chat', { method: 'POST', body }),
+      // 답변 언어는 본문에 없다 — `client.ts` 가 모든 요청에 `Accept-Language` 를
+      // 실어 보내고 서버가 그 하나만 본다. 본문에도 두면 같은 결정이 두 군데가 된다.
+    }) =>
+      api.parsed(aiChatOutSchema, '/ai/chat', {
+        method: 'POST',
+        body,
+      }),
   })
 }
 

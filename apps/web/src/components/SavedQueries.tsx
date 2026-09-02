@@ -12,6 +12,8 @@ import {
   type SavedQuery,
 } from '../api/savedStore'
 import type { Connection, PipelineSummary } from '../api/types'
+import { useT, type MsgKey } from '../i18n'
+import { rich } from '../i18n/rich'
 
 /** 트리에서 같은 이름의 쿼리를 찾아 메모를 돌려준다 (재저장 시 메모 프리필용). */
 function findQueryNote(folders: SavedFolder[], name: string): string {
@@ -34,8 +36,12 @@ function findFolder(folders: SavedFolder[], id: string): SavedFolder | null {
   return null
 }
 
-/** 새로 만들 때 입력줄에 **미리 채워 두는** 이름. */
-const ADD_DEFAULT_NAME = { folder: '새 폴더', query: '새 쿼리', pipeline: '새 파이프라인' } as const
+/** 새로 만들 때 입력줄에 **미리 채워 두는** 이름 — 생성 시점에 t() 로 풀어 데이터가 된다. */
+const ADD_DEFAULT_NAME = {
+  folder: 'saved.newFolderName',
+  query: 'saved.newQueryName',
+  pipeline: 'common.newPipeline',
+} as const satisfies Record<string, MsgKey>
 type AddKind = keyof typeof ADD_DEFAULT_NAME
 
 /** 끌 수 있는 것 네 가지. `pipeline` 은 폴더에 담긴 항목(트리 항목 id),
@@ -85,6 +91,7 @@ export function SavedQueriesPanel({
    *  방금 무엇이 생겼는지 알 수 없다. */
   openTitles?: string[]
 } & PanelHandlers) {
+  const tr = useT()
   const [open, setOpen] = useState<Record<string, boolean>>({})
   const [editing, setEditing] = useState<{ folderId?: string; queryId?: string } | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -213,7 +220,7 @@ export function SavedQueriesPanel({
         : kind === 'query'
           ? [...(parent?.queries ?? []).map((q) => q.name), ...openTitles]
           : [...pipelines.map((p) => p.name), ...openTitles]
-    return uniqueName(ADD_DEFAULT_NAME[kind], taken)
+    return uniqueName(tr(ADD_DEFAULT_NAME[kind]), taken)
   }
 
   /** 입력줄을 연다 — **기본 이름을 채운 채로.**
@@ -285,7 +292,7 @@ export function SavedQueriesPanel({
           ref={addInput}
           autoFocus
           value={addName}
-          placeholder={parentId === null ? '폴더 이름…' : '이름…'}
+          placeholder={parentId === null ? tr('saved.folderNamePh') : tr('saved.namePh')}
           onChange={(e) => {
             setAddName(e.target.value)
             setAddTouched(true)
@@ -295,19 +302,24 @@ export function SavedQueriesPanel({
             if (e.key === 'Escape') cancelAdd()
           }}
         />
-        {addKindButton('folder', '폴더', <Icon.stack />, '폴더 만들기')}
+        {addKindButton('folder', tr('saved.kindFolder'), <Icon.stack />, tr('saved.makeFolderTip'))}
         {parentId !== null && (
           <>
-            {addKindButton('query', '쿼리', <Icon.code />, '쿼리 파일 만들기')}
+            {addKindButton('query', tr('saved.kindQuery'), <Icon.code />, tr('saved.makeQueryTip'))}
             {addKindButton(
               'pipeline',
-              '파이프라인',
+              tr('saved.kindPipeline'),
               <Icon.flow />,
-              '파이프라인을 새로 만들고 이 폴더에 놓습니다 (탭으로 열립니다)',
+              tr('saved.makePipelineTip'),
             )}
           </>
         )}
-        <button className="sq-add-x" onClick={cancelAdd} title="취소 (Esc)" aria-label="취소">
+        <button
+          className="sq-add-x"
+          onClick={cancelAdd}
+          title={tr('saved.cancelEsc')}
+          aria-label={tr('common.cancel')}
+        >
           ×
         </button>
       </div>
@@ -358,8 +370,8 @@ export function SavedQueriesPanel({
         >
           <button
             className={`pl-hist-caret ${histShown ? 'open' : ''}`}
-            title="실행 이력 보기"
-            aria-label="실행 이력 보기"
+            title={tr('saved.showRunHistory')}
+            aria-label={tr('saved.showRunHistory')}
             onPointerDown={stopDrag}
             onClick={(e) => {
               e.stopPropagation()
@@ -368,12 +380,12 @@ export function SavedQueriesPanel({
           >
             <Icon.chevron />
           </button>
-          <span className="sq-mode pipeline" title="파이프라인">
+          <span className="sq-mode pipeline" title={tr('saved.kindPipeline')}>
             <Icon.flow />
           </span>
           <span className="sq-query-name">{p.name}</span>
           {p.schedule_enabled && p.schedule && (
-            <span className="pl-sched" title={`스케줄: ${p.schedule}`}>
+            <span className="pl-sched" title={tr('saved.scheduleTip', { schedule: p.schedule })}>
               <Icon.clock />
             </span>
           )}
@@ -381,7 +393,7 @@ export function SavedQueriesPanel({
           {itemId && (
             <button
               className="sq-del"
-              title="트리에서 빼기 (파이프라인 자체는 지워지지 않습니다)"
+              title={tr('saved.removeFromTree')}
               onPointerDown={stopDrag}
               onClick={(e) => {
                 e.stopPropagation()
@@ -419,7 +431,7 @@ export function SavedQueriesPanel({
               onPointerDown={(e) => startDrag(e, 'folder', f.id, f.name)}
               onClick={guardClick(() => setOpen((o) => ({ ...o, [f.id]: !isOpen })))}
               onDoubleClick={() => startEdit({ folderId: f.id }, f.name)}
-              title="드래그해서 다른 폴더로 이동"
+              title={tr('saved.dragToMove')}
             >
               <span className={`sq-caret ${isOpen ? 'open' : ''}`}>
                 <Icon.chevron />
@@ -433,7 +445,7 @@ export function SavedQueriesPanel({
           )}
           <button
             className="sq-edit"
-            title="폴더 / 쿼리 추가"
+            title={tr('saved.addChildTip')}
             onPointerDown={stopDrag}
             onClick={() => {
               setOpen((o) => ({ ...o, [f.id]: true }))
@@ -444,7 +456,7 @@ export function SavedQueriesPanel({
           </button>
           <button
             className="sq-edit"
-            title="폴더 이름 변경"
+            title={tr('saved.renameFolderTip')}
             onPointerDown={stopDrag}
             onClick={() => startEdit({ folderId: f.id }, f.name)}
           >
@@ -452,10 +464,10 @@ export function SavedQueriesPanel({
           </button>
           <button
             className="sq-del"
-            title="폴더 삭제"
+            title={tr('saved.deleteFolderTip')}
             onPointerDown={stopDrag}
             onClick={() => {
-              if (confirm(`폴더 "${f.name}" 와 안의 내용을 모두 삭제할까요?`)) h.onDeleteFolder(f.id)
+              if (confirm(tr('saved.deleteFolderConfirm', { name: f.name }))) h.onDeleteFolder(f.id)
             }}
           >
             <Icon.trash />
@@ -468,7 +480,7 @@ export function SavedQueriesPanel({
             {f.queries.length === 0 &&
               f.pipelines.length === 0 &&
               f.folders.length === 0 &&
-              addParent !== f.id && <div className="sq-folder-empty">비어 있음</div>}
+              addParent !== f.id && <div className="sq-folder-empty">{tr('saved.emptyFolder')}</div>}
             {f.pipelines.map((r) => {
               const p = pipelineById.get(r.pipelineId)
               // 서버에서 지워진 파이프라인의 흔적은 감추기만 한다 — 목록을 아직 못 받은
@@ -531,7 +543,7 @@ export function SavedQueriesPanel({
                   )}
                   <button
                     className="sq-edit"
-                    title="이름 변경"
+                    title={tr('saved.renameTip')}
                     onPointerDown={stopDrag}
                     onClick={(e) => {
                       e.stopPropagation()
@@ -542,7 +554,7 @@ export function SavedQueriesPanel({
                   </button>
                   <button
                     className="sq-del"
-                    title="삭제"
+                    title={tr('saved.delete')}
                     onPointerDown={stopDrag}
                     onClick={(e) => {
                       e.stopPropagation()
@@ -563,25 +575,25 @@ export function SavedQueriesPanel({
   return (
     <div className="sq-panel">
       <div className="sq-head">
-        <span className="sq-title">쿼리 · 파이프라인</span>
+        <span className="sq-title">{tr('saved.panelTitle')}</span>
         <button
           className="sq-newfolder"
           onClick={() => (addParent === null ? closeAdd() : openAdd(null))}
-          title="새 폴더"
+          title={tr('saved.newFolderName')}
         >
           <Icon.plus />
-          폴더
+          {tr('saved.kindFolder')}
         </button>
       </div>
       <div className="tree-search sq-search">
         <Icon.search />
         <input
           value={search}
-          placeholder="쿼리 · 파이프라인 검색…"
+          placeholder={tr('saved.searchPh')}
           onChange={(e) => setSearch(e.target.value)}
         />
         {search && (
-          <button className="tree-search-x" onClick={() => setSearch('')} aria-label="지우기">
+          <button className="tree-search-x" onClick={() => setSearch('')} aria-label={tr('saved.clear')}>
             ×
           </button>
         )}
@@ -590,12 +602,12 @@ export function SavedQueriesPanel({
         {addBox(null)}
         {folders.length === 0 && loose.length === 0 && addParent === undefined ? (
           <div className="sq-empty">
-            저장된 항목이 없습니다.
+            {tr('saved.emptyTitle')}
             <br />
-            <b>폴더</b> 를 만들고 그 안에서 <b>쿼리</b> · <b>파이프라인</b> 을 추가하세요.
+            {rich(tr('saved.emptyBody'))}
           </div>
         ) : term && shownFolders.length === 0 && shownLoose.length === 0 ? (
-          <div className="sq-empty">“{search.trim()}” 검색 결과가 없습니다.</div>
+          <div className="sq-empty">{tr('saved.noSearchResults', { term: search.trim() })}</div>
         ) : (
           <>
             {shownFolders.map((f) => renderFolder(f))}
@@ -604,7 +616,7 @@ export function SavedQueriesPanel({
                 <div className="sq-folder-row">
                   <span className="pl-loose-label">
                     <Icon.flow />
-                    미분류 파이프라인
+                    {tr('saved.loosePipelines')}
                     <span className="sq-count">{shownLoose.length}</span>
                   </span>
                 </div>
@@ -657,6 +669,7 @@ export function SaveQueryDialog({
     note: string,
   ) => void
 }) {
+  const tr = useT()
   const flat = flattenFolders(folders)
   const initial = flat.find((f) => f.queryNames.includes(defaultName))?.id ?? flat[0]?.id ?? null
   const [selected, setSelected] = useState<string | null>(initial) // 폴더 id, null = 최상위
@@ -717,15 +730,15 @@ export function SaveQueryDialog({
     <div className="overlay" onClick={onCancel}>
       <div className="modal sq-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="mh">
-          <h3>쿼리 저장</h3>
-          <button className="x" onClick={onCancel} aria-label="닫기">
+          <h3>{tr('saved.saveDialogTitle')}</h3>
+          <button className="x" onClick={onCancel} aria-label={tr('common.close')}>
             ×
           </button>
         </div>
         <div className="mb sq-dialog-body">
           <div className="sq-field">
             <div className="sq-field-head">
-              <span>저장할 폴더</span>
+              <span>{tr('saved.saveFolderLabel')}</span>
               <button
                 className={`sq-newfolder ${creating ? 'on' : ''}`}
                 onClick={() => {
@@ -734,7 +747,7 @@ export function SaveQueryDialog({
                 }}
               >
                 <Icon.plus />
-                새 폴더
+                {tr('saved.newFolderName')}
               </button>
             </div>
             <div className="sq-tree">
@@ -744,7 +757,7 @@ export function SaveQueryDialog({
               >
                 <span className="sq-tree-caret ph" />
                 <Icon.home />
-                <span className="sq-tree-name">최상위</span>
+                <span className="sq-tree-name">{tr('saved.topLevel')}</span>
               </div>
               {renderTree(folders, 0)}
             </div>
@@ -752,11 +765,11 @@ export function SaveQueryDialog({
 
           {creating && (
             <label className="sq-field">
-              <span>{selInfo ? `"${selInfo.label}" 안에 새 폴더` : '최상위에 새 폴더'}</span>
+              <span>{selInfo ? tr('saved.newFolderIn', { name: selInfo.label }) : tr('saved.newFolderTop')}</span>
               <input
                 autoFocus
                 value={newName}
-                placeholder="폴더 이름…"
+                placeholder={tr('saved.folderNamePh')}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && save()}
               />
@@ -764,21 +777,21 @@ export function SaveQueryDialog({
           )}
 
           <label className="sq-field">
-            <span>쿼리 이름</span>
+            <span>{tr('saved.queryNameLabel')}</span>
             <input
               value={name}
-              placeholder="예: 최근 알람 조회"
+              placeholder={tr('saved.queryNamePh')}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && save()}
             />
           </label>
 
           <label className="sq-field">
-            <span>메모 (선택)</span>
+            <span>{tr('saved.noteLabel')}</span>
             <textarea
               className="sq-note"
               value={note}
-              placeholder="이 쿼리에 대한 설명·주의사항 등"
+              placeholder={tr('saved.notePh')}
               rows={2}
               onChange={(e) => setNote(e.target.value)}
             />
@@ -787,21 +800,20 @@ export function SaveQueryDialog({
           {conflict && (
             <div className="sq-conflict">
               <Icon.alert />
-              같은 이름의 쿼리가 이미 있습니다 — 저장하면 <b>덮어씁니다</b>. 다른 이름으로 저장하려면 이름을
-              바꾸세요.
+              {rich(tr('saved.conflictWarn'))}
             </div>
           )}
           {!creating && selected === null && (
-            <div className="sq-pickhint">폴더를 고르거나 “새 폴더” 로 만들어 저장하세요.</div>
+            <div className="sq-pickhint">{tr('saved.pickHint')}</div>
           )}
         </div>
         <div className="mf">
           <button className="btn" onClick={onCancel}>
-            취소
+            {tr('common.cancel')}
           </button>
           <button className={`btn ${conflict ? 'danger' : 'primary'}`} onClick={save} disabled={!canSave}>
             <Icon.save />
-            {conflict ? '덮어쓰기' : '저장'}
+            {conflict ? tr('saved.overwrite') : tr('saved.save')}
           </button>
         </div>
       </div>

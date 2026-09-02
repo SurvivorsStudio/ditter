@@ -29,6 +29,8 @@ class AiChatRequest(BaseModel):
     #: 언급된 테이블의 예시 행을 프롬프트에 넣어 값→컬럼 매핑 정확도를 높인다.
     #: 실제 데이터가 AI 프로바이더로 전송되므로 기본은 꺼짐 — 프론트가 토글로 켠다.
     include_samples: bool = False
+    # 답변 언어는 본문에 없다 — 요청의 ``Accept-Language`` 하나로 정해진다
+    # (`i18n.locale`). 같은 결정을 본문과 헤더 두 군데서 하면 반드시 갈린다.
 
 
 class AiChatResponse(BaseModel):

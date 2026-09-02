@@ -6,6 +6,7 @@
  *
  * 표기는 항상 대문자(`SELECT`)로 보여주고, 저장되는 값은 소문자다.
  */
+import { t, type MsgKey } from '../i18n'
 
 /** 표시 순서를 겸한다 — 체크박스도 태그도 이 순서로 나온다. */
 export const SQL_STATEMENTS = [
@@ -45,30 +46,14 @@ export const riskOf = (s: SqlStatement): StatementRisk => RISK[s]
 
 /** 칩에 함께 보이는 짧은 말. 이름만으로는 무엇을 켜는지 한눈에 안 들어온다.
  *  길면 칩이 줄을 넘겨 아홉 개가 흩어지므로 여기서는 짧게만 — 자세한 건 툴팁이 맡는다. */
-export const STATEMENT_HINT: Record<SqlStatement, string> = {
-  select: '조회',
-  insert: '행 추가',
-  update: '행 수정',
-  delete: '행 삭제',
-  merge: '수정+추가',
-  create: '생성',
-  alter: '스키마 변경',
-  drop: '테이블 삭제',
-  truncate: '전체 삭제',
+export function statementHint(s: SqlStatement): string {
+  return t(`stmt.${s}.hint` as MsgKey)
 }
 
 /** 칩에 마우스를 올렸을 때의 한 문장. 되돌릴 수 없는 것은 그렇다고 적는다 —
  *  체크 한 번으로 열리는 권한이라 무엇을 여는지 여기서 분명히 해야 한다. */
-export const STATEMENT_DETAIL: Record<SqlStatement, string> = {
-  select: '데이터를 읽습니다.',
-  insert: '테이블에 행을 추가합니다.',
-  update: '기존 행의 값을 바꿉니다.',
-  delete: '조건에 맞는 행을 지웁니다 — 되돌릴 수 없습니다.',
-  merge: '키가 있으면 수정하고 없으면 추가합니다 (upsert).',
-  create: '테이블·인덱스 등을 만듭니다.',
-  alter: '테이블 구조를 바꿉니다 — 기존 파이프라인이 깨질 수 있습니다.',
-  drop: '테이블을 통째로 지웁니다 — 되돌릴 수 없습니다.',
-  truncate: '테이블의 모든 행을 지웁니다 — 되돌릴 수 없습니다.',
+export function statementDetail(s: SqlStatement): string {
+  return t(`stmt.${s}.detail` as MsgKey)
 }
 
 const isStatement = (v: string): v is SqlStatement =>
@@ -180,5 +165,5 @@ export function mutedRunMessage(sql: string, muted: SqlStatement[]): string | nu
   if (!muted.length) return null
   const stmt = statementOf(sql)
   if (!stmt || !muted.includes(stmt)) return null
-  return `${stmt.toUpperCase()} 를 꺼 두었습니다 — 실행하지 않았습니다. 상단의 ${stmt.toUpperCase()} 태그를 눌러 다시 켜세요.`
+  return t('stmt.mutedRun', { stmt: stmt.toUpperCase() })
 }

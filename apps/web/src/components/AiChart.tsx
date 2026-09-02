@@ -19,6 +19,7 @@ import {
   Tooltip,
   Legend,
 } from 'recharts'
+import { useT } from '../i18n'
 
 export type ChartSpec = {
   type: 'bar' | 'line' | 'pie'
@@ -76,7 +77,8 @@ function normalizeSpec(obj: unknown): ChartSpec | null {
 type Datum = Record<string, string | number>
 
 export function AiChart({ spec }: { spec: ChartSpec }) {
-  const names = spec.series.map((s, i) => s.name || `계열 ${i + 1}`)
+  const t = useT()
+  const names = spec.series.map((s, i) => s.name || t('ai.seriesN', { n: i + 1 }))
   // recharts 데이터 형식으로: 각 범주(label) 한 행 + 계열별 값.
   const data: Datum[] = spec.labels.map((lb, i) => {
     const row: Datum = { x: lb }

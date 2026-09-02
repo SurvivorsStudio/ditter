@@ -17,25 +17,26 @@ import {
   EmptyState,
   Spinner,
   Stat,
-  TRIGGER_LABEL,
   Tag,
   formatDuration,
   formatNumber,
   formatTime,
+  triggerLabel,
 } from '../components/common'
 import { Icon } from '../components/icons'
+import { useT } from '../i18n'
 
 const FILTERS = [
-  { key: undefined, label: '전체' },
-  { key: 'success', label: '✔ 성공' },
-  { key: 'running', label: '● 실행중' },
-  { key: 'failed', label: '✕ 실패' },
+  { key: undefined, labelKey: 'monitor.filter.all' },
+  { key: 'success', labelKey: 'monitor.filter.success' },
+  { key: 'running', labelKey: 'monitor.filter.running' },
+  { key: 'failed', labelKey: 'monitor.filter.failed' },
 ] as const
 
 const RANGES = [
-  { hours: 24, label: '최근 24시간' },
-  { hours: 24 * 7, label: '최근 7일' },
-  { hours: undefined, label: '전체 기간' },
+  { hours: 24, labelKey: 'monitor.range.24h' },
+  { hours: 24 * 7, labelKey: 'monitor.range.7d' },
+  { hours: undefined, labelKey: 'monitor.range.all' },
 ] as const
 
 const BAR_COLOR: Record<string, string> = {
@@ -47,6 +48,7 @@ const BAR_COLOR: Record<string, string> = {
 }
 
 export function Monitor() {
+  const t = useT()
   const [tab, setTab] = useState<'runs' | 'streams'>('runs')
   const [status, setStatus] = useState<string | undefined>(undefined)
   const [hours, setHours] = useState<number | undefined>(24)
@@ -66,13 +68,13 @@ export function Monitor() {
       <div className="pad">
         <div className="filter-row" style={{ marginBottom: 14 }}>
           <span className={`pill ${tab === 'runs' ? 'on' : ''}`} onClick={() => setTab('runs')}>
-            실행 (배치)
+            {t('monitor.tab.runs')}
           </span>
           <span
             className={`pill ${tab === 'streams' ? 'on' : ''}`}
             onClick={() => setTab('streams')}
           >
-            <Icon.broadcast /> 스트림 (CDC)
+            <Icon.broadcast /> {t('monitor.tab.streams')}
           </span>
         </div>
 
@@ -139,32 +141,42 @@ function RunsPanel({
   cancel,
   setOpenRunId,
 }: RunsPanelProps) {
+  const t = useT()
   return (
     <>
         <div className="stats">
           <Stat
-            label="성공률 (24h)"
+            label={t('monitor.stat.successRate')}
             value={`${stats?.success_rate_24h ?? 0}%`}
-            sub={`실행 ${stats?.runs_total_24h ?? 0}건 기준`}
+            sub={t('monitor.stat.successRateSub', { n: stats?.runs_total_24h ?? 0 })}
             color="var(--green)"
             tone="up"
           />
           <Stat
-            label="평균 처리시간"
+            label={t('monitor.stat.avgDuration')}
             value={formatDuration(stats?.avg_duration_seconds ?? null)}
-            sub={`중앙값 ${formatDuration(stats?.median_duration_seconds ?? null)}`}
+            sub={t('monitor.stat.medianSub', {
+              v: formatDuration(stats?.median_duration_seconds ?? null),
+            })}
             color="var(--blue)"
           />
           <Stat
-            label="실행 (24h)"
+            label={t('monitor.stat.runs24h')}
             value={formatNumber(stats?.runs_total_24h ?? 0)}
-            sub={`스케줄 ${stats?.runs_scheduled_24h ?? 0} · 수동 ${stats?.runs_manual_24h ?? 0}`}
+            sub={t('monitor.stat.runs24hSub', {
+              scheduled: stats?.runs_scheduled_24h ?? 0,
+              manual: stats?.runs_manual_24h ?? 0,
+            })}
             color="var(--purple)"
           />
           <Stat
-            label="실패 (오늘)"
+            label={t('monitor.stat.failedToday')}
             value={formatNumber(stats?.runs_failed_today ?? 0)}
-            sub={(stats?.runs_failed_today ?? 0) > 0 ? '로그 확인 필요' : '이상 없음'}
+            sub={
+              (stats?.runs_failed_today ?? 0) > 0
+                ? t('monitor.stat.checkLogs')
+                : t('monitor.stat.allClear')
+            }
             color="var(--red)"
             tone={(stats?.runs_failed_today ?? 0) > 0 ? 'down' : undefined}
           />
@@ -173,11 +185,11 @@ function RunsPanel({
         <div className="filter-row">
           {FILTERS.map((f) => (
             <span
-              key={f.label}
+              key={f.labelKey}
               className={`pill ${status === f.key ? 'on' : ''}`}
               onClick={() => setStatus(f.key)}
             >
-              {f.label}
+              {t(f.labelKey)}
             </span>
           ))}
           <span style={{ marginLeft: 'auto' }} />
@@ -185,9 +197,9 @@ function RunsPanel({
             className="pill select"
             value={pipelineId ?? ''}
             onChange={(e) => setPipelineId(e.target.value || undefined)}
-            title="파이프라인별 필터"
+            title={t('monitor.pipelineFilterTitle')}
           >
-            <option value="">모든 파이프라인</option>
+            <option value="">{t('monitor.allPipelines')}</option>
             {(pipelines ?? []).map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -196,22 +208,24 @@ function RunsPanel({
           </select>
           {RANGES.map((r) => (
             <span
-              key={r.label}
+              key={r.labelKey}
               className={`pill ${hours === r.hours ? 'on' : ''}`}
               onClick={() => setHours(r.hours)}
             >
-              {r.label}
+              {t(r.labelKey)}
             </span>
           ))}
         </div>
 
-        {error && <Banner kind="error">실행 이력을 불러오지 못했습니다: {String(error)}</Banner>}
+        {error && (
+          <Banner kind="error">{t('monitor.loadRunsFailed', { error: String(error) })}</Banner>
+        )}
 
-        {isLoading && !page && <EmptyState title="불러오는 중…" />}
+        {isLoading && !page && <EmptyState title={t('runs.loading')} />}
 
         {page && runs.length === 0 && (
-          <EmptyState title="해당 조건의 실행 이력이 없습니다">
-            필터를 바꾸거나 파이프라인을 실행해 보세요.
+          <EmptyState title={t('monitor.emptyRunsTitle')}>
+            {t('monitor.emptyRunsBody')}
           </EmptyState>
         )}
 
@@ -220,14 +234,14 @@ function RunsPanel({
             <table>
               <thead>
                 <tr>
-                  <th style={{ width: 90 }}>실행</th>
-                  <th>파이프라인</th>
-                  <th style={{ width: 80 }}>상태</th>
-                  <th style={{ width: 80 }}>트리거</th>
-                  <th style={{ width: 100 }}>처리 건수</th>
-                  <th style={{ width: 150 }}>진행률</th>
-                  <th style={{ width: 80 }}>소요</th>
-                  <th style={{ width: 100 }}>시작 시각</th>
+                  <th style={{ width: 90 }}>{t('monitor.th.run')}</th>
+                  <th>{t('monitor.th.pipeline')}</th>
+                  <th style={{ width: 80 }}>{t('monitor.th.status')}</th>
+                  <th style={{ width: 80 }}>{t('monitor.th.trigger')}</th>
+                  <th style={{ width: 100 }}>{t('monitor.th.records')}</th>
+                  <th style={{ width: 150 }}>{t('monitor.th.progress')}</th>
+                  <th style={{ width: 80 }}>{t('monitor.th.duration')}</th>
+                  <th style={{ width: 100 }}>{t('monitor.th.startedAt')}</th>
                   <th style={{ width: 110 }} />
                 </tr>
               </thead>
@@ -241,7 +255,7 @@ function RunsPanel({
                     <td>
                       <Tag status={run.status} />
                     </td>
-                    <td style={{ color: '#5b6070' }}>{TRIGGER_LABEL[run.trigger] ?? run.trigger}</td>
+                    <td style={{ color: '#5b6070' }}>{triggerLabel(run.trigger)}</td>
                     <td className="mono">{formatNumber(run.records)}</td>
                     <td>
                       <span className="bar">
@@ -264,14 +278,14 @@ function RunsPanel({
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <button className="btn sm" onClick={() => setOpenRunId(run.id)}>
-                        상세
+                        {t('monitor.detailBtn')}
                       </button>{' '}
                       {canOperate && (run.status === 'running' || run.status === 'pending') && (
                         <button
                           className="btn sm danger"
                           disabled={cancel.isPending}
                           onClick={() => cancel.mutate(run.id)}
-                          title="실행 취소"
+                          title={t('monitor.cancelRun')}
                         >
                           <Icon.stop />
                         </button>
@@ -290,11 +304,11 @@ function RunsPanel({
 /* --------------------------------------------------------------- CDC 스트림 탭 */
 
 const STREAM_FILTERS = [
-  { key: undefined, label: '전체' },
-  { key: 'running', label: '● 흐르는 중' },
-  { key: 'paused', label: '❚❚ 일시정지' },
-  { key: 'failed', label: '✕ 실패' },
-  { key: 'stopped', label: '■ 중지됨' },
+  { key: undefined, labelKey: 'monitor.filter.all' },
+  { key: 'running', labelKey: 'monitor.sfilter.flowing' },
+  { key: 'paused', labelKey: 'monitor.sfilter.paused' },
+  { key: 'failed', labelKey: 'monitor.sfilter.failed' },
+  { key: 'stopped', labelKey: 'monitor.sfilter.stopped' },
 ] as const
 
 /** 스트림 상태별로 가능한 제어 (백엔드 전이 가드와 짝) */
@@ -305,6 +319,7 @@ const STREAM_REMOVABLE = new Set(['stopped', 'failed'])
 const SINK_REFRESH_SECONDS = 10
 
 function StreamsPanel({ canOperate }: { canOperate: boolean }) {
+  const t = useT()
   const navigate = useNavigate()
   const [status, setStatus] = useState<string | undefined>(undefined)
   const { data: streams, isLoading, error } = useStreams(status)
@@ -316,8 +331,8 @@ function StreamsPanel({ canOperate }: { canOperate: boolean }) {
   // 카운트다운용 1초 틱
   const [nowMs, setNowMs] = useState(() => Date.now())
   useEffect(() => {
-    const t = setInterval(() => setNowMs(Date.now()), 1000)
-    return () => clearInterval(t)
+    const timer = setInterval(() => setNowMs(Date.now()), 1000)
+    return () => clearInterval(timer)
   }, [])
 
   // 스트림이 '구독 대기중'으로 처음 보인 시각 — 클라이언트 기준 카운트다운의 기준점.
@@ -340,33 +355,38 @@ function StreamsPanel({ canOperate }: { canOperate: boolean }) {
       <div className="filter-row">
         {STREAM_FILTERS.map((f) => (
           <span
-            key={f.label}
+            key={f.labelKey}
             className={`pill ${status === f.key ? 'on' : ''}`}
             onClick={() => setStatus(f.key)}
           >
-            {f.label}
+            {t(f.labelKey)}
           </span>
         ))}
       </div>
 
-      {error && <Banner kind="error">스트림 목록을 불러오지 못했습니다: {String(error)}</Banner>}
+      {error && (
+        <Banner kind="error">{t('monitor.loadStreamsFailed', { error: String(error) })}</Banner>
+      )}
       {act.error && (
         <Banner kind="error">
-          스트림 제어 실패: {act.error instanceof Error ? act.error.message : '오류'}
+          {t('monitor.streamActionFailed', {
+            error: act.error instanceof Error ? act.error.message : t('status.error'),
+          })}
         </Banner>
       )}
       {del.error && (
         <Banner kind="error">
-          이력 삭제 실패: {del.error instanceof Error ? del.error.message : '오류'}
+          {t('monitor.deleteHistoryFailed', {
+            error: del.error instanceof Error ? del.error.message : t('status.error'),
+          })}
         </Banner>
       )}
 
-      {isLoading && !streams && <EmptyState title="불러오는 중…" />}
+      {isLoading && !streams && <EmptyState title={t('runs.loading')} />}
 
       {streams && rows.length === 0 && (
-        <EmptyState title="해당 조건의 스트림이 없습니다">
-          캔버스에서 CDC 소스 파이프라인을 만들고 [스트림 시작]을, 실시간 동기화
-          파이프라인이면 [동기화 시작]을 눌러 보세요.
+        <EmptyState title={t('monitor.emptyStreamsTitle')}>
+          {t('monitor.emptyStreamsBody')}
         </EmptyState>
       )}
 
@@ -385,13 +405,13 @@ function StreamsPanel({ canOperate }: { canOperate: boolean }) {
                   <button
                     className="stream-name"
                     onClick={() => navigate(`/canvas/${s.pipeline_id}`)}
-                    title="파이프라인 열기"
+                    title={t('monitor.openPipeline')}
                   >
                     {s.pipeline_name}
                   </button>
-                  {sync && <span className="tag">동기화</span>}
+                  {sync && <span className="tag">{t('monitor.syncTag')}</span>}
                   {waiting && !sync ? (
-                    <span className="tag provisioning">구독 대기중</span>
+                    <span className="tag provisioning">{t('monitor.subWaitingTag')}</span>
                   ) : (
                     <Tag status={s.status} />
                   )}
@@ -399,8 +419,10 @@ function StreamsPanel({ canOperate }: { canOperate: boolean }) {
 
                 {waiting && !sync && (
                   <div className="stream-waiting">
-                    <Spinner /> Sink 자동 구독 대기 —{' '}
-                    {remain > 0 ? `약 ${remain}초 후 시작` : '곧 시작됩니다…'}
+                    <Spinner />{' '}
+                    {remain > 0
+                      ? t('monitor.sinkWaitingIn', { n: remain })
+                      : t('monitor.sinkWaitingSoon')}
                   </div>
                 )}
 
@@ -410,7 +432,7 @@ function StreamsPanel({ canOperate }: { canOperate: boolean }) {
                   <div className="stream-metrics">
                     <div className="sm-item">
                       <span className="sm-num">{formatNumber(s.events_total)}</span>
-                      <span className="sm-lab">누적 이벤트</span>
+                      <span className="sm-lab">{t('monitor.metric.eventsTotal')}</span>
                     </div>
                     <div className="sm-item">
                       <span className="sm-num">{s.eps.toFixed(1)}</span>
@@ -418,14 +440,17 @@ function StreamsPanel({ canOperate }: { canOperate: boolean }) {
                     </div>
                     <div className="sm-item">
                       <span className="sm-num">{s.lag_ms == null ? '—' : `${s.lag_ms}ms`}</span>
-                      <span className="sm-lab">랙(lag)</span>
+                      <span className="sm-lab">{t('monitor.metric.lag')}</span>
                     </div>
                   </div>
                 )}
 
                 <div className="stream-foot">
                   <span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
-                    최근 {formatTime(s.last_event_at)} · 시작 {formatTime(s.started_at)}
+                    {t('monitor.streamTimes', {
+                      last: formatTime(s.last_event_at),
+                      start: formatTime(s.started_at),
+                    })}
                   </span>
                   {canOperate && (active || removable) && (
                     <div className="actions">
@@ -434,7 +459,7 @@ function StreamsPanel({ canOperate }: { canOperate: boolean }) {
                           className="btn sm"
                           disabled={act.isPending}
                           onClick={() => act.mutate({ id: s.id, action: 'pause' })}
-                          title="일시정지"
+                          title={t('monitor.pauseTitle')}
                         >
                           <Icon.pause />
                         </button>
@@ -444,7 +469,7 @@ function StreamsPanel({ canOperate }: { canOperate: boolean }) {
                           className="btn sm"
                           disabled={act.isPending}
                           onClick={() => act.mutate({ id: s.id, action: 'resume' })}
-                          title="재개"
+                          title={t('monitor.resumeTitle')}
                         >
                           <Icon.play />
                         </button>
@@ -454,7 +479,7 @@ function StreamsPanel({ canOperate }: { canOperate: boolean }) {
                           className="btn sm danger"
                           disabled={act.isPending}
                           onClick={() => act.mutate({ id: s.id, action: 'stop' })}
-                          title={sync ? '중지 (원본 트리거 제거)' : '중지 (커넥터 삭제)'}
+                          title={sync ? t('monitor.stopSyncTitle') : t('monitor.stopStreamTitle')}
                         >
                           {act.isPending && act.variables?.id === s.id ? <Spinner /> : <Icon.stop />}
                         </button>
@@ -464,7 +489,7 @@ function StreamsPanel({ canOperate }: { canOperate: boolean }) {
                           className="btn sm danger"
                           disabled={del.isPending}
                           onClick={() => del.mutate(s.id)}
-                          title="이력 삭제"
+                          title={t('monitor.deleteHistoryTitle')}
                         >
                           {del.isPending && del.variables === s.id ? <Spinner /> : <Icon.trash />}
                         </button>
@@ -474,9 +499,7 @@ function StreamsPanel({ canOperate }: { canOperate: boolean }) {
                 </div>
                 {s.status === 'failed' && (
                   <div className="stream-error">
-                    {sync
-                      ? '동기화가 실패 상태입니다. 원본에 트리거가 남아 있을 수 있으니 SYM_TRIGGER 를 확인하세요.'
-                      : '스트림이 실패 상태입니다. 파이프라인·소스 상태를 확인하세요.'}
+                    {sync ? t('monitor.syncFailedMsg') : t('monitor.streamFailedMsg')}
                   </div>
                 )}
               </div>
@@ -499,6 +522,7 @@ function StreamsPanel({ canOperate }: { canOperate: boolean }) {
  * 목록보다 느리게(10초) 도는 것은 폴링 한 번이 원본에 쿼리 넷을 날리기 때문이다.
  */
 function SyncMetrics({ streamId, active }: { streamId: string; active: boolean }) {
+  const t = useT()
   const { data } = useStream(active ? streamId : undefined, 10_000)
   const metrics = (data?.metrics ?? {}) as {
     pending_rows?: number
@@ -515,32 +539,27 @@ function SyncMetrics({ streamId, active }: { streamId: string; active: boolean }
       <div className="stream-metrics">
         <div className="sm-item">
           <span className="sm-num">{formatNumber(pending)}</span>
-          <span className="sm-lab">미전송</span>
+          <span className="sm-lab">{t('monitor.metric.pending')}</span>
         </div>
         <div className="sm-item">
           <span className="sm-num">{formatNumber(errors)}</span>
-          <span className="sm-lab">오류 배치</span>
+          <span className="sm-lab">{t('monitor.metric.errorBatches')}</span>
         </div>
         <div className="sm-item">
           <span className="sm-num">{metrics.lag_ms == null ? '—' : `${metrics.lag_ms}ms`}</span>
-          <span className="sm-lab">랙(lag)</span>
+          <span className="sm-lab">{t('monitor.metric.lag')}</span>
         </div>
       </div>
       {active && nodes === 0 && (
         <div className="stream-waiting">
-          <Spinner /> 타깃 노드 등록 대기 — 등록 전에는 데이터가 가지 않습니다.
+          <Spinner /> {t('monitor.nodeWaiting')}
         </div>
       )}
       {pending > 0 && (
-        <div className="stream-waiting">
-          미전송 {formatNumber(pending)}건이 원본 SYM_DATA 에 쌓여 있습니다. 계속 늘어나면
-          원본 DB 용량과 트랜잭션 로그를 확인하세요.
-        </div>
+        <div className="stream-waiting">{t('monitor.pendingRows', { n: pending })}</div>
       )}
       {errors > 0 && (
-        <div className="stream-error">
-          전송 실패 배치 {formatNumber(errors)}건 — SYM_OUTGOING_BATCH 를 확인하세요.
-        </div>
+        <div className="stream-error">{t('monitor.errorBatchesMsg', { n: errors })}</div>
       )}
     </>
   )

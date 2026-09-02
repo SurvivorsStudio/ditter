@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from './icons'
+import { useT } from '../i18n'
 
 /** `accent` 는 목록에서 성격이 다른 항목을 구분한다 — 연결 하나가 아니라 '여러 연결'처럼. */
 export type SelectOption = { value: string; label: string; hint?: string; accent?: boolean }
@@ -37,10 +38,10 @@ export function SearchSelect({
   value,
   onChange,
   options,
-  placeholder = '— 선택 —',
+  placeholder,
   disabled = false,
   loading = false,
-  emptyText = '결과 없음',
+  emptyText,
   leading,
 }: {
   value: string
@@ -53,6 +54,7 @@ export function SearchSelect({
   /** 트리거의 라벨 앞에 놓을 요소 (연결 타입 배지 등). */
   leading?: React.ReactNode
 }) {
+  const tr = useT() // 지역 setTimeout 핸들 t 와의 충돌을 피한다
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
@@ -136,7 +138,7 @@ export function SearchSelect({
       >
         {leading && selected && <span className="ss-lead">{leading}</span>}
         <span className={selected ? 'ss-val' : 'ss-ph'}>
-          {loading ? '불러오는 중…' : (selected?.label ?? placeholder)}
+          {loading ? tr('runs.loading') : (selected?.label ?? placeholder ?? tr('navi.selectPlaceholder'))}
         </span>
         <Icon.chevron />
       </button>
@@ -159,13 +161,15 @@ export function SearchSelect({
                 <input
                   ref={inputRef}
                   value={query}
-                  placeholder="검색…"
+                  placeholder={tr('navi.search')}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={onInputKey}
                 />
               </div>
               <div className="ss-list" ref={listRef}>
-                {filtered.length === 0 && <div className="ss-empty">{emptyText}</div>}
+                {filtered.length === 0 && (
+                  <div className="ss-empty">{emptyText ?? tr('navi.noResults')}</div>
+                )}
                 {filtered.map((o, i) => (
                   <button
                     key={o.value}
@@ -181,7 +185,9 @@ export function SearchSelect({
                 ))}
               </div>
               <div className="ss-foot">
-                {query.trim() ? `${filtered.length} / ${options.length}` : `${options.length}개`}
+                {query.trim()
+                  ? `${filtered.length} / ${options.length}`
+                  : tr('navi.optionCount', { n: options.length })}
               </div>
             </div>
           </>,

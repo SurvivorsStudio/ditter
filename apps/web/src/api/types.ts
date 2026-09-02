@@ -492,14 +492,10 @@ export type SyncPreflight = z.infer<typeof syncPreflightSchema>
 /** SymmetricDS 채널 — 전송 단위이자 우선순위 단위. 백엔드 dag.py 의 SYNC_CHANNELS 와 짝.
  *  대량 배치가 발생하는 테이블을 realtime 에 넣으면 채널을 점유해 다른 테이블의
  *  실시간성을 망친다 — 그래서 테이블마다 고르게 한다. */
-export const SYNC_CHANNELS = [
-  { id: 'realtime', label: '실시간', hint: '재고·출고 등 지연 민감' },
-  { id: 'standard', label: '일반', hint: '마스터 테이블' },
-  { id: 'bulk', label: '대량', hint: '배치 작업이 몰리는 테이블' },
-] as const
+//  라벨·설명은 여기 두지 않는다 — 화면은 `sync.channel.<id>.label|hint` 사전을 본다.
+//  같은 문자열을 두 군데 두면 한쪽만 고쳤을 때 조용히 갈라진다.
+export const SYNC_CHANNELS = [{ id: 'realtime' }, { id: 'standard' }, { id: 'bulk' }] as const
 
 /** 복제본의 최종 용도. 백엔드 SYNC_PURPOSES 와 짝. */
-export const SYNC_PURPOSES = [
-  { id: 'readonly', label: '조회/분석' },
-  { id: 'operational', label: '업무 판단 근거' },
-] as const
+//  라벨은 `sync.purpose.<id>` 사전을 본다 (위와 같은 이유).
+export const SYNC_PURPOSES = [{ id: 'readonly' }, { id: 'operational' }] as const

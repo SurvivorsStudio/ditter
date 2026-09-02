@@ -58,10 +58,10 @@ describe('실시간 동기화 노드 카탈로그', () => {
   it('소분류가 붙은 노드는 그 분류의 마지막에 모여 있다', () => {
     for (const category of CATEGORIES) {
       const inCategory = NODE_SPECS.filter((s) => s.category === category)
-      const firstGrouped = inCategory.findIndex((s) => s.group)
+      const firstGrouped = inCategory.findIndex((s) => s.groupKey)
       if (firstGrouped === -1) continue
       const tail = inCategory.slice(firstGrouped)
-      expect(tail.every((s) => s.group), `${category}: 소분류 뒤에 소분류 없는 노드가 있다`).toBe(
+      expect(tail.every((s) => s.groupKey), `${category}: 소분류 뒤에 소분류 없는 노드가 있다`).toBe(
         true,
       )
     }

@@ -7,6 +7,7 @@ import { specFor } from '../api/connectorFields'
 import { Icon } from './icons'
 import { ObjectDetailModal, type DetailTarget } from './ObjectDetailModal'
 import { objectDetailSchema, type Connection, type DbObject } from '../api/types'
+import { useT, type MsgKey } from '../i18n'
 
 type CtxMenu = { x: number; y: number; target: DetailTarget }
 export type OpenQueryPayload = { connId: string; mode: 'sql' | 'mongo'; text: string; title: string }
@@ -30,6 +31,7 @@ export function ConnectionNavigator({
   /** 우클릭 → "쿼리 탭으로 열기". 없으면 그 메뉴 항목을 숨긴다. */
   onOpenQuery?: (payload: OpenQueryPayload) => void
 }) {
+  const tr = useT() // 지역 변수 t(DetailTarget)와의 충돌을 피한다
   const qc = useQueryClient()
   const [query, setQuery] = useState('')
   const [menu, setMenu] = useState<CtxMenu | null>(null)
@@ -66,7 +68,7 @@ export function ConnectionNavigator({
     if (!onOpenQuery) return
     const qn = t.schema ? `${t.schema}.${t.name}` : t.name
     if (DEFINITION_KINDS.has(t.kind)) {
-      let text = `-- 정의를 가져오지 못했습니다: ${qn}`
+      let text = tr('navi.defFetchFailed', { name: qn })
       try {
         const p = new URLSearchParams({ kind: t.kind, name: t.name })
         if (t.schema) p.set('schema', t.schema)
@@ -95,15 +97,19 @@ export function ConnectionNavigator({
     <div className="sql-nav">
       <div className="tree-search sql-nav-search">
         <Icon.search />
-        <input value={query} placeholder="객체 검색…" onChange={(e) => setQuery(e.target.value)} />
+        <input
+          value={query}
+          placeholder={tr('navi.searchObjects')}
+          onChange={(e) => setQuery(e.target.value)}
+        />
         {query && (
-          <button className="tree-search-x" onClick={() => setQuery('')} aria-label="지우기">
+          <button className="tree-search-x" onClick={() => setQuery('')} aria-label={tr('navi.clear')}>
             ×
           </button>
         )}
       </div>
       <div className="sql-nav-body">
-        {connections.length === 0 && <div className="tree-empty">DB 연결이 없습니다</div>}
+        {connections.length === 0 && <div className="tree-empty">{tr('navi.noConnections')}</div>}
         {connections.map((c) => (
           <ConnectionNode
             key={c.id}
@@ -133,17 +139,17 @@ export function ConnectionNavigator({
             >
               <Icon.table />
               {menu.target.kind === 'table' || menu.target.kind === 'collection'
-                ? '구조 보기 (팝업)'
+                ? tr('navi.viewStructure')
                 : menu.target.kind === 'view' || menu.target.kind === 'materialized_view'
-                  ? '뷰 스크립트 (팝업)'
+                  ? tr('navi.viewScript')
                   : menu.target.kind === 'function' || menu.target.kind === 'procedure'
-                    ? '소스 보기 (팝업)'
-                    : '상세 보기 (팝업)'}
+                    ? tr('navi.viewSource')
+                    : tr('navi.viewDetail')}
             </button>
             {onOpenQuery && (
               <button className="sql-ctxmenu-item" onClick={() => openInTab(menu.target)}>
                 <Icon.code />
-                쿼리 탭으로 열기
+                {tr('navi.openInQueryTab')}
               </button>
             )}
             <button
@@ -154,7 +160,7 @@ export function ConnectionNavigator({
               }}
             >
               <Icon.copy />
-              이름 복사
+              {tr('navi.copyName')}
             </button>
           </div>,
           document.body,
@@ -165,24 +171,25 @@ export function ConnectionNavigator({
   )
 }
 
-/** 스키마 안(schema-level) 카테고리 — 표시 순서와 라벨. 엔진마다 있는 종류만 나타난다. */
-const CATEGORIES: { kind: string; label: string }[] = [
-  { kind: 'table', label: '테이블' },
-  { kind: 'view', label: '뷰' },
-  { kind: 'materialized_view', label: '구체화 뷰' },
-  { kind: 'function', label: '함수' },
-  { kind: 'procedure', label: '프로시저' },
-  { kind: 'sequence', label: '시퀀스' },
-  { kind: 'collection', label: '컬렉션' },
+/** 스키마 안(schema-level) 카테고리 — 표시 순서와 라벨(MsgKey — 렌더 시점에 t() 로 푼다).
+ *  엔진마다 있는 종류만 나타난다. */
+const CATEGORIES: { kind: string; label: MsgKey }[] = [
+  { kind: 'table', label: 'navi.cat.table' },
+  { kind: 'view', label: 'navi.cat.view' },
+  { kind: 'materialized_view', label: 'navi.cat.materialized_view' },
+  { kind: 'function', label: 'navi.cat.function' },
+  { kind: 'procedure', label: 'navi.cat.procedure' },
+  { kind: 'sequence', label: 'navi.cat.sequence' },
+  { kind: 'collection', label: 'navi.cat.collection' },
 ]
 const SCHEMA_KINDS = new Set(CATEGORIES.map((c) => c.kind))
 
 /** DB/클러스터 레벨 카테고리 — 스키마에 속하지 않고 DB 노드 바로 아래 온다(PostgreSQL). */
-const DB_CATEGORIES: { kind: string; label: string }[] = [
-  { kind: 'extension', label: '확장 (Extensions)' },
-  { kind: 'event_trigger', label: '이벤트 트리거' },
-  { kind: 'tablespace', label: '테이블스페이스' },
-  { kind: 'role', label: '롤 (Roles)' },
+const DB_CATEGORIES: { kind: string; label: MsgKey }[] = [
+  { kind: 'extension', label: 'navi.cat.extension' },
+  { kind: 'event_trigger', label: 'navi.cat.event_trigger' },
+  { kind: 'tablespace', label: 'navi.cat.tablespace' },
+  { kind: 'role', label: 'navi.cat.role' },
 ]
 
 function KindIcon({ kind }: { kind: string }) {
@@ -254,6 +261,7 @@ function ConnectionNode({
   onPickTable: (connId: string, encoded: string) => void
   onObjContext: (e: React.MouseEvent, target: DetailTarget) => void
 }) {
+  const t = useT()
   const [open, setOpen] = useState(active)
   const { data, isLoading, isFetching } = useConnectionObjects(open ? conn.id : undefined)
   const spec = specFor(conn.type)
@@ -290,7 +298,7 @@ function ConnectionNode({
       <CategoryNode
         key={c.kind}
         connId={conn.id}
-        label={c.label}
+        label={t(c.label)}
         kind={c.kind}
         items={byKind.get(c.kind) ?? []}
         forceOpen={searching}
@@ -313,8 +321,8 @@ function ConnectionNode({
           className={`conn-refresh ${isFetching ? 'spinning' : ''}`}
           role="button"
           tabIndex={-1}
-          title="스키마 새로고침"
-          aria-label={`${conn.name} 스키마 새로고침`}
+          title={t('navi.refreshSchema')}
+          aria-label={t('navi.refreshSchemaOf', { name: conn.name })}
           onClick={refresh}
         >
           <Icon.refresh />
@@ -324,7 +332,7 @@ function ConnectionNode({
       {open && (
         <div className="tree-conn-body">
           {isLoading ? (
-            <div className="tree-skel" aria-label="불러오는 중">
+            <div className="tree-skel" aria-label={t('navi.loading')}>
               {[72, 58, 84, 64, 76, 50, 68].map((w, i) => (
                 <div key={i} className="tree-skel-row">
                   <span className="tree-skel-ic" />
@@ -333,7 +341,7 @@ function ConnectionNode({
               ))}
             </div>
           ) : schemas.length === 0 && dbByKind.size === 0 ? (
-            <div className="tree-empty sm">객체가 없습니다</div>
+            <div className="tree-empty sm">{t('navi.noObjects')}</div>
           ) : withSchemas ? (
             // PostgreSQL·SQL Server: DB → ("Schemas" → 스키마 → 카테고리) + DB 레벨 항목
             <Folder
@@ -346,7 +354,7 @@ function ConnectionNode({
             >
               {schemas.length > 0 && (
                 <Folder
-                  label="스키마"
+                  label={t('navi.schemasFolder')}
                   icon={<Icon.folder />}
                   count={schemas.length}
                   rowClass="schemas"
@@ -373,7 +381,7 @@ function ConnectionNode({
                 <CategoryNode
                   key={c.kind}
                   connId={conn.id}
-                  label={c.label}
+                  label={t(c.label)}
                   kind={c.kind}
                   items={dbByKind.get(c.kind) ?? []}
                   forceOpen={searching}
