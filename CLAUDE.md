@@ -337,8 +337,12 @@ DAG 스펙(`eai_api.schemas.dag`)을 양쪽이 공유하는 이유가 이것이�
 - `from __future__ import annotations` 가 있으면 FastAPI 가 `-> None` 을 문자열로 본다.
   204 응답 라우트에는 **`response_model=None` 을 명시**해야 한다.
 - zod 스키마를 `z.ZodType<T>` 로 받으면 TS 가 **입력** 타입으로 추론해 `.default()` 필드가 전부
-  optional 로 샌다. `<S extends z.ZodTypeAny>` + `z.infer<S>` 로 받을 것.
-- **FastMCP 2.10.x 는 pydantic 2.13 과 깨진다.** 버전을 올릴 때 반드시 호환성부터 확인한다.
+  optional 로 샌다. `<S extends z.ZodType>` + `z.infer<S>` 로 받을 것. (zod 4 에서 `ZodTypeAny`
+  는 deprecated 되었으므로 bare `z.ZodType` 을 쓴다.) 이 성질은 `apps/web/src/api/client.test.ts`
+  의 타입 단언으로 회귀 테스트된다 — 그 테스트를 지우거나 약화시키지 말 것.
+- **fastmcp 와 mcp 는 따로 올릴 수 없는 짝이다.** fastmcp 3.4.7 은 `mcp>=1.24.0,<2.0` 을 강제하고,
+  mcp 2.x 로 가려면 fastmcp 도 4.0 으로 함께 올려야 한다 (추적 이슈 #114). 버전을 올릴 때
+  `apps/api/pyproject.toml` 의 주석과 `uv.lock` 의 해소 버전을 반드시 함께 확인할 것.
 - 워터마크가 `datetime`/`Decimal` 이면 JSONB 에 그대로 들어가지 않는다.
   `engine._encode_watermark` 가 타입 태그를 붙여 저장한다 — 태그를 잃으면 다음 비교가 조용히 어긋난다.
 - vitest 는 자체 vite 를 번들한다. **vite 메이저와 맞춰야** 타입 충돌이 없다 (vite 6 ↔ vitest 3).

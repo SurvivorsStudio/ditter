@@ -59,7 +59,7 @@ export const pipelineNodeSchema = z.object({
   kind: nodeKindSchema,
   label: z.string().default(''),
   position: z.object({ x: z.number(), y: z.number() }).default({ x: 0, y: 0 }),
-  params: z.record(z.unknown()).default({}),
+  params: z.record(z.string(), z.unknown()).default({}),
 })
 export type PipelineNode = z.infer<typeof pipelineNodeSchema>
 
@@ -75,7 +75,7 @@ export type PipelineEdge = z.infer<typeof pipelineEdgeSchema>
 export const pipelineDefinitionSchema = z.object({
   nodes: z.array(pipelineNodeSchema).default([]),
   edges: z.array(pipelineEdgeSchema).default([]),
-  variables: z.record(z.unknown()).default({}),
+  variables: z.record(z.string(), z.unknown()).default({}),
 })
 export type PipelineDefinition = z.infer<typeof pipelineDefinitionSchema>
 
@@ -84,7 +84,7 @@ export const connectionSchema = z.object({
   name: z.string(),
   type: z.string(),
   description: z.string().nullable().default(null),
-  config: z.record(z.unknown()).default({}),
+  config: z.record(z.string(), z.unknown()).default({}),
   pool_size: z.number().default(5),
   ssl: z.boolean().default(false),
   cdc_enabled: z.boolean().default(false),
@@ -157,7 +157,7 @@ export const objectDetailSchema = z.object({
   columns: z.array(columnSchema).default([]),
   indexes: z.array(indexSchema).default([]),
   definition: z.string().nullable().default(null),
-  info: z.record(z.string()).default({}),
+  info: z.record(z.string(), z.string()).default({}),
 })
 export type ObjectDetail = z.infer<typeof objectDetailSchema>
 
@@ -183,14 +183,14 @@ export const deleteResultSchema = z.object({
 
 export const previewSchema = z.object({
   columns: z.array(z.string()),
-  rows: z.array(z.record(z.unknown())),
+  rows: z.array(z.record(z.string(), z.unknown())),
   truncated: z.boolean().default(false),
 })
 export type Preview = z.infer<typeof previewSchema>
 
 export const queryResultSchema = z.object({
   columns: z.array(z.string()),
-  rows: z.array(z.record(z.unknown())),
+  rows: z.array(z.record(z.string(), z.unknown())),
   row_count: z.number(),
   truncated: z.boolean().default(false),
   elapsed_ms: z.number(),
@@ -319,7 +319,7 @@ export const runSchema = z.object({
   records: z.number().default(0),
   progress: z.number().default(0),
   error: z.string().nullable().default(null),
-  node_states: z.record(z.unknown()).default({}),
+  node_states: z.record(z.string(), z.unknown()).default({}),
   created_at: z.string(),
 })
 export type Run = z.infer<typeof runSchema>
@@ -374,7 +374,7 @@ export type Stats = z.infer<typeof statsSchema>
 export const runEventSchema = z.object({
   type: z.enum(['snapshot', 'status', 'progress', 'log', 'node']),
   run_id: z.string().optional(),
-  payload: z.record(z.unknown()).default({}),
+  payload: z.record(z.string(), z.unknown()).default({}),
   ts: z.string().optional(),
 })
 export type RunEvent = z.infer<typeof runEventSchema>
@@ -382,7 +382,7 @@ export type RunEvent = z.infer<typeof runEventSchema>
 /** 노드 실행 결과 샘플 (엣지 위 미리보기) */
 export const nodeSampleSchema = z.object({
   columns: z.array(z.string()).default([]),
-  rows: z.array(z.record(z.unknown())).default([]),
+  rows: z.array(z.record(z.string(), z.unknown())).default([]),
   truncated: z.boolean().default(false),
 })
 export type NodeSample = z.infer<typeof nodeSampleSchema>
@@ -395,10 +395,10 @@ export const nodeStateSchema = z.object({
   location: z.string().nullable().default(null),
   sample: nodeSampleSchema.optional(),
   /** API 트리거가 선으로 넘긴 **값 그 자체** {이름: 값} — 엣지 칩에 뜨는 것이 이것이다. */
-  handed: z.record(z.unknown()).optional(),
+  handed: z.record(z.string(), z.unknown()).optional(),
   /** 그 값으로 하류 노드 설정이 어떻게 바뀌었는지 {하류_노드_id: {파라미터: 치환된 값}}.
    *  엣지 상세 모달에서 저작↔실행 대비에 쓴다. 트리거 노드에만 있다. */
-  applied: z.record(z.record(z.unknown())).optional(),
+  applied: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
 })
 export type NodeState = z.infer<typeof nodeStateSchema>
 
@@ -415,9 +415,9 @@ export const cdcStreamSchema = z.object({
   source_connection_id: z.string().nullable().default(null),
   target_connection_id: z.string().nullable().default(null),
   topics: z.array(z.string()).default([]),
-  config: z.record(z.unknown()).default({}),
+  config: z.record(z.string(), z.unknown()).default({}),
   last_event_at: z.string().nullable().default(null),
-  metrics: z.record(z.unknown()).default({}),
+  metrics: z.record(z.string(), z.unknown()).default({}),
   error: z.string().nullable().default(null),
   created_at: z.string(),
   updated_at: z.string(),

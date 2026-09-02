@@ -90,8 +90,11 @@ async function request(path: string, options: RequestOptions = {}): Promise<unkn
  *
  * 제네릭을 스키마 자체로 받는 것이 중요하다 — `z.ZodType<T>` 로 받으면 TS 가 T 를
  * 출력이 아닌 **입력** 타입으로 추론해 `.default()` 필드가 전부 optional 로 새어 나온다.
+ * (zod 4: `z.ZodTypeAny` 는 deprecated — `z.ZodType`(제네릭 없이, bare)가 그 자리를
+ * 대체한다. `z.ZodType<T>` 처럼 출력 타입을 박아 넣으면 zod 3 과 같은 함정이 그대로다.
+ * 실제로 회귀 여부는 `client.test.ts` 의 타입 단언이 `tsc` 로 지킨다.)
  */
-async function parsed<S extends z.ZodTypeAny>(
+async function parsed<S extends z.ZodType>(
   schema: S,
   path: string,
   options?: RequestOptions,

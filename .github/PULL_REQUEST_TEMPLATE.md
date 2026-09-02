@@ -1,6 +1,13 @@
 ## 무엇을 바꿨나
 
-<!-- 한두 문장. 관련 이슈가 있으면 `Closes #123`. -->
+Closes #
+
+<!-- 한두 문장으로 무엇을 바꿨는지 적는다.
+
+     위 `Closes #` 에는 **이 PR 이 실제로 닫는** 이슈 번호만 넣는다. 참고로만 관련된 이슈는
+     본문에서 `#123` 으로 언급만 한다.
+     근거 이슈 없이 시작한 작업이면 **그 줄을 통째로 지운다** — 번호를 지어내지 않는다.
+     근거 이슈가 없는 PR 도 정상이다. (commit-convention.md §5.2) -->
 
 ## 왜
 
@@ -26,6 +33,9 @@ cd apps/web && npm test && npm run lint && npm run build
 
 ## 체크리스트
 
+- [ ] 근거 이슈가 있으면 본문 맨 위에 `Closes #N` 을 적었다 — 없으면 그 줄을 지웠다
+      ([commit-convention.md](https://github.com/SurvivorsStudio/ditter/blob/main/docs/conventions/commit-convention.md) §5.2).
+      이 선언이 머지 게이트(§5.1)가 겹치는 PR 을 찾는 **유일한 근거**다
 - [ ] 커밋을 **영역별로 분리**했다 — api·web·worker·connectors·sap-connector·cdc·sync·docs
       ([commit-convention.md](https://github.com/SurvivorsStudio/ditter/blob/main/docs/conventions/commit-convention.md) §1)
 - [ ] 브랜치명이 `feature/`·`fix/`·`bug/` 로 시작한다 (§4)
