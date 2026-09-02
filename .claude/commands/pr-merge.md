@@ -57,7 +57,8 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
 > | 설정 | 값 |
 > |---|---|
 > | `required_status_checks` | `build-test` (`strict: false`) |
-> | `required_approving_review_count` | 0 |
+> | `required_approving_review_count` | 1 |
+> | `dismiss_stale_reviews` | true |
 > | `enforce_admins` | true |
 > | `required_linear_history` | true |
 > | `required_conversation_resolution` | **true** — 2번이 이것 때문에 있다 |
@@ -67,8 +68,9 @@ argument-hint: [PR number (optional, defaults to current branch's PR)]
 > 설정은 바뀔 수 있다 — 이 표와 어긋나는 동작을 보면 표부터 다시 읽는다.
 
 - `reviewDecision == "CHANGES_REQUESTED"` 면 종료 — 리뷰 코멘트를 먼저 반영하고 `/pr` 로 재준비.
-  `reviewDecision` 이 빈 값이면 통과로 본다. 보호가 걸려 있어도 `required_approving_review_count`
-  가 **0** 이라 승인 요건 자체가 없다(위 표).
+  `reviewDecision == "APPROVED"` 면 **통과**. **빈 값이거나 `REVIEW_REQUIRED`** 이면 종료 —
+  승인이 필요하다(위 표). `.claude/commands/pr.md` §6-D 를 참고하여 **자기 PR 을 자기가
+  승인할 수 없다는 점**을 기억하고, 다른 사람의 리뷰를 기다린다.
 - **CI 는 "실패가 없으면 통과"가 아니라 "성공을 확인해야 통과"다.** `/pr` 로 PR 을 만든 직후
   `/pr-merge` 를 부르는 흐름에서 CI 는 아직 도는 중이고(실측 약 40초), 그때 `statusCheckRollup`
   에는 실패가 없다 — 검사 전이기 때문이다. `build-test` 가 required check 이라 그 상태로 머지를
@@ -215,8 +217,9 @@ grep -rn "§1d" --include="*.md" . | grep -v node_modules
 
 ### 2. 진행 고지 (되묻지 않는다)
 
-**`/pr-merge` 호출 자체가 머지 승인이다.** 1번 게이트를 모두 통과했다면 **다시 묻지 말고** 3번으로
-진행한다. 사용자가 방금 명령한 것을 "진행할까요?" 로 되묻는 것은 같은 결정을 두 번 시키는 것이다.
+**`/pr-merge` 호출 자체가 머지 실행 동의다.** 1번 게이트를 모두 통과했다면(GitHub 리뷰 승인·CI·충돌 등
+모든 필수 요건 포함) **다시 묻지 말고** 3번으로 진행한다. 사용자가 방금 명령한 것을 "진행할까요?" 로
+되묻는 것은 같은 결정을 두 번 시키는 것이다.
 
 진행 직전에는 **묻지 말고 고지만** 한다 — PR 번호·제목·소스 브랜치, main 으로 **squash 머지** +
 머지 후 브랜치 삭제.
@@ -488,9 +491,10 @@ gh pr merge <n> --squash --delete-branch --subject "<타입>: <제목>" --body "
   정한다** — 허락받아 접는 것은 그 허락이 이번 실행에만 유효하다. 무엇을 resolve 했는지는
   5번 보고에 남긴다.
 - 머지 명령이 실패해도 **재호출 전 서버 상태(MERGED)를 먼저 확인**한다(step 3). 강제·우회 옵션 금지.
-- **`/pr-merge` 호출이 곧 머지 승인이다.** 게이트를 통과하면 되묻지 않는다 — **묻는 경우는
-  0번과 2번이 각각 정한다.** 여기서 세지 않는다: 세어 두면 그 절에 물음이 늘거나 줄 때 이
-  요약만 옛 개수를 들고 있게 되고, 요약을 계약으로 읽는 쪽은 새로 생긴 물음을 건너뛴다.
+- **`/pr-merge` 호출이 곧 머지 실행 동의다.** 게이트를 통과하면(리뷰 승인 포함) 되묻지 않는다 —
+  **묻는 경우는 0번과 2번이 각각 정한다.** 여기서 세지 않는다: 세어 두면 그 절에 물음이
+  늘거나 줄 때 이 요약만 옛 개수를 들고 있게 되고, 요약을 계약으로 읽는 쪽은 새로 생긴
+  물음을 건너뛴다.
   사용자에게 되물어야 할 것은 "이미 지시한 일을 해도 되는지"가 아니라 **"지시만으로는
   정해지지 않는 것"** 이다.
 - **같은 이슈를 다루는 다른 열린 PR 이 있으면 머지하지 않는다**(step 1d, SSOT 는
