@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { EmptyState } from '../components/common'
 import { useT } from '../i18n'
 
@@ -12,6 +12,7 @@ import { useT } from '../i18n'
  */
 export function NotFound() {
   const t = useT()
+  const navigate = useNavigate()
   const { pathname } = useLocation()
 
   return (
@@ -22,11 +23,12 @@ export function NotFound() {
             <code>{pathname}</code>
           </p>
           <p>{t('nav.notFound.body')}</p>
-          <p>
-            <NavLink to="/" className="btn primary">
-              {t('nav.notFound.goHome')}
-            </NavLink>
-          </p>
+          {/* 링크가 아니라 버튼이다 — `.btn` 은 밑줄을 지우지 않아 앵커에 걸면 그것만 밑줄이
+              그어진다. 같은 상황의 기존 화면(`Canvas.tsx` 의 「파이프라인을 찾을 수 없습니다」)과
+              같은 모양으로 맞춘다. */}
+          <button className="btn primary" style={{ marginTop: 12 }} onClick={() => navigate('/')}>
+            {t('nav.notFound.goHome')}
+          </button>
         </EmptyState>
       </div>
     </div>
