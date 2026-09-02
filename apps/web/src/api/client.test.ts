@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { z } from 'zod'
 import { ApiError, api, runStreamUrl } from './client'
 
@@ -82,6 +82,13 @@ describe('api.parsed', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     mockFetch(200, { id: 123 })
     await expect(api.parsed(schema, '/runs/run-1')).rejects.toThrow('응답 형식이 올바르지 않습니다')
+  })
+
+  it('타입 수준에서도 .default() 필드는 optional 로 새지 않는다 (client.ts 의 z.ZodType 함정 회귀 방지)', async () => {
+    mockFetch(200, { id: 'run-1' })
+    const result = await api.parsed(schema, '/runs/run-1')
+    // 컴파일 시점 검증 — records·error 가 optional(`?`)이면 여기서 tsc 가 실패한다.
+    expectTypeOf(result).toEqualTypeOf<{ id: string; records: number; error: string | null }>()
   })
 })
 
