@@ -45,8 +45,26 @@ jobs:
         with:
           python-version: "3.12"
 
+      # uv 는 버전을 고정한다. 아래 `uv lock --check` 의 판정이 그 uv 버전의 리졸버·락
+      # 정규화 동작에 좌우되기 때문이다 — 고정하지 않으면(예전의 `pip install uv`) 저장소에
+      # 아무 변경이 없어도 uv 릴리스 하나로 모든 PR 의 CI 가 동시에 막힐 수 있다.
+      # 머리말 25~27행이 "변경 없이 빨개지는 것"을 피하겠다고 적은 그 결과가 다른 경로로
+      # 들어오는 셈이다.
+      #
+      # 올리는 길은 dependabot 이다 — github-actions 생태계가 이 액션을 추적해 갱신을 PR 로
+      # 올린다. `pip install "uv==..."` 로 고정하면 run 스텝 안이라 추적되지 않아 **고정이 곧
+      # 방치**가 된다. 그래서 액션 쪽으로 옮겼다.
+      #
+      # 태그가 `vN` 이 아니라 정확한 버전인 이유: astral-sh/setup-uv 는 떠 있는 major 태그를
+      # **v7 까지만** 냈고 v8 부터는 `vX.Y.Z` 만 있다. 이 파일의 다른 액션처럼 `@v10` 이라
+      # 적으면 그런 ref 가 없어 액션을 못 찾는다 (확인: v10 · v9 는 404, v7 만 resolve 된다).
+      #
+      # `enable-cache` 는 기본값 `auto` 라 GitHub 호스티드 러너에서 uv 캐시가 켜진다
+      # (키는 `**/pyproject.toml` · `**/uv.lock`). 락 검사 자체는 캐시가 비어도 통과한다.
       - name: Install uv
-        run: pip install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: "0.12.9"
 
       - name: Check uv.lock (connectors)
         run: cd apps/connectors && uv lock --check
