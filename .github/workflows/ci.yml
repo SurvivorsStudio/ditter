@@ -87,7 +87,7 @@ jobs:
       # `enable-cache` 는 기본값 `auto` 라 GitHub 호스티드 러너에서 uv 캐시가 켜진다.
       # 락 검사 자체는 캐시가 비어도 통과한다.
       - name: Install uv
-        uses: astral-sh/setup-uv@v10.0.1
+        uses: astral-sh/setup-uv@v10.3.0
         with:
           version: "0.12.9"
           checksum: "ec7a99cd05e0cd7f80243f135ce1361c76835cb0ee60055d14d20eba8eba1460"
